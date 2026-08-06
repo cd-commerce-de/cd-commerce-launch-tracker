@@ -151,28 +151,28 @@
   <nav class="sidebar">
     <div class="nav-burger">☰</div>
     <div class="nav-section-label">Overview</div>
-    <div class="nav-item active" data-view="date-range" onclick="switchView('date-range')">
+    <div class="nav-item active" data-view="date-range" onclick="switchView('date-range')" title="Everything at a glance — overall totals, trend, and every product for any date range">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></div>
       Dashboard
     </div>
-    <div class="nav-item" data-view="all-products" onclick="switchView('all-products')">
+    <div class="nav-item" data-view="all-products" onclick="switchView('all-products')" title="One row per product, 12-week totals — quick scan of who's ahead or behind">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="10" width="4" height="10"/><rect x="10" y="5" width="4" height="15"/><rect x="17" y="13" width="4" height="7"/></svg></div>
       All Products
     </div>
-    <div class="nav-item" data-view="weekly-pulse" onclick="switchView('weekly-pulse')">
+    <div class="nav-item" data-view="weekly-pulse" onclick="switchView('weekly-pulse')" title="Deep dive into one product's own 12-week launch window — KPIs, trend charts, full scorecard">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3,13 8,13 10,7 14,19 16,13 21,13"/></svg></div>
-      Weekly Pulse
+      Product Detail
     </div>
-    <div class="nav-item" data-view="comparison" onclick="switchView('comparison')">
+    <div class="nav-item" data-view="comparison" onclick="switchView('comparison')" title="Pick one metric and see every product side by side, week by week">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg></div>
-      Metric Comparison
+      Metric Trends
     </div>
-    <div class="nav-item" data-view="launch-report" onclick="switchView('launch-report')">
+    <div class="nav-item" data-view="launch-report" onclick="switchView('launch-report')" title="Every product's full scorecard, one after another — for printing or sharing">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/></svg></div>
-      Launch Report
+      Full Report
     </div>
     <div class="nav-section-label">Data</div>
-    <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')">
+    <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')" title="Upload weekly exports and manage your product list">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v12"/><polyline points="7,10 12,15 17,10"/><path d="M5 19h14"/></svg></div>
       Upload &amp; Manage
     </div>
@@ -199,6 +199,10 @@
         <h3>Overall</h3>
         <div class="kpi-grid" id="drKpiGrid"></div>
       </div>
+      <div class="panel" id="drTrendPanel" style="display:none;">
+        <h3>Portfolio Trend</h3>
+        <div class="chart-box" style="height:300px;"><canvas id="chartPortfolioTrend"></canvas></div>
+      </div>
       <div id="dateRangeEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No data for this range</div>
         Try a wider date range, or upload a weekly export that falls inside it.
@@ -211,7 +215,7 @@
     <div class="view" id="view-all-products">
       <div class="page-head">
         <h2>All Products</h2>
-        <div class="meta">12-week performance across every launch/expansion product — click a row to open it in Weekly Pulse</div>
+        <div class="meta">12-week performance across every launch/expansion product — click a row to open it in Product Detail</div>
       </div>
       <div id="overviewEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No products yet</div>
@@ -224,7 +228,7 @@
 
     <div class="view" id="view-weekly-pulse">
       <div class="page-head">
-        <h2>Weekly Pulse</h2>
+        <h2>Product Detail</h2>
         <div class="meta" id="pulseMeta">Select a product to see its 12-week scorecard</div>
       </div>
 
@@ -260,11 +264,14 @@
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Units Sold vs. Margin &amp; ACOS</h4><div class="chart-box"><canvas id="chartUnitsMargin"></canvas></div>
               <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Bars are Units Sold (left axis); the two lines are Margin % and Real ACOS % (right axis) — watch for volume growing while margin holds or improves.</p></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Weekly Cost Structure</h4><div class="chart-box"><canvas id="chartCostTrend"></canvas></div></div>
-            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">12-Wk Cost Breakdown</h4><div class="chart-box"><canvas id="chartSplit"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">TACoS Trend (Ad Spend ÷ Total Sales)</h4><div class="chart-box"><canvas id="chartTacos"></canvas></div>
+              <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">A falling TACoS as the launch progresses means sales are relying less on ads over time — usually the clearest sign a launch is taking hold organically.</p></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Traffic &amp; Conversion</h4><div class="chart-box"><canvas id="chartTraffic"></canvas></div>
               <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Sessions and Clicks come from whichever of Sellerboard/Sellerfox reported them; Conversion Rate is Sellerboard's own Unit Session %.</p></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">ACOS / ROI / Margin</h4><div class="chart-box"><canvas id="chartMargin"></canvas></div></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Best BSR trend (lower = better)</h4><div class="chart-box"><canvas id="chartBSR"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Refund Rate Trend</h4><div class="chart-box"><canvas id="chartRefundRate"></canvas></div>
+              <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">A rising refund rate as volume grows can point to a listing, sizing, or quality issue worth investigating early.</p></div>
           </div>
         </div>
 
@@ -281,7 +288,7 @@
 
     <div class="view" id="view-comparison">
       <div class="page-head">
-        <h2>Metric Comparison</h2>
+        <h2>Metric Trends</h2>
         <div class="meta">Every product side by side, one metric at a time, week by week</div>
       </div>
       <div class="panel">
@@ -305,8 +312,8 @@
 
     <div class="view" id="view-launch-report">
       <div class="page-head">
-        <h2>Launch Report</h2>
-        <div class="meta">Every product's full scorecard, one block after another — same shape as the Launch tab</div>
+        <h2>Full Report</h2>
+        <div class="meta">Every product's full scorecard, one block after another — for printing or sharing</div>
       </div>
       <div class="panel">
         <div class="filter-bar">
@@ -418,6 +425,27 @@ function shortenName(name){
     s = (lastSpace > 20 ? cut.slice(0,lastSpace) : cut).trim() + '…';
   }
   return s;
+}
+function nameWithAsin(name, asin){
+  return `<div>${shortenName(name)}</div><div style="font-size:10px;font-weight:400;color:var(--text-muted);margin-top:2px;">${asin||''}</div>`;
+}
+function sortArrow(key, sortState){
+  if(sortState.key !== key) return '<span style="opacity:.25;">↕</span>';
+  return sortState.dir === 'asc' ? '▲' : '▼';
+}
+function sortRows(rows, key, dir, nameGetter){
+  const arr = [...rows];
+  arr.sort((a,b)=>{
+    let av = key==='__name__' ? nameGetter(a) : a[key];
+    let bv = key==='__name__' ? nameGetter(b) : b[key];
+    const aNull = av==null, bNull = bv==null;
+    if(aNull && bNull) return 0;
+    if(aNull) return 1;
+    if(bNull) return -1;
+    if(typeof av === 'string') return dir==='asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return dir==='asc' ? av-bv : bv-av;
+  });
+  return arr;
 }
 
 function switchView(view){
@@ -760,12 +788,19 @@ async function getMarketplaces(){
 }
 
 /* ---------------- Overview (All Products) ---------------- */
+let overviewRowsData = [];
+let overviewSort = { key: 'totalSales', dir: 'desc' };
+function sortOverviewBy(key){
+  if(overviewSort.key === key){ overviewSort.dir = overviewSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { overviewSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
+  renderOverviewTable();
+}
 async function loadOverview(){
   const products = await fetchProducts();
   const hideNoLaunch = document.getElementById('hideNoLaunch').checked;
   const filtered = hideNoLaunch ? products.filter(p=>p.launch) : products;
 
-  const rows = await Promise.all(filtered.map(async product => {
+  overviewRowsData = await Promise.all(filtered.map(async product => {
     const { weeks } = await computeWeeks(product, 'ALL');
     const sum = key => weeks.reduce((a,w)=>a+w[key],0);
     const avg = key => weeks.reduce((a,w)=>a+w[key],0)/weeks.length;
@@ -776,18 +811,27 @@ async function loadOverview(){
       weeksWithData: weeks.filter(w=>w.sales>0||w.sessions>0).length,
     };
   }));
-  rows.sort((a,b)=>b.totalSales - a.totalSales);
+  renderOverviewTable();
+}
+function renderOverviewTable(){
+  const rows = sortRows(overviewRowsData, overviewSort.key, overviewSort.dir, r=>r.product.name||'');
 
   document.getElementById('overviewEmpty').style.display = rows.length ? 'none' : 'block';
   document.getElementById('overviewPanel').style.display = rows.length ? 'block' : 'none';
+  if(!rows.length) return;
 
-  let html = `<thead><tr>
-    <th>Product</th><th>Total Sales</th><th>Net Profit</th>
-    <th>Avg. Margin</th><th>Units Sold</th><th>Sessions</th><th>Best BSR</th><th>Weeks w/ Data</th>
-  </tr></thead><tbody>`;
+  const cols = [
+    {key:'__name__', label:'Product'}, {key:'totalSales', label:'Total Sales'}, {key:'netProfit', label:'Net Profit'},
+    {key:'avgMargin', label:'Avg. Margin'}, {key:'units', label:'Units Sold'}, {key:'sessions', label:'Sessions'},
+    {key:'bestBSR', label:'Best BSR'}, {key:'weeksWithData', label:'Weeks w/ Data'},
+  ];
+  let html = '<thead><tr>' + cols.map(c=>
+    `<th style="cursor:pointer;user-select:none;" onclick="sortOverviewBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, overviewSort)}</span></th>`
+  ).join('') + '</tr></thead><tbody>';
+
   rows.forEach(r=>{
     html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${shortenName(r.product.name)}</td>
+      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${nameWithAsin(r.product.name, r.product.asin)}</td>
       <td>${fmtMoney(r.totalSales)}</td>
       <td>${fmtMoney(r.netProfit)}</td>
       <td>${fmtPct(r.avgMargin)}</td>
@@ -797,7 +841,23 @@ async function loadOverview(){
       <td>${r.weeksWithData} / 12</td>
     </tr>`;
   });
-  html += '</tbody>';
+
+  const totalSales = rows.reduce((a,r)=>a+r.totalSales,0);
+  const totalNetProfit = rows.reduce((a,r)=>a+r.netProfit,0);
+  const totalUnits = rows.reduce((a,r)=>a+r.units,0);
+  const totalSessions = rows.reduce((a,r)=>a+r.sessions,0);
+  const weightedMargin = totalSales? totalNetProfit/totalSales : 0;
+  const bestVals = rows.map(r=>r.bestBSR).filter(x=>x!=null&&x>0);
+  html += `</tbody><tfoot><tr style="font-weight:700;background:#F1F5F9;">
+    <td style="background:#F1F5F9;">Total</td>
+    <td>${fmtMoney(totalSales)}</td>
+    <td>${fmtMoney(totalNetProfit)}</td>
+    <td>${fmtPct(weightedMargin)}</td>
+    <td>${fmtInt(totalUnits)}</td>
+    <td>${fmtInt(totalSessions)}</td>
+    <td>${bestVals.length?fmtRank(Math.min(...bestVals)):'–'}</td>
+    <td>–</td>
+  </tr></tfoot>`;
   document.getElementById('overviewTable').innerHTML = html;
 }
 function openProductFromOverview(asin){
@@ -806,7 +866,7 @@ function openProductFromOverview(asin){
 }
 document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
-/* ---------------- Dashboard (Weekly Pulse) ---------------- */
+/* ---------------- Dashboard (Product Detail) ---------------- */
 async function loadLaunchReport(){
   const products = await fetchProducts();
   const mktSel = document.getElementById('launchReportMarketplace');
@@ -918,6 +978,7 @@ async function loadDateRangeOverview(){
   document.getElementById('dateRangeEmpty').style.display = rows.length ? 'none' : 'block';
   document.getElementById('dateRangePanel').style.display = rows.length ? 'block' : 'none';
   document.getElementById('drKpiPanel').style.display = rows.length ? 'block' : 'none';
+  document.getElementById('drTrendPanel').style.display = rows.length ? 'block' : 'none';
 
   if(rows.length){
     const totalSales = rows.reduce((a,r)=>a+r.sales,0);
@@ -930,15 +991,55 @@ async function loadDateRangeOverview(){
       {label:'Net Margin', value:fmtMoney(totalNetProfit)},
       {label:'Net Margin %', value:fmtPct(avgMargin)},
     ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
+
+    const weekBuckets = {};
+    (sbRows||[]).forEach(r=>{
+      if(!byAsin[r.asin]) return;
+      if(!weekBuckets[r.week]) weekBuckets[r.week] = { sales:0, netProfit:0 };
+      weekBuckets[r.week].sales += +r.sales||0;
+      weekBuckets[r.week].netProfit += +r.net_profit||0;
+    });
+    const sortedWeeks = Object.keys(weekBuckets).sort();
+    const trendLabels = sortedWeeks.map(w => new Date(w).toLocaleDateString('en-GB',{day:'numeric',month:'short'}));
+    if(portfolioTrendChart) portfolioTrendChart.destroy();
+    portfolioTrendChart = new Chart(document.getElementById('chartPortfolioTrend'), {
+      type:'bar',
+      data:{ labels: trendLabels, datasets:[
+        {type:'bar', label:'Total Sales (€)', data:sortedWeeks.map(w=>weekBuckets[w].sales), backgroundColor:'#E2E8F0'},
+        {type:'line', label:'Net Margin (€)', data:sortedWeeks.map(w=>weekBuckets[w].netProfit), borderColor:'#D97757', backgroundColor:'#D97757', tension:.3, borderWidth:3},
+      ]},
+      options: chartOpts(),
+    });
   }
 
-  let html = `<thead><tr>
-    <th>Product</th><th>Units</th><th>Refunds</th><th>Sales</th><th>Ad Spend</th><th>% Refunds</th>
-    <th>COGS</th><th>Shipping</th><th>Net Profit</th><th>Margin</th><th>ROI</th><th>ASP</th><th>Real ACOS</th><th>Sessions</th>
-  </tr></thead><tbody>`;
+  dateRangeRowsData = rows;
+  renderDateRangeTable();
+}
+
+let dateRangeRowsData = [];
+let dateRangeSort = { key: 'sales', dir: 'desc' };
+function sortDateRangeBy(key){
+  if(dateRangeSort.key === key){ dateRangeSort.dir = dateRangeSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { dateRangeSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
+  renderDateRangeTable();
+}
+function renderDateRangeTable(){
+  const rows = sortRows(dateRangeRowsData, dateRangeSort.key, dateRangeSort.dir, r=>r.product.name||'');
+  if(!rows.length){ document.getElementById('dateRangeTable').innerHTML = ''; return; }
+
+  const cols = [
+    {key:'__name__', label:'Product'}, {key:'units', label:'Units'}, {key:'refunds', label:'Refunds'},
+    {key:'sales', label:'Sales'}, {key:'adSpend', label:'Ad Spend'}, {key:'refundPct', label:'% Refunds'},
+    {key:'cogs', label:'COGS'}, {key:'shipping', label:'Shipping'}, {key:'netProfit', label:'Net Profit'},
+    {key:'margin', label:'Margin'}, {key:'roi', label:'ROI'}, {key:'asp', label:'ASP'},
+    {key:'realAcos', label:'Real ACOS'}, {key:'sessions', label:'Sessions'},
+  ];
+  let html = '<thead><tr>' + cols.map(c=>
+    `<th style="cursor:pointer;user-select:none;" onclick="sortDateRangeBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, dateRangeSort)}</span></th>`
+  ).join('') + '</tr></thead><tbody>';
   rows.forEach(r=>{
     html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-      <td style="max-width:220px;white-space:normal;">${thumb(r.product.image_url)}${shortenName(r.product.name)}</td>
+      <td style="max-width:220px;white-space:normal;">${thumb(r.product.image_url)}${nameWithAsin(r.product.name, r.product.asin)}</td>
       <td>${fmtInt(r.units)}</td>
       <td>${fmtInt(r.refunds)}</td>
       <td>${fmtMoney(r.sales)}</td>
@@ -954,7 +1055,30 @@ async function loadDateRangeOverview(){
       <td>${fmtInt(r.sessions)}</td>
     </tr>`;
   });
-  html += '</tbody>';
+
+  const tUnits=rows.reduce((a,r)=>a+r.units,0), tRefunds=rows.reduce((a,r)=>a+r.refunds,0),
+        tSales=rows.reduce((a,r)=>a+r.sales,0), tAdSpend=rows.reduce((a,r)=>a+r.adSpend,0),
+        tCogs=rows.reduce((a,r)=>a+r.cogs,0), tShipping=rows.reduce((a,r)=>a+r.shipping,0),
+        tNetProfit=rows.reduce((a,r)=>a+r.netProfit,0), tSessions=rows.reduce((a,r)=>a+r.sessions,0);
+  const wRefundPct = tUnits? tRefunds/tUnits : 0;
+  const wMargin = tSales? tNetProfit/tSales : 0;
+  const wAsp = tUnits? tSales/tUnits : null;
+  html += `</tbody><tfoot><tr style="font-weight:700;background:#F1F5F9;">
+    <td style="background:#F1F5F9;">Total</td>
+    <td>${fmtInt(tUnits)}</td>
+    <td>${fmtInt(tRefunds)}</td>
+    <td>${fmtMoney(tSales)}</td>
+    <td>${fmtMoney(tAdSpend)}</td>
+    <td>${fmtPct(wRefundPct)}</td>
+    <td>${fmtMoney(tCogs)}</td>
+    <td>${fmtMoney(tShipping)}</td>
+    <td>${fmtMoney(tNetProfit)}</td>
+    <td>${fmtPct(wMargin)}</td>
+    <td>–</td>
+    <td>${wAsp!=null?fmtMoney(wAsp):'–'}</td>
+    <td>–</td>
+    <td>${fmtInt(tSessions)}</td>
+  </tr></tfoot>`;
   document.getElementById('dateRangeTable').innerHTML = html;
 }
 
@@ -980,6 +1104,12 @@ async function loadComparison(){
   }
   renderComparison();
 }
+let comparisonSort = { key: '__total__', dir: 'desc' };
+function sortComparisonBy(key){
+  if(comparisonSort.key === key){ comparisonSort.dir = comparisonSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { comparisonSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
+  renderComparison();
+}
 function renderComparison(){
   document.getElementById('comparisonEmpty').style.display = comparisonData.length ? 'none' : 'block';
   document.getElementById('comparisonPanel').style.display = comparisonData.length ? 'block' : 'none';
@@ -988,20 +1118,38 @@ function renderComparison(){
   const key = document.getElementById('comparisonMetric').value;
   const m = METRICS.find(x=>x.key===key) || METRICS[0];
 
-  let html = '<thead><tr><th>Product</th>';
-  for(let i=1;i<=12;i++) html += `<th>Wk ${i}</th>`;
-  html += '<th>12-Wk Total/Avg</th></tr></thead><tbody>';
-
-  comparisonData.forEach(({product, weeks})=>{
-    const vals = weeks.map(w=>w[m.key]);
-    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
-    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+  const enriched = comparisonData.map(({product, weeks})=>{
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
     else if(m.kind==='min') total = minBSR(weeks);
     else total = avg(weeks, m.key);
+    return { product, weeks, total };
+  });
 
-    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${product.asin}')"><td style="max-width:220px;white-space:normal;">${thumb(product.image_url)}${shortenName(product.name)}</td>`;
+  const sorted = [...enriched].sort((a,b)=>{
+    let av, bv;
+    if(comparisonSort.key === '__name__'){ av = a.product.name||''; bv = b.product.name||''; }
+    else if(comparisonSort.key === '__total__'){ av = a.total; bv = b.total; }
+    else { const idx = parseInt(comparisonSort.key.replace('wk',''),10)-1; av = a.weeks[idx][m.key]; bv = b.weeks[idx][m.key]; }
+    const aNull = av==null, bNull = bv==null;
+    if(aNull && bNull) return 0;
+    if(aNull) return 1;
+    if(bNull) return -1;
+    if(typeof av === 'string') return comparisonSort.dir==='asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return comparisonSort.dir==='asc' ? av-bv : bv-av;
+  });
+
+  let html = '<thead><tr>';
+  html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('__name__')">Product <span style="font-size:9px;">${sortArrow('__name__', comparisonSort)}</span></th>`;
+  for(let i=1;i<=12;i++) html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('wk${i}')">Wk ${i} <span style="font-size:9px;">${sortArrow('wk'+i, comparisonSort)}</span></th>`;
+  html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('__total__')">12-Wk Total/Avg <span style="font-size:9px;">${sortArrow('__total__', comparisonSort)}</span></th></tr></thead><tbody>`;
+
+  sorted.forEach(({product, weeks, total})=>{
+    const vals = weeks.map(w=>w[m.key]);
+    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
+    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+
+    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${product.asin}')"><td style="max-width:220px;white-space:normal;">${thumb(product.image_url)}${nameWithAsin(product.name, product.asin)}</td>`;
     vals.forEach(v=>{
       const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       html += `<td style="background:${bg}">${v===null?'–':m.fmt(v)}</td>`;
@@ -1009,10 +1157,30 @@ function renderComparison(){
     html += `<td class="total-col">${total===null?'–':m.fmt(total)}</td></tr>`;
   });
   html += '</tbody>';
+
+  let footerCells = '';
+  for(let i=0;i<12;i++){
+    const colVals = sorted.map(s=>s.weeks[i][m.key]).filter(v=>v!=null && !isNaN(v));
+    let agg;
+    if(!colVals.length) agg = null;
+    else if(m.kind==='sum') agg = colVals.reduce((a,v)=>a+v,0);
+    else if(m.kind==='min') agg = Math.min(...colVals);
+    else agg = colVals.reduce((a,v)=>a+v,0)/colVals.length;
+    footerCells += `<td>${agg==null?'–':m.fmt(agg)}</td>`;
+  }
+  const totalVals = sorted.map(s=>s.total).filter(v=>v!=null && !isNaN(v));
+  let grandTotal;
+  if(!totalVals.length) grandTotal = null;
+  else if(m.kind==='sum') grandTotal = totalVals.reduce((a,v)=>a+v,0);
+  else if(m.kind==='min') grandTotal = Math.min(...totalVals);
+  else grandTotal = totalVals.reduce((a,v)=>a+v,0)/totalVals.length;
+  html += `<tfoot><tr style="font-weight:700;background:#F1F5F9;"><td style="background:#F1F5F9;">${m.kind==='sum'?'Total':'Avg'}</td>${footerCells}<td>${grandTotal==null?'–':m.fmt(grandTotal)}</td></tr></tfoot>`;
+
   document.getElementById('comparisonTable').innerHTML = html;
 }
 
 let charts = {};
+let portfolioTrendChart = null;
 function destroyCharts(){ Object.values(charts).forEach(c=>c && c.destroy()); charts = {}; }
 
 async function loadDashboard(){
@@ -1154,13 +1322,18 @@ function renderCharts(weeks, labels){
     ]}, options: chartOpts(false, true)
   });
 
-  charts.split = new Chart(document.getElementById('chartSplit'), {
-    type:'doughnut',
-    data:{labels:['Cost of Goods','Amazon Fees','Ad Spend','Net Profit'], datasets:[{
-      data:[sum(weeks,'cogs'), sum(weeks,'amazonFees'), sum(weeks,'adSpend'), Math.max(sum(weeks,'netProfit'),0)],
-      backgroundColor:[olive, red, gold, green],
-    }]},
-    options:{responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, color:'#64748B'}}}}
+  charts.tacos = new Chart(document.getElementById('chartTacos'), {
+    type:'line',
+    data:{labels, datasets:[
+      {label:'TACoS (%)', data:weeks.map(w=>w.sales? +((w.adSpend/w.sales)*100).toFixed(2) : null), borderColor:gold, backgroundColor:'#D9775720', tension:.3, fill:true, borderWidth:3, spanGaps:true},
+    ]}, options: chartOpts()
+  });
+
+  charts.refundRate = new Chart(document.getElementById('chartRefundRate'), {
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Refund Rate (%)', data:weeks.map(w=>+(w.refundPct*100).toFixed(2)), borderColor:red, backgroundColor:red, tension:.3, borderWidth:3},
+    ]}, options: chartOpts()
   });
 
   charts.traffic = new Chart(document.getElementById('chartTraffic'), {
@@ -1272,11 +1445,11 @@ function weekDelta(vals, i, lowerIsBetter){
   const cur = vals[i], prev = vals[i-1];
   if(cur==null || prev==null || prev===0) return '';
   const pct = ((cur-prev)/Math.abs(prev))*100;
-  if(Math.abs(pct) < 0.05) return `<div style="font-size:9.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
+  if(Math.abs(pct) < 0.05) return `<div style="font-size:8.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
   const isGood = lowerIsBetter ? pct<0 : pct>0;
   const color = isGood ? '#0F7A52' : '#B91C1C';
   const arrow = pct>0 ? '▲' : '▼';
-  return `<div style="display:inline-block;margin-top:3px;padding:1px 6px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:9.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</div>`;
+  return `<div style="margin-top:3px;"><span style="display:inline-block;padding:1px 5px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:8.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
 function buildScorecardTable(weeks, targets, colLabels){
   const t = targets || {};
