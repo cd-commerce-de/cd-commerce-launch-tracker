@@ -190,9 +190,11 @@
           <div class="filter-field"><label>From</label><input type="date" id="drStart" onchange="loadDateRangeOverview()"></div>
           <div class="filter-field"><label>To</label><input type="date" id="drEnd" onchange="loadDateRangeOverview()"></div>
           <div class="filter-field"><label>Marketplace</label><select id="drMarketplace" onchange="loadDateRangeOverview()"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Tag</label><select id="drTag" onchange="loadDateRangeOverview()"><option value="ALL">All</option><option value="launch">Launch</option><option value="expansion">Expansion</option></select></div>
         </div>
       </div>
       <div class="panel" id="drKpiPanel" style="display:none;">
+        <h3>Overall</h3>
         <div class="kpi-grid" id="drKpiGrid"></div>
       </div>
       <div id="dateRangeEmpty" class="panel empty-state" style="display:none;">
@@ -821,10 +823,12 @@ async function loadLaunchReport(){
     const { weeks, anchor } = await computeWeeks(product, mkt);
     const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
     const colLabels = weeks.map((_,i)=>{
-      if(!anchor) return 'Wk '+(i+1);
+      const wkLabel = 'Wk '+(i+1);
+      if(!anchor) return wkLabel;
       const d = new Date(anchor);
       d.setDate(d.getDate() + i*7);
-      return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ` (Wk ${i+1})`;
+      const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
     });
 
     const panel = document.createElement('div');
@@ -844,10 +848,15 @@ async function loadLaunchReport(){
 async function loadDateRangeOverview(){
   const startEl = document.getElementById('drStart'), endEl = document.getElementById('drEnd');
   if(!startEl.value || !endEl.value){
-    const today = new Date();
-    const weekAgo = new Date(); weekAgo.setDate(today.getDate()-6);
-    startEl.value = weekAgo.toISOString().slice(0,10);
-    endEl.value = today.toISOString().slice(0,10);
+    const [{ data: a }, { data: b }] = await Promise.all([
+      sb.from('sellerboard_rows').select('week').order('week', { ascending: false }).limit(1),
+      sb.from('sellerfox_rows').select('week').order('week', { ascending: false }).limit(1),
+    ]);
+    const latest = [...(a||[]), ...(b||[])].map(r=>r.week).filter(Boolean).sort().pop();
+    const end = latest ? new Date(latest) : new Date();
+    const start = new Date(end); start.setDate(end.getDate()-6);
+    startEl.value = start.toISOString().slice(0,10);
+    endEl.value = end.toISOString().slice(0,10);
   }
   const start = startEl.value, end = endEl.value;
 
@@ -859,7 +868,10 @@ async function loadDateRangeOverview(){
   if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
   const mkt = mktSel.value;
 
-  const products = await fetchProducts();
+  const tagSel = document.getElementById('drTag');
+  const tag = tagSel.value;
+
+  const products = (await fetchProducts()).filter(p => tag==='ALL' || p.tag===tag);
 
   let sbQuery = sb.from('sellerboard_rows').select('*').gte('week', start).lte('week', end);
   if(mkt!=='ALL') sbQuery = sbQuery.eq('marketplace', mkt);
@@ -908,17 +920,13 @@ async function loadDateRangeOverview(){
   if(rows.length){
     const totalSales = rows.reduce((a,r)=>a+r.sales,0);
     const totalUnits = rows.reduce((a,r)=>a+r.units,0);
-    const totalRefunds = rows.reduce((a,r)=>a+r.refunds,0);
-    const totalAdSpend = rows.reduce((a,r)=>a+r.adSpend,0);
     const totalNetProfit = rows.reduce((a,r)=>a+r.netProfit,0);
     const avgMargin = totalSales? totalNetProfit/totalSales : 0;
     document.getElementById('drKpiGrid').innerHTML = [
       {label:'Total Sales', value:fmtMoney(totalSales)},
-      {label:'Units Sold', value:fmtInt(totalUnits)},
-      {label:'Refunds', value:fmtInt(totalRefunds)},
-      {label:'Ad Spend', value:fmtMoney(totalAdSpend)},
-      {label:'Net Profit', value:fmtMoney(totalNetProfit)},
-      {label:'Margin', value:fmtPct(avgMargin)},
+      {label:'Total Units', value:fmtInt(totalUnits)},
+      {label:'Net Margin', value:fmtMoney(totalNetProfit)},
+      {label:'Net Margin %', value:fmtPct(avgMargin)},
     ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
   }
 
@@ -1262,11 +1270,11 @@ function weekDelta(vals, i, lowerIsBetter){
   const cur = vals[i], prev = vals[i-1];
   if(cur==null || prev==null || prev===0) return '';
   const pct = ((cur-prev)/Math.abs(prev))*100;
-  if(Math.abs(pct) < 0.05) return `<div style="font-size:9.5px;color:var(--text-muted);margin-top:2px;">▬ 0%</div>`;
+  if(Math.abs(pct) < 0.05) return `<div style="font-size:9.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
   const isGood = lowerIsBetter ? pct<0 : pct>0;
-  const color = isGood ? 'var(--green)' : 'var(--red)';
+  const color = isGood ? '#0F7A52' : '#B91C1C';
   const arrow = pct>0 ? '▲' : '▼';
-  return `<div style="font-size:9.5px;color:${color};margin-top:2px;font-weight:600;">${arrow} ${Math.abs(pct).toFixed(0)}%</div>`;
+  return `<div style="display:inline-block;margin-top:3px;padding:1px 6px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:9.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</div>`;
 }
 function buildScorecardTable(weeks, targets, colLabels){
   const t = targets || {};
@@ -1309,7 +1317,7 @@ function renderTable(weeks, targets, anchor){
     const d = new Date(anchor);
     d.setDate(d.getDate() + i*7);
     const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    return `${wkLabel}<div style="font-size:9.5px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+    return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
   document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels);
 }
