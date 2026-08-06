@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launch KPI Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --header-bg:#17140F;
+    --bg:#FAF6EE;
+    --panel:#FFFFFF;
+    --gold:#C9972E;
+    --gold-dark:#A9791E;
+    --gold-light:#F3E3BE;
+    --text-dark:#1F1B15;
+    --text-muted:#8B8272;
+    --border:#EDE7DA;
+    --olive:#8B6F1F;
+    --tan:#D9BE84;
+    --green:#4C6B4A;
+    --red:#A34131;
+    --slate:#7893A8;
+    --brown:#4A3B24;
+    --font-h:'Poppins',sans-serif; --font-b:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text-dark);font-family:var(--font-b);}
+  h1,h2,h3,.brand{font-family:var(--font-h);}
+
+  header{background:var(--header-bg);border-bottom:3px solid var(--gold);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand .mark{width:44px;height:44px;border:2px solid var(--gold);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--gold);font-size:15px;}
+  .brand .titles h1{margin:0;color:#F4EFE3;font-size:21px;font-weight:700;}
+  .brand .titles .sub{color:#B9B2A0;font-size:12.5px;margin-top:1px;}
+  .header-toggle{display:flex;align-items:center;gap:8px;color:#EADFC2;font-size:13px;font-weight:500;}
+  .header-toggle input{width:16px;height:16px;accent-color:var(--gold);}
+  .server-badge{font-size:10.5px;color:#8b846f;}
+  .server-badge.ok{color:#8fae7f;}
+  .server-badge.down{color:#c77a6a;}
+
+  .app{display:flex;min-height:calc(100vh - 74px);}
+  nav.sidebar{width:230px;flex-shrink:0;background:#FFFEFB;border-right:1px solid var(--border);padding:18px 12px;}
+  .nav-burger{padding:6px 8px 14px;color:var(--text-muted);font-size:18px;}
+  .nav-section-label{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;padding:14px 10px 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--text-dark);margin-bottom:2px;}
+  .nav-item:hover{background:#F5EFE0;}
+  .nav-item.active{background:var(--gold-light);font-weight:700;}
+  .nav-icon{width:28px;height:28px;border-radius:50%;background:#EEE7D6;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .nav-item.active .nav-icon{background:var(--gold);}
+  .nav-icon svg{width:14px;height:14px;stroke:var(--text-muted);}
+  .nav-item.active .nav-icon svg{stroke:#fff;}
+
+  main.content{flex:1;padding:26px 32px 60px;max-width:1400px;}
+  .page-head{margin-bottom:18px;}
+  .page-head h2{font-size:24px;margin:0 0 4px;font-weight:700;}
+  .page-head .meta{color:var(--text-muted);font-size:13px;}
+  .page-head .meta strong{color:var(--text-dark);}
+
+  .panel{background:var(--panel);border-radius:12px;padding:20px 22px;margin-bottom:20px;border:1px solid var(--border);}
+  .panel h3{font-size:15px;margin:0 0 14px;font-weight:700;}
+
+  .filter-bar{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;}
+  .filter-field label{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
+  select, input[type=text], input[type=date]{
+    font-family:var(--font-b);font-size:13.5px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text-dark);min-width:160px;
+  }
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;}
+  @media (max-width:1150px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:640px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+  .kpi{background:#fff;border-radius:10px;padding:16px 16px 14px;border-top:3px solid var(--gold);box-shadow:0 1px 2px rgba(31,27,21,.04);}
+  .kpi .label{font-size:10.5px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .kpi .value{font-family:var(--font-h);font-size:24px;font-weight:700;color:var(--text-dark);margin-top:6px;}
+  .kpi .desc{font-size:11.5px;color:var(--text-muted);margin-top:6px;line-height:1.4;}
+
+  .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:920px){.charts-grid{grid-template-columns:1fr;}}
+  .chart-box{position:relative;height:270px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;}
+  thead th{background:#F5EFE0;color:var(--text-dark);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;}
+  thead th:first-child{background:#F5EFE0;}
+  tbody tr:nth-child(even) td{background:#FCFAF4;}
+  tbody tr:nth-child(even) td:first-child{background:#FCFAF4;}
+  .table-wrap{overflow-x:auto;max-height:520px;overflow-y:auto;border-radius:8px;border:1px solid var(--border);}
+  .total-col{background:var(--gold-light) !important;font-weight:700;}
+
+  .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#FDFBF6;transition:.15s;}
+  .upload-box.drag{border-color:var(--gold);background:var(--gold-light);}
+  .upload-box input[type=file]{display:none;}
+  .upload-box label{cursor:pointer;color:var(--gold-dark);font-weight:700;font-size:13.5px;}
+  .upload-box .hint{font-size:11.5px;color:var(--text-muted);margin-top:5px;}
+  .status-line{font-size:11.5px;margin-top:7px;font-weight:600;min-height:15px;}
+  .status-ok{color:var(--green);} .status-err{color:var(--red);} .status-busy{color:var(--text-muted);}
+  .row{display:flex;gap:16px;flex-wrap:wrap;} .col{flex:1;min-width:250px;}
+
+  .btn{font-family:var(--font-h);font-weight:600;font-size:12.5px;padding:9px 16px;border-radius:8px;border:1px solid var(--border);cursor:pointer;background:#fff;color:var(--text-dark);}
+  .btn:hover{border-color:var(--gold);color:var(--gold-dark);}
+  .btn-primary{background:var(--gold);color:#fff;border-color:var(--gold);}
+  .btn-primary:hover{background:var(--gold-dark);color:#fff;}
+  .btn-danger:hover{border-color:var(--red);color:var(--red);}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+
+  .products-table input{width:100%;border:none;background:transparent;font-size:12.5px;padding:4px;}
+  .products-table input:focus{outline:1px solid var(--gold);border-radius:4px;}
+  .products-table td, .products-table th{text-align:left;}
+
+  .empty-state{text-align:center;padding:44px 20px;color:var(--text-muted);}
+  .empty-state .big{font-family:var(--font-h);font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:6px;}
+  .banner{background:var(--gold-light);border:1px solid var(--gold);color:var(--gold-dark);border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;margin-bottom:16px;display:none;}
+  .banner.show{display:block;}
+  .banner.err{background:#FBEAE7;border-color:var(--red);color:#8f3324;}
+
+  .view{display:none;} .view.active{display:block;}
+
+  .overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;}
+  .oc{background:#fff;border-radius:10px;border:1px solid var(--border);border-top:3px solid var(--gold);padding:16px;cursor:pointer;transition:.1s;}
+  .oc:hover{box-shadow:0 2px 8px rgba(31,27,21,.08);}
+  .oc h4{margin:0 0 10px;font-size:14.5px;font-weight:700;}
+  .oc .metric-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--text-muted);}
+  .oc .metric-row b{color:var(--text-dark);font-weight:700;}
+  .tag-pill{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10.5px;font-weight:700;background:#EEE7D6;color:var(--text-muted);margin-left:6px;}
+
+  footer{text-align:center;font-size:11.5px;color:var(--text-muted);padding:22px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">CD</div>
+    <div class="titles">
+      <h1>Launch KPI Dashboard</h1>
+      <div class="sub">CD Commerce · Launch Operations · <span id="serverBadge" class="server-badge">checking backend…</span></div>
+    </div>
+  </div>
+  <div class="header-toggle"><input type="checkbox" id="hideNoLaunch"> Hide products without a launch date</div>
+</header>
+
+<div class="app">
+  <nav class="sidebar">
+    <div class="nav-burger">☰</div>
+    <div class="nav-section-label">Overview</div>
+    <div class="nav-item active" data-view="date-range" onclick="switchView('date-range')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></div>
+      Dashboard
+    </div>
+    <div class="nav-item" data-view="all-products" onclick="switchView('all-products')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="10" width="4" height="10"/><rect x="10" y="5" width="4" height="15"/><rect x="17" y="13" width="4" height="7"/></svg></div>
+      All Products
+    </div>
+    <div class="nav-item" data-view="weekly-pulse" onclick="switchView('weekly-pulse')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3,13 8,13 10,7 14,19 16,13 21,13"/></svg></div>
+      Weekly Pulse
+    </div>
+    <div class="nav-item" data-view="comparison" onclick="switchView('comparison')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg></div>
+      Metric Comparison
+    </div>
+    <div class="nav-item" data-view="launch-report" onclick="switchView('launch-report')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/></svg></div>
+      Launch Report
+    </div>
+    <div class="nav-section-label">Data</div>
+    <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v12"/><polyline points="7,10 12,15 17,10"/><path d="M5 19h14"/></svg></div>
+      Upload &amp; Manage
+    </div>
+  </nav>
+
+  <main class="content">
+
+    <div class="banner err" id="serverDownBanner">Can't reach the backend API. Make sure the server is running — see README.</div>
+
+    <div class="view active" id="view-date-range">
+      <div class="page-head">
+        <h2>Dashboard</h2>
+        <div class="meta">Every product at once, for any date range you pick</div>
+      </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>From</label><input type="date" id="drStart" onchange="loadDateRangeOverview()"></div>
+          <div class="filter-field"><label>To</label><input type="date" id="drEnd" onchange="loadDateRangeOverview()"></div>
+          <div class="filter-field"><label>Marketplace</label><select id="drMarketplace" onchange="loadDateRangeOverview()"><option value="ALL">All</option></select></div>
+        </div>
+      </div>
+      <div class="panel" id="drKpiPanel" style="display:none;">
+        <div class="kpi-grid" id="drKpiGrid"></div>
+      </div>
+      <div id="dateRangeEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No data for this range</div>
+        Try a wider date range, or upload a weekly export that falls inside it.
+      </div>
+      <div class="panel" id="dateRangePanel" style="display:none;">
+        <div class="table-wrap"><table id="dateRangeTable"></table></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-all-products">
+      <div class="page-head">
+        <h2>All Products</h2>
+        <div class="meta">12-week performance across every launch/expansion product — click a row to open it in Weekly Pulse</div>
+      </div>
+      <div id="overviewEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No products yet</div>
+        Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
+      </div>
+      <div class="panel" id="overviewPanel" style="display:none;">
+        <div class="table-wrap"><table id="overviewTable"></table></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-weekly-pulse">
+      <div class="page-head">
+        <h2>Weekly Pulse</h2>
+        <div class="meta" id="pulseMeta">Select a product to see its 12-week scorecard</div>
+      </div>
+
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Product</label><select id="productSelect" onchange="loadDashboard()"></select></div>
+          <div class="filter-field"><label>Marketplace</label><select id="marketplaceSelect" onchange="loadDashboard()"><option value="ALL">All</option></select></div>
+        </div>
+      </div>
+
+      <div class="banner" id="noLaunchBanner">No launch date set for this product yet — add one in Upload &amp; Manage so weeks can be calculated.</div>
+
+      <div id="emptyState" class="panel empty-state" style="display:none;">
+        <div class="big">No data yet</div>
+        Upload weekly exports in <b>Upload &amp; Manage</b> to see this product's scorecard.
+      </div>
+
+      <div id="dashboardBody" style="display:none;">
+        <div class="panel">
+          <h3>12-week headline numbers</h3>
+          <div class="kpi-grid" id="kpiGrid"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Trends</h3>
+          <div class="filter-bar" style="margin-bottom:14px;">
+            <div class="filter-field"><label>Week-over-week chart metric</label><select id="wowMetric" onchange="renderWowChart()"></select></div>
+          </div>
+          <div class="charts-grid">
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Week-over-Week Change</h4><div class="chart-box"><canvas id="chartWow"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Revenue &amp; Profit</h4><div class="chart-box"><canvas id="chartRevenue"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Weekly Cost Structure</h4><div class="chart-box"><canvas id="chartCostTrend"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">12-Wk Cost Breakdown</h4><div class="chart-box"><canvas id="chartSplit"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Traffic &amp; Conversion</h4><div class="chart-box"><canvas id="chartTraffic"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">ACOS / ROI / Margin</h4><div class="chart-box"><canvas id="chartMargin"></canvas></div></div>
+            <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Best BSR trend (lower = better)</h4><div class="chart-box"><canvas id="chartBSR"></canvas></div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Full 12-week scorecard</h3>
+          <div class="table-wrap"><table id="scorecardTable"></table></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="view" id="view-comparison">
+      <div class="page-head">
+        <h2>Metric Comparison</h2>
+        <div class="meta">Every product side by side, one metric at a time, week by week</div>
+      </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Metric</label><select id="comparisonMetric" onchange="renderComparison()"></select></div>
+          <div class="filter-field"><label>Marketplace</label><select id="comparisonMarketplace" onchange="loadComparison()"><option value="ALL">All</option></select></div>
+        </div>
+      </div>
+      <div id="comparisonEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No products yet</div>
+        Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
+      </div>
+      <div class="panel" id="comparisonPanel" style="display:none;">
+        <div class="table-wrap"><table id="comparisonTable"></table></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-launch-report">
+      <div class="page-head">
+        <h2>Launch Report</h2>
+        <div class="meta">Every product's full scorecard, one block after another — same shape as the Launch tab</div>
+      </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Marketplace</label><select id="launchReportMarketplace" onchange="loadLaunchReport()"><option value="ALL">All</option></select></div>
+        </div>
+      </div>
+      <div id="launchReportEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No products yet</div>
+        Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
+      </div>
+      <div id="launchReportBody"></div>
+    </div>
+
+    <div class="view" id="view-data-manage">
+      <div class="page-head"><h2>Upload &amp; Manage</h2><div class="meta">Weekly exports are parsed and stored on the backend — nothing is processed in this browser.</div></div>
+
+      <div class="panel">
+        <h3>Upload weekly exports</h3>
+        <div class="row">
+          <div class="col">
+            <div class="upload-box" id="dropSB">
+              <label for="fileSB">Upload Sellerboard CSV</label>
+              <input type="file" id="fileSB" accept=".csv">
+              <div class="hint">Export from Sellerboard with "Group by Parent" — upload as-is</div>
+              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
+                <input type="date" id="sbWeek" title="Week start date (auto-filled from the filename if possible)" style="min-width:140px;">
+                <input type="text" id="sbMarketplace" placeholder="Marketplace (e.g. DE)" style="min-width:110px;">
+                <select id="sbTag"><option value="launch">launch</option><option value="expansion">expansion</option></select>
+              </div>
+              <div class="status-line" id="statusSB"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="upload-box" id="dropSF">
+              <label for="fileSF">Upload Sellerfox CSV</label>
+              <input type="file" id="fileSF" accept=".csv">
+              <div class="hint">Sessions, Impressions, Clicks, Orders, Highest BSR</div>
+              <div class="status-line" id="statusSF"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="upload-box" id="dropPR">
+              <label for="filePR">Upload Products CSV</label>
+              <input type="file" id="filePR" accept=".csv">
+              <div class="hint">Product Name, Parent ASIN/SKU, Tag, Marketplace, Launch Date</div>
+              <div class="status-line" id="statusPR"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="upload-box" id="dropTG">
+              <label for="fileTG">Upload Targets CSV</label>
+              <input type="file" id="fileTG" accept=".csv">
+              <div class="hint">One 12-week target per product: Sales, Units, Net Profit, Margin, Sessions, BSR</div>
+              <div class="status-line" id="statusTG"></div>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button class="btn" onclick="downloadTemplate('sellerfox')">Download Sellerfox template</button>
+          <button class="btn" onclick="downloadTemplate('products')">Download Products template</button>
+          <button class="btn" onclick="downloadTemplate('targets')">Download Targets template</button>
+          <button class="btn" onclick="exportBackup()">Export all data (JSON backup)</button>
+          <label class="btn" style="margin:0;">Import JSON backup<input type="file" id="fileBackup" accept=".json" style="display:none;"></label>
+          <button class="btn btn-danger" onclick="clearAllData()">Clear all data</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Products &amp; launch dates</h3>
+        <div class="table-wrap" style="max-height:280px;">
+          <table class="products-table" id="productsTable">
+            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Marketplace</th><th>Launch Date</th><th></th></tr></thead>
+            <tbody id="productsBody"></tbody>
+          </table>
+        </div>
+        <div class="toolbar"><button class="btn btn-primary" onclick="addProductRow()">+ Add product</button></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer>CD Commerce GmbH — internal tool. All data lives on the backend server, shared by everyone who opens this page.</footer>
+
+<script>
+const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+const EDGE_BASE = window.SUPABASE_URL + '/functions/v1';
+
+function fmtMoney(n){ return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtInt(n){ return Math.round(n).toLocaleString('en-US'); }
+function fmtPct(n){ return (n*100).toFixed(1)+'%'; }
+function fmtRank(n){ return n?fmtInt(n):'–'; }
+
+function thumb(imageUrl, size=28){
+  return imageUrl
+    ? `<img src="${imageUrl}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:6px;vertical-align:middle;margin-right:8px;">`
+    : `<span style="display:inline-block;width:${size}px;height:${size}px;background:#EEE7D6;border-radius:6px;vertical-align:middle;margin-right:8px;"></span>`;
+}
+function shortenName(name){
+  if(!name) return '';
+  let s = String(name).split('|')[0].trim();
+  if(s.length > 42){
+    const cut = s.slice(0,42);
+    const lastSpace = cut.lastIndexOf(' ');
+    s = (lastSpace > 20 ? cut.slice(0,lastSpace) : cut).trim() + '…';
+  }
+  return s;
+}
+
+function switchView(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  if(view==='all-products') loadOverview();
+  if(view==='weekly-pulse') loadDashboard();
+  if(view==='comparison') loadComparison();
+  if(view==='launch-report') loadLaunchReport();
+  if(view==='date-range') loadDateRangeOverview();
+}
+
+/* ---------------- Server / Supabase reachability check ---------------- */
+async function checkServer(){
+  try{
+    if(!window.SUPABASE_URL || window.SUPABASE_URL.includes('YOUR-PROJECT')){
+      throw new Error('Supabase not configured — edit config.js with your project URL and anon key.');
+    }
+    const { error } = await sb.from('products').select('asin', { count: 'exact', head: true });
+    if(error) throw error;
+    document.getElementById('serverBadge').textContent = 'live data';
+    document.getElementById('serverBadge').className = 'server-badge ok';
+    document.getElementById('serverDownBanner').classList.remove('show');
+    return true;
+  }catch(e){
+    document.getElementById('serverBadge').textContent = 'Supabase unreachable';
+    document.getElementById('serverBadge').className = 'server-badge down';
+    document.getElementById('serverDownBanner').classList.add('show');
+    document.getElementById('serverDownBanner').textContent = 'Can\'t reach Supabase: ' + e.message;
+    return false;
+  }
+}
+
+function downloadBlob(content, filename, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+function downloadTemplate(kind){
+  let csv, filename;
+  if(kind==='sellerfox'){
+    csv = 'Week Start Date,Marketplace,Tag,Parent ASIN / SKU,Product Name,Sessions,Impressions,Clicks,Orders,Highest BSR (best/lowest rank in week)\n'
+        + '2025-08-29,DE,launch,PARENT-ASIN-001,Toilet Seat Adults - D shape,380,6800,400,20,58210\n';
+    filename = 'sellerfox_template.csv';
+  } else if(kind==='products'){
+    csv = 'Product Name,Parent ASIN / SKU,Tag,Marketplace,Launch Date\n'
+        + 'Toilet Seat Adults - D shape,PARENT-ASIN-001,launch,DE,2025-08-29\n';
+    filename = 'products_template.csv';
+  } else {
+    csv = 'Parent ASIN / SKU,Target Total Sales (€),Target Units Sold,Target Net Profit (€),Target Margin (%),Target Sessions,Target BSR\n'
+        + 'PARENT-ASIN-001,80000,1800,15000,20,15000,5000\n';
+    filename = 'targets_template.csv';
+  }
+  downloadBlob(csv, filename, 'text/csv');
+}
+async function exportBackup(){
+  const [{ data: products }, { data: sellerboard }, { data: sellerfox }, { data: targets }] = await Promise.all([
+    sb.from('products').select('*'),
+    sb.from('sellerboard_rows').select('*'),
+    sb.from('sellerfox_rows').select('*'),
+    sb.from('targets').select('*'),
+  ]);
+  downloadBlob(JSON.stringify({ products, sellerboard, sellerfox, targets }, null, 2), 'launch_tracker_backup.json', 'application/json');
+}
+
+function setStatus(id, kind, msg){
+  const el = document.getElementById(id); el.textContent = msg;
+  el.className = 'status-line ' + (kind==='ok'?'status-ok':kind==='err'?'status-err':'status-busy');
+}
+
+/* ---------------- Uploads: sent to Supabase Edge Functions ---------------- */
+async function uploadFile(functionName, file, statusId){
+  setStatus(statusId, 'busy', 'Uploading…');
+  const fd = new FormData(); fd.append('file', file);
+  try{
+    const res = await fetch(`${EDGE_BASE}/${functionName}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+      body: fd,
+    });
+    const data = await res.json();
+    if(!res.ok){ setStatus(statusId, 'err', data.error || 'Upload failed'); return; }
+    const extra = data.newProducts ? ` (${data.newProducts} new product${data.newProducts>1?'s':''} added)` : '';
+    const skipped = data.skippedUnknownAsins ? `, ${data.skippedUnknownAsins} unknown ASIN(s) skipped` : '';
+    const count = data.rowsLoaded ?? data.productsLoaded ?? data.targetsLoaded;
+    setStatus(statusId, 'ok', `${count} rows loaded${extra}${skipped}`);
+    await populateSelectors(); await loadDashboard(); await loadOverview();
+  }catch(e){ setStatus(statusId, 'err', 'Could not reach Supabase Edge Function'); }
+}
+function extractWeekFromFilename(name){
+  // Sellerboard export filenames embed the report range like 13_07_2026-19_07_2026
+  const m = name.match(/(\d{2})_(\d{2})_(\d{4})-\d{2}_\d{2}_\d{4}/);
+  if(!m) return '';
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+document.getElementById('fileSB').addEventListener('change', async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const guessed = extractWeekFromFilename(file.name);
+  if(guessed) document.getElementById('sbWeek').value = guessed;
+  if(!document.getElementById('sbWeek').value){
+    setStatus('statusSB', 'err', 'Could not read the week from the filename — set the date field above, then re-select the file.');
+    return;
+  }
+  setStatus('statusSB', 'busy', 'Uploading…');
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('week', document.getElementById('sbWeek').value);
+  fd.append('marketplace', document.getElementById('sbMarketplace').value || '');
+  fd.append('tag', document.getElementById('sbTag').value);
+  try{
+    const res = await fetch(`${EDGE_BASE}/upload-sellerboard`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+      body: fd,
+    });
+    const data = await res.json();
+    if(!res.ok){ setStatus('statusSB', 'err', data.error || 'Upload failed'); return; }
+    const extra = data.newProducts ? ` (${data.newProducts} new product${data.newProducts>1?'s':''} added)` : '';
+    const skipped = data.skippedChildRows ? `, ${data.skippedChildRows} child SKU rows skipped` : '';
+    setStatus('statusSB', 'ok', `${data.rowsLoaded} parent products loaded${extra}${skipped}`);
+    await populateSelectors(); await loadDashboard(); await loadOverview();
+  }catch(err){ setStatus('statusSB', 'err', 'Could not reach Supabase Edge Function'); }
+});
+document.getElementById('fileSF').addEventListener('change', e=>{ if(e.target.files[0]) uploadFile('upload-sellerfox', e.target.files[0], 'statusSF'); });
+document.getElementById('filePR').addEventListener('change', e=>{ if(e.target.files[0]) uploadFile('upload-products', e.target.files[0], 'statusPR'); });
+document.getElementById('fileTG').addEventListener('change', e=>{ if(e.target.files[0]) uploadFile('upload-targets', e.target.files[0], 'statusTG'); });
+
+['dropSB','dropSF','dropPR','dropTG'].forEach((id, idx)=>{
+  const box = document.getElementById(id);
+  const inputId = ['fileSB','fileSF','filePR','fileTG'][idx];
+  box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('drag'); });
+  box.addEventListener('dragleave', ()=> box.classList.remove('drag'));
+  box.addEventListener('drop', e=>{
+    e.preventDefault(); box.classList.remove('drag');
+    if(e.dataTransfer.files.length){ document.getElementById(inputId).files = e.dataTransfer.files; document.getElementById(inputId).dispatchEvent(new Event('change')); }
+  });
+});
+
+document.getElementById('fileBackup').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const text = await f.text();
+  try{
+    const json = JSON.parse(text);
+    if(json.products?.length) await sb.from('products').upsert(json.products, { onConflict: 'asin' });
+    if(json.sellerboard?.length) await sb.from('sellerboard_rows').upsert(json.sellerboard, { onConflict: 'asin,week' });
+    if(json.sellerfox?.length) await sb.from('sellerfox_rows').upsert(json.sellerfox, { onConflict: 'asin,week' });
+    if(json.targets?.length) await sb.from('targets').upsert(json.targets, { onConflict: 'asin' });
+    alert('Backup restored.'); await populateSelectors(); await loadDashboard(); await loadOverview();
+  }catch(err){ alert('Invalid backup file: ' + err.message); }
+});
+
+async function clearAllData(){
+  if(!confirm('This clears all data in Supabase for everyone using this dashboard. Continue?')) return;
+  await sb.from('sellerboard_rows').delete().neq('id', -1);
+  await sb.from('sellerfox_rows').delete().neq('id', -1);
+  await sb.from('targets').delete().neq('asin', '');
+  await sb.from('products').delete().neq('asin', '');
+  await populateSelectors(); await loadDashboard(); await loadOverview();
+}
+
+/* ---------------- Products (read/write directly via Supabase, RLS allows it) ---------------- */
+async function fetchProducts(){
+  const { data, error } = await sb.from('products').select('*').order('name');
+  if(error){ console.error(error); return []; }
+  return data;
+}
+
+async function renderProductsTable(){
+  const products = await fetchProducts();
+  const body = document.getElementById('productsBody'); body.innerHTML = '';
+  products.forEach((p)=>{
+    const tr = document.createElement('tr');
+    const thumb = p.image_url
+      ? `<img src="${p.image_url}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`
+      : `<div style="width:36px;height:36px;border-radius:6px;background:#EEE7D6;"></div>`;
+    tr.innerHTML = `
+      <td>
+        <label style="cursor:pointer;display:inline-block;" title="Click to upload/replace photo">
+          ${thumb}
+          <input type="file" accept="image/*" style="display:none;" onchange="uploadProductImage('${p.asin}', this.files[0])">
+        </label>
+      </td>
+      <td><input value="${p.name||''}" onchange="updateProduct('${p.asin}','name',this.value)"></td>
+      <td><input value="${p.asin||''}" disabled title="Delete and re-add to change the ASIN"></td>
+      <td><input value="${p.tag||''}" onchange="updateProduct('${p.asin}','tag',this.value)"></td>
+      <td><input value="${p.marketplace||''}" onchange="updateProduct('${p.asin}','marketplace',this.value)"></td>
+      <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)"></td>
+      <td><button class="btn btn-danger" onclick="removeProduct('${p.asin}')">✕</button></td>`;
+    body.appendChild(tr);
+  });
+  return products;
+}
+async function uploadProductImage(asin, file){
+  if(!file) return;
+  const ext = (file.name.split('.').pop()||'jpg').toLowerCase();
+  const path = `${asin}.${ext}`;
+  const { error } = await sb.storage.from('product-images').upload(path, file, { upsert: true });
+  if(error){ alert('Image upload failed: ' + error.message); return; }
+  const { data } = sb.storage.from('product-images').getPublicUrl(path);
+  await sb.from('products').update({ image_url: data.publicUrl + '?t=' + Date.now() }).eq('asin', asin);
+  await renderProductsTable(); await populateSelectors(); await loadOverview(); await loadDateRangeOverview();
+}
+async function addProductRow(){
+  const asin = 'NEW-' + Date.now();
+  await sb.from('products').insert({ name:'New Product', asin, tag:'launch', marketplace:'', launch:null });
+  await renderProductsTable(); await populateSelectors(); await loadOverview();
+}
+async function updateProduct(asin, field, val){
+  await sb.from('products').update({ [field]: val || null }).eq('asin', asin);
+  await populateSelectors(); await loadDashboard(); await loadOverview();
+}
+async function removeProduct(asin){
+  await sb.from('products').delete().eq('asin', asin);
+  await renderProductsTable(); await populateSelectors(); await loadDashboard(); await loadOverview();
+}
+
+async function populateSelectors(){
+  const products = await fetchProducts();
+  const sel = document.getElementById('productSelect');
+  const current = sel.value;
+  sel.innerHTML = '';
+  products.forEach(p=>{
+    const o = document.createElement('option'); o.value = p.asin; o.textContent = shortenName(p.name) + (p.asin?' ('+p.asin+')':'');
+    sel.appendChild(o);
+  });
+  if(products.find(p=>p.asin===current)) sel.value = current;
+  await renderProductsTable();
+}
+
+/* ---------------- Week aggregation (computed client-side from raw rows — data volume is tiny) ---------------- */
+function weekNumber(launchDate, rowDate){
+  const l = new Date(launchDate), d = new Date(rowDate);
+  const diffDays = Math.round((d - l) / 86400000);
+  return Math.floor(diffDays / 7) + 1;
+}
+
+async function computeWeeks(product, marketplaceFilter){
+  const emptyWeeks = () => Array.from({ length: 12 }, () => ({
+    sales:0, units:0, refunds:0, refundPctSum:0, refundPctN:0,
+    adSpend:0, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0,
+    marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
+    bsr:null, sessions:0, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
+    impressions:0, clicks:0,
+  }));
+  if(!product) return { weeks: emptyWeeks().map(finalizeWeek), anchor: null, autoAnchor: false };
+
+  let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
+  if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
+  const { data: sbRows } = await sbQuery;
+
+  let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
+  if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
+  const { data: sfRows } = await sfQuery;
+
+  // No launch date? Use the earliest uploaded week for this product as Week 1
+  // instead. This re-derives itself automatically if an earlier week ever
+  // gets backfilled later — it's never stored, always computed fresh.
+  const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
+  const autoAnchor = !product.launch;
+  const anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
+
+  const weeks = emptyWeeks();
+  if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor };
+
+  (sbRows||[]).forEach(r=>{
+    const wk = weekNumber(anchor, r.week);
+    if(wk<1||wk>12) return;
+    const w = weeks[wk-1];
+    w.sales+=+r.sales||0; w.units+=+r.units||0; w.refunds+=+r.refunds||0;
+    w.adSpend+=+r.ad_spend||0; w.amazonFees+=+r.amazon_fees||0; w.cogs+=+r.cogs||0;
+    w.vat+=+r.vat||0; w.shipping+=+r.shipping||0; w.grossProfit+=+r.gross_profit||0; w.netProfit+=+r.net_profit||0;
+    w.sessions+=+r.sessions||0;
+    w.bsr = (w.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(w.bsr, r.bsr) : w.bsr);
+    if(r.refund_pct!=null){ w.refundPctSum+=+r.refund_pct; w.refundPctN++; }
+    if(r.margin_pct!=null){ w.marginSum+=+r.margin_pct; w.marginN++; }
+    if(r.roi_pct!=null){ w.roiSum+=+r.roi_pct; w.roiN++; }
+    if(r.real_acos_pct!=null){ w.acosSum+=+r.real_acos_pct; w.acosN++; }
+    if(r.unit_session_pct!=null){ w.cvrSum+=+r.unit_session_pct; w.cvrN++; }
+    if(r.avg_sales_price!=null){ w.avgPriceSum+=+r.avg_sales_price; w.avgPriceN++; }
+  });
+
+  // Sellerfox is optional here — Sellerboard already supplies Sessions/BSR/Conversion;
+  // Sellerfox only adds Impressions/Clicks (for Click-Through Rate) if it's uploaded too.
+  (sfRows||[]).forEach(r=>{
+    const wk = weekNumber(anchor, r.week);
+    if(wk<1||wk>12) return;
+    const w = weeks[wk-1];
+    w.impressions+=+r.impressions||0; w.clicks+=+r.clicks||0;
+    if(!w.sessions && r.sessions) w.sessions+=+r.sessions;
+    if(w.bsr===null && r.bsr) w.bsr = r.bsr;
+  });
+
+  return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor };
+}
+function finalizeWeek(w){
+  return {
+    sales:w.sales, units:w.units, refunds:w.refunds,
+    refundPct: w.refundPctN? (w.refundPctSum/w.refundPctN)/100 : (w.units? w.refunds/w.units : 0),
+    adSpend:w.adSpend, amazonFees:w.amazonFees, cogs:w.cogs, vat:w.vat, shipping:w.shipping,
+    grossProfit:w.grossProfit, netProfit:w.netProfit,
+    margin: w.marginN? (w.marginSum/w.marginN)/100 : (w.sales? w.netProfit/w.sales : 0),
+    roi: w.roiN? (w.roiSum/w.roiN)/100 : null,
+    realAcos: w.acosN? (w.acosSum/w.acosN)/100 : null,
+    bsr:w.bsr, sessions:w.sessions,
+    cvr: w.cvrN? (w.cvrSum/w.cvrN)/100 : (w.sessions? w.units/w.sessions : 0),
+    avgSalesPrice: w.avgPriceN? w.avgPriceSum/w.avgPriceN : null,
+    impressions:w.impressions, clicks:w.clicks,
+    ctr: w.impressions? w.clicks/w.impressions : 0,
+  };
+}
+
+async function getMarketplaces(){
+  const { data: a } = await sb.from('sellerboard_rows').select('marketplace');
+  const { data: b } = await sb.from('sellerfox_rows').select('marketplace');
+  const set = new Set([...(a||[]), ...(b||[])].map(r=>r.marketplace).filter(Boolean));
+  return [...set];
+}
+
+/* ---------------- Overview (All Products) ---------------- */
+async function loadOverview(){
+  const products = await fetchProducts();
+  const hideNoLaunch = document.getElementById('hideNoLaunch').checked;
+  const filtered = hideNoLaunch ? products.filter(p=>p.launch) : products;
+
+  const rows = await Promise.all(filtered.map(async product => {
+    const { weeks } = await computeWeeks(product, 'ALL');
+    const sum = key => weeks.reduce((a,w)=>a+w[key],0);
+    const avg = key => weeks.reduce((a,w)=>a+w[key],0)/weeks.length;
+    const bsrVals = weeks.map(w=>w.bsr).filter(x=>x!==null&&x>0);
+    return {
+      product, totalSales: sum('sales'), netProfit: sum('netProfit'), avgMargin: avg('margin'),
+      units: sum('units'), sessions: sum('sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
+      weeksWithData: weeks.filter(w=>w.sales>0||w.sessions>0).length,
+    };
+  }));
+  rows.sort((a,b)=>b.totalSales - a.totalSales);
+
+  document.getElementById('overviewEmpty').style.display = rows.length ? 'none' : 'block';
+  document.getElementById('overviewPanel').style.display = rows.length ? 'block' : 'none';
+
+  let html = `<thead><tr>
+    <th>Product</th><th>Total Sales</th><th>Net Profit</th>
+    <th>Avg. Margin</th><th>Units Sold</th><th>Sessions</th><th>Best BSR</th><th>Weeks w/ Data</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
+      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${shortenName(r.product.name)}</td>
+      <td>${fmtMoney(r.totalSales)}</td>
+      <td>${fmtMoney(r.netProfit)}</td>
+      <td>${fmtPct(r.avgMargin)}</td>
+      <td>${fmtInt(r.units)}</td>
+      <td>${fmtInt(r.sessions)}</td>
+      <td>${fmtRank(r.bestBSR)}</td>
+      <td>${r.weeksWithData} / 12</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('overviewTable').innerHTML = html;
+}
+function openProductFromOverview(asin){
+  document.getElementById('productSelect').value = asin;
+  switchView('weekly-pulse');
+}
+document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
+
+/* ---------------- Dashboard (Weekly Pulse) ---------------- */
+async function loadLaunchReport(){
+  const products = await fetchProducts();
+  const mktSel = document.getElementById('launchReportMarketplace');
+  const curMkt = mktSel.value || 'ALL';
+  const marketplaces = await getMarketplaces();
+  mktSel.innerHTML = '<option value="ALL">All</option>';
+  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
+  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
+  const mkt = mktSel.value;
+
+  document.getElementById('launchReportEmpty').style.display = products.length ? 'none' : 'block';
+  const body = document.getElementById('launchReportBody');
+  body.innerHTML = '';
+
+  for(const product of products){
+    const { weeks, anchor } = await computeWeeks(product, mkt);
+    const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+    const colLabels = weeks.map((_,i)=>{
+      if(!anchor) return 'Wk '+(i+1);
+      const d = new Date(anchor);
+      d.setDate(d.getDate() + i*7);
+      return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ` (Wk ${i+1})`;
+    });
+
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.innerHTML = `
+      <div style="margin-bottom:14px;">
+        <h3 style="margin:0 0 4px;">${thumb(product.image_url, 36)}${shortenName(product.name)}</h3>
+        <div style="font-size:12.5px;color:var(--text-muted);">Parent ASIN: <strong>${product.asin}</strong></div>
+      </div>
+      <div class="table-wrap"><table></table></div>
+    `;
+    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels);
+    body.appendChild(panel);
+  }
+}
+
+async function loadDateRangeOverview(){
+  const startEl = document.getElementById('drStart'), endEl = document.getElementById('drEnd');
+  if(!startEl.value || !endEl.value){
+    const today = new Date();
+    const weekAgo = new Date(); weekAgo.setDate(today.getDate()-6);
+    startEl.value = weekAgo.toISOString().slice(0,10);
+    endEl.value = today.toISOString().slice(0,10);
+  }
+  const start = startEl.value, end = endEl.value;
+
+  const mktSel = document.getElementById('drMarketplace');
+  const curMkt = mktSel.value || 'ALL';
+  const marketplaces = await getMarketplaces();
+  mktSel.innerHTML = '<option value="ALL">All</option>';
+  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
+  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
+  const mkt = mktSel.value;
+
+  const products = await fetchProducts();
+
+  let sbQuery = sb.from('sellerboard_rows').select('*').gte('week', start).lte('week', end);
+  if(mkt!=='ALL') sbQuery = sbQuery.eq('marketplace', mkt);
+  const { data: sbRows } = await sbQuery;
+
+  let sfQuery = sb.from('sellerfox_rows').select('*').gte('week', start).lte('week', end);
+  if(mkt!=='ALL') sfQuery = sfQuery.eq('marketplace', mkt);
+  const { data: sfRows } = await sfQuery;
+
+  const byAsin = {};
+  products.forEach(p => byAsin[p.asin] = {
+    product:p, units:0, refunds:0, sales:0, adSpend:0, cogs:0, shipping:0, netProfit:0,
+    marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0, aspSum:0, aspN:0,
+    sessions:0, bsr:null, rowCount:0,
+  });
+  (sbRows||[]).forEach(r=>{
+    const b = byAsin[r.asin]; if(!b) return;
+    b.units+=+r.units||0; b.refunds+=+r.refunds||0; b.sales+=+r.sales||0; b.adSpend+=+r.ad_spend||0;
+    b.cogs+=+r.cogs||0; b.shipping+=+r.shipping||0; b.netProfit+=+r.net_profit||0;
+    b.sessions+=+r.sessions||0; b.rowCount++;
+    if(r.margin_pct!=null){ b.marginSum+=+r.margin_pct; b.marginN++; }
+    if(r.roi_pct!=null){ b.roiSum+=+r.roi_pct; b.roiN++; }
+    if(r.real_acos_pct!=null){ b.acosSum+=+r.real_acos_pct; b.acosN++; }
+    if(r.avg_sales_price!=null){ b.aspSum+=+r.avg_sales_price; b.aspN++; }
+    b.bsr = (b.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(b.bsr, r.bsr) : b.bsr);
+  });
+  (sfRows||[]).forEach(r=>{
+    const b = byAsin[r.asin]; if(!b) return;
+    if(!b.sessions && r.sessions) b.sessions += +r.sessions||0;
+  });
+
+  const rows = Object.values(byAsin).filter(b=>b.rowCount>0).map(b=>({
+    product:b.product, units:b.units, refunds:b.refunds, refundPct: b.units? b.refunds/b.units : 0,
+    sales:b.sales, adSpend:b.adSpend, cogs:b.cogs, shipping:b.shipping, netProfit:b.netProfit,
+    margin: b.marginN? (b.marginSum/b.marginN)/100 : (b.sales? b.netProfit/b.sales : 0),
+    roi: b.roiN? (b.roiSum/b.roiN)/100 : null,
+    realAcos: b.acosN? (b.acosSum/b.acosN)/100 : null,
+    asp: b.aspN? b.aspSum/b.aspN : null,
+    sessions:b.sessions, bsr:b.bsr,
+  })).sort((a,b)=>b.sales-a.sales);
+
+  document.getElementById('dateRangeEmpty').style.display = rows.length ? 'none' : 'block';
+  document.getElementById('dateRangePanel').style.display = rows.length ? 'block' : 'none';
+  document.getElementById('drKpiPanel').style.display = rows.length ? 'block' : 'none';
+
+  if(rows.length){
+    const totalSales = rows.reduce((a,r)=>a+r.sales,0);
+    const totalUnits = rows.reduce((a,r)=>a+r.units,0);
+    const totalRefunds = rows.reduce((a,r)=>a+r.refunds,0);
+    const totalAdSpend = rows.reduce((a,r)=>a+r.adSpend,0);
+    const totalNetProfit = rows.reduce((a,r)=>a+r.netProfit,0);
+    const avgMargin = totalSales? totalNetProfit/totalSales : 0;
+    document.getElementById('drKpiGrid').innerHTML = [
+      {label:'Total Sales', value:fmtMoney(totalSales)},
+      {label:'Units Sold', value:fmtInt(totalUnits)},
+      {label:'Refunds', value:fmtInt(totalRefunds)},
+      {label:'Ad Spend', value:fmtMoney(totalAdSpend)},
+      {label:'Net Profit', value:fmtMoney(totalNetProfit)},
+      {label:'Margin', value:fmtPct(avgMargin)},
+    ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
+  }
+
+  let html = `<thead><tr>
+    <th>Product</th><th>Units</th><th>Refunds</th><th>Sales</th><th>Ad Spend</th><th>% Refunds</th>
+    <th>COGS</th><th>Shipping</th><th>Net Profit</th><th>Margin</th><th>ROI</th><th>ASP</th><th>Real ACOS</th><th>Sessions</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
+      <td style="max-width:220px;white-space:normal;">${thumb(r.product.image_url)}${shortenName(r.product.name)}</td>
+      <td>${fmtInt(r.units)}</td>
+      <td>${fmtInt(r.refunds)}</td>
+      <td>${fmtMoney(r.sales)}</td>
+      <td>${fmtMoney(r.adSpend)}</td>
+      <td>${fmtPct(r.refundPct)}</td>
+      <td>${fmtMoney(r.cogs)}</td>
+      <td>${fmtMoney(r.shipping)}</td>
+      <td>${fmtMoney(r.netProfit)}</td>
+      <td>${fmtPct(r.margin)}</td>
+      <td>${r.roi!=null?fmtPct(r.roi):'–'}</td>
+      <td>${r.asp!=null?fmtMoney(r.asp):'–'}</td>
+      <td>${r.realAcos!=null?fmtPct(r.realAcos):'–'}</td>
+      <td>${fmtInt(r.sessions)}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('dateRangeTable').innerHTML = html;
+}
+
+let comparisonData = [];
+async function loadComparison(){
+  const products = await fetchProducts();
+  const mktSel = document.getElementById('comparisonMarketplace');
+  const curMkt = mktSel.value || 'ALL';
+  const marketplaces = await getMarketplaces();
+  mktSel.innerHTML = '<option value="ALL">All</option>';
+  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
+  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
+  const mkt = mktSel.value;
+
+  comparisonData = await Promise.all(products.map(async product => {
+    const { weeks } = await computeWeeks(product, mkt);
+    return { product, weeks };
+  }));
+
+  const metricSel = document.getElementById('comparisonMetric');
+  if(!metricSel.options.length){
+    METRICS.forEach(m=>{ const o=document.createElement('option'); o.value=m.key; o.textContent=m.label; metricSel.appendChild(o); });
+  }
+  renderComparison();
+}
+function renderComparison(){
+  document.getElementById('comparisonEmpty').style.display = comparisonData.length ? 'none' : 'block';
+  document.getElementById('comparisonPanel').style.display = comparisonData.length ? 'block' : 'none';
+  if(!comparisonData.length) return;
+
+  const key = document.getElementById('comparisonMetric').value;
+  const m = METRICS.find(x=>x.key===key) || METRICS[0];
+
+  let html = '<thead><tr><th>Product</th>';
+  for(let i=1;i<=12;i++) html += `<th>Wk ${i}</th>`;
+  html += '<th>12-Wk Total/Avg</th></tr></thead><tbody>';
+
+  comparisonData.forEach(({product, weeks})=>{
+    const vals = weeks.map(w=>w[m.key]);
+    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
+    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+    let total;
+    if(m.kind==='sum') total = sum(weeks, m.key);
+    else if(m.kind==='min') total = minBSR(weeks);
+    else total = avg(weeks, m.key);
+
+    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${product.asin}')"><td style="max-width:220px;white-space:normal;">${thumb(product.image_url)}${shortenName(product.name)}</td>`;
+    vals.forEach(v=>{
+      const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
+      html += `<td style="background:${bg}">${v===null?'–':m.fmt(v)}</td>`;
+    });
+    html += `<td class="total-col">${total===null?'–':m.fmt(total)}</td></tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('comparisonTable').innerHTML = html;
+}
+
+let charts = {};
+function destroyCharts(){ Object.values(charts).forEach(c=>c && c.destroy()); charts = {}; }
+
+async function loadDashboard(){
+  const sel = document.getElementById('productSelect');
+  if(!sel.value){ document.getElementById('emptyState').style.display='block'; document.getElementById('dashboardBody').style.display='none'; return; }
+  const products = await fetchProducts();
+  const product = products.find(p=>p.asin===sel.value);
+
+  const mktSel = document.getElementById('marketplaceSelect');
+  const curMkt = mktSel.value || 'ALL';
+  const marketplaces = await getMarketplaces();
+  mktSel.innerHTML = '<option value="ALL">All</option>';
+  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
+  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
+  const mkt = mktSel.value;
+
+  const hasAnyData = !!product;
+  document.getElementById('emptyState').style.display = hasAnyData ? 'none' : 'block';
+  document.getElementById('dashboardBody').style.display = hasAnyData ? 'block' : 'none';
+  document.getElementById('pulseMeta').innerHTML = product
+    ? `${thumb(product.image_url, 44)}<strong>${shortenName(product.name)}</strong> · Parent ASIN: <strong>${product.asin}</strong>`
+    : 'Select a product to see its 12-week scorecard';
+  if(!hasAnyData){ destroyCharts(); return; }
+
+  const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt);
+  const banner = document.getElementById('noLaunchBanner');
+  if(autoAnchor && anchor){
+    banner.textContent = `No launch date set — using the earliest uploaded week (${anchor}) as Week 1. Set a launch date in Upload & Manage if you'd rather anchor by the real launch date.`;
+    banner.classList.add('show');
+  } else if(!anchor){
+    banner.textContent = `No data uploaded for this product yet.`;
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+  const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+  const labels = weeks.map((_,i)=>'Wk '+(i+1));
+  renderKPIs(weeks, targetRow);
+  renderCharts(weeks, labels);
+  renderTable(weeks, targetRow);
+}
+
+function sum(arr, key){ return arr.reduce((a,w)=>a+w[key],0); }
+function avg(arr, key){ return arr.reduce((a,w)=>a+w[key],0)/arr.length; }
+function minBSR(arr){ const v = arr.map(w=>w.bsr).filter(x=>x!==null&&x>0); return v.length?Math.min(...v):null; }
+
+function targetLine(actual, target, fmt, lowerIsBetter=false){
+  if(target==null) return '';
+  const pct = lowerIsBetter
+    ? (actual>0 ? Math.round((target/actual)*100) : null)
+    : (target>0 ? Math.round((actual/target)*100) : null);
+  const pctStr = pct!=null ? ` (${pct}% of target)` : '';
+  return `<div class="desc" style="color:var(--gold-dark);font-weight:600;">Target: ${fmt(target)}${pctStr}</div>`;
+}
+function renderKPIs(weeks, targets){
+  const t = targets || {};
+  const cards = [
+    {label:'12-Wk Total Sales', value: fmtMoney(sum(weeks,'sales')), desc:'Sum of Total Sales across all 12 weeks', target: targetLine(sum(weeks,'sales'), t.target_sales, fmtMoney)},
+    {label:'12-Wk Net Profit', value: fmtMoney(sum(weeks,'netProfit')), desc:'Sum of Net Profit across all 12 weeks', target: targetLine(sum(weeks,'netProfit'), t.target_net_profit, fmtMoney)},
+    {label:'Avg. Margin', value: fmtPct(avg(weeks,'margin')), desc:'Sellerboard margin %, averaged over 12 weeks', target: targetLine(avg(weeks,'margin')*100, t.target_margin_pct, v=>v.toFixed(1)+'%')},
+    {label:'12-Wk Units Sold', value: fmtInt(sum(weeks,'units')), desc:'Sum of Units Sold across all 12 weeks', target: targetLine(sum(weeks,'units'), t.target_units, fmtInt)},
+    {label:'12-Wk Sessions', value: fmtInt(sum(weeks,'sessions')), desc:'Sum of Sessions across all 12 weeks', target: targetLine(sum(weeks,'sessions'), t.target_sessions, fmtInt)},
+    {label:'Best BSR reached', value: fmtRank(minBSR(weeks)), desc:'Lowest (best) BSR seen in any week', target: targetLine(minBSR(weeks)||0, t.target_bsr, fmtRank, true)},
+  ];
+  document.getElementById('kpiGrid').innerHTML = cards.map(c=>`
+    <div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="desc">${c.desc}</div>${c.target}</div>`).join('');
+}
+
+function chartOpts(stacked=false, dualAxis=false){
+  const base = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, boxWidth:10, color:'#8B8272'}} },
+    scales:{ x:{grid:{display:false}, ticks:{color:'#8B8272'}}, y:{grid:{color:'#EDE7DA'}, stacked, ticks:{color:'#8B8272'}} }
+  };
+  if(stacked){ base.scales.x.stacked = true; base.scales.y.stacked = true; }
+  if(dualAxis){ base.scales.y1 = {position:'right', grid:{display:false}, ticks:{callback:v=>v+'%', color:'#8B8272'}}; }
+  return base;
+}
+
+function renderCharts(weeks, labels){
+  destroyCharts();
+  const gold='#C9972E', olive='#8B6F1F', green='#4C6B4A', red='#A34131', slate='#7893A8', dark='#1F1B15';
+
+  charts.revenue = new Chart(document.getElementById('chartRevenue'), {
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Total Sales (€)', data:weeks.map(w=>w.sales), borderColor:dark, backgroundColor:dark, tension:.3},
+      {label:'Net Profit (€)', data:weeks.map(w=>w.netProfit), borderColor:gold, backgroundColor:gold, tension:.3, borderWidth:3},
+      {label:'Ad Spend (€)', data:weeks.map(w=>w.adSpend), borderColor:'#C9BBA0', backgroundColor:'#C9BBA0', tension:.3, borderDash:[4,3]},
+    ]}, options: chartOpts()
+  });
+
+  charts.split = new Chart(document.getElementById('chartSplit'), {
+    type:'doughnut',
+    data:{labels:['Cost of Goods','Amazon Fees','Ad Spend','Net Profit'], datasets:[{
+      data:[sum(weeks,'cogs'), sum(weeks,'amazonFees'), sum(weeks,'adSpend'), Math.max(sum(weeks,'netProfit'),0)],
+      backgroundColor:[olive, red, gold, green],
+    }]},
+    options:{responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, color:'#8B8272'}}}}
+  });
+
+  charts.traffic = new Chart(document.getElementById('chartTraffic'), {
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Sessions', data:weeks.map(w=>w.sessions), borderColor:dark, backgroundColor:dark, tension:.3, yAxisID:'y'},
+      {label:'Clicks', data:weeks.map(w=>w.clicks), borderColor:slate, backgroundColor:slate, tension:.3, yAxisID:'y'},
+      {label:'Conversion Rate (%)', data:weeks.map(w=>+(w.cvr*100).toFixed(2)), borderColor:gold, backgroundColor:gold, tension:.3, yAxisID:'y1', borderWidth:3},
+    ]}, options: chartOpts(false, true)
+  });
+
+  charts.margin = new Chart(document.getElementById('chartMargin'), {
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Real ACOS (%)', data:weeks.map(w=>w.realAcos!=null?+(w.realAcos*100).toFixed(2):null), borderColor:red, backgroundColor:red, tension:.3, borderDash:[5,3], spanGaps:true},
+      {label:'ROI (%)', data:weeks.map(w=>w.roi!=null?+(w.roi*100).toFixed(2):null), borderColor:olive, backgroundColor:olive, tension:.3, borderDash:[5,3], spanGaps:true},
+      {label:'Margin (%)', data:weeks.map(w=>+(w.margin*100).toFixed(2)), borderColor:green, backgroundColor:green, tension:.3, borderWidth:3},
+    ]}, options: chartOpts()
+  });
+
+  charts.bsr = new Chart(document.getElementById('chartBSR'), {
+    type:'line',
+    data:{labels, datasets:[{label:'Best BSR', data:weeks.map(w=>w.bsr), borderColor:gold, backgroundColor:gold, tension:.3, spanGaps:true, borderWidth:3}]},
+    options: (()=>{ const o = chartOpts(); o.scales.y = {...o.scales.y, reverse:true}; return o; })()
+  });
+
+  charts.costTrend = new Chart(document.getElementById('chartCostTrend'), {
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'Cost of Goods', data:weeks.map(w=>w.cogs), backgroundColor:olive, stack:'s'},
+      {label:'Amazon Fees', data:weeks.map(w=>w.amazonFees), backgroundColor:red, stack:'s'},
+      {label:'Ad Spend', data:weeks.map(w=>w.adSpend), backgroundColor:gold, stack:'s'},
+      {label:'Net Profit', data:weeks.map(w=>Math.max(w.netProfit,0)), backgroundColor:green, stack:'s'},
+    ]}, options: chartOpts(true)
+  });
+
+  currentWeeksData = weeks;
+  const wowSel = document.getElementById('wowMetric');
+  if(!wowSel.options.length){
+    METRICS.forEach(m=>{ const o=document.createElement('option'); o.value=m.key; o.textContent=m.label; wowSel.appendChild(o); });
+    wowSel.value = 'sales';
+  }
+  renderWowChart();
+}
+
+let currentWeeksData = [];
+function renderWowChart(){
+  if(!currentWeeksData.length) return;
+  const key = document.getElementById('wowMetric').value || 'sales';
+  const m = METRICS.find(x=>x.key===key) || METRICS[0];
+  const vals = currentWeeksData.map(w=>w[m.key]);
+  const labels = vals.map((_,i)=>'Wk '+(i+1));
+  const changes = vals.map((v,i)=>{
+    if(i===0) return null;
+    const prev = vals[i-1];
+    if(v==null || prev==null || prev===0) return null;
+    return +(((v-prev)/Math.abs(prev))*100).toFixed(1);
+  });
+  const colors = changes.map(c=>{
+    if(c==null) return '#D9D2C2';
+    const isGood = m.lowerIsBetter ? c<0 : c>0;
+    return isGood ? '#4C6B4A' : '#A34131';
+  });
+  if(charts.wow) charts.wow.destroy();
+  charts.wow = new Chart(document.getElementById('chartWow'), {
+    type:'bar',
+    data:{labels, datasets:[{label:m.label+' — % change vs. prior week', data:changes, backgroundColor:colors}]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>(ctx.raw==null?'No prior week to compare':ctx.raw+'%')}} },
+      scales:{ x:{grid:{display:false}, ticks:{color:'#8B8272'}}, y:{grid:{color:'#EDE7DA'}, ticks:{color:'#8B8272', callback:v=>v+'%'}} },
+    }
+  });
+}
+
+const METRICS = [
+  {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, kind:'sum', targetKey:'target_sales'},
+  {key:'units', label:'Units Sold', fmt:fmtInt, kind:'sum', targetKey:'target_units'},
+  {key:'refunds', label:'Refund Units', fmt:fmtInt, kind:'sum', lowerIsBetter:true},
+  {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
+  {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
+  {key:'amazonFees', label:'Amazon Fees (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
+  {key:'cogs', label:'Cost of Goods (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
+  {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoney, kind:'sum', targetKey:'target_net_profit'},
+  {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', targetKey:'target_margin_pct', targetIsPct:true},
+  {key:'roi', label:'ROI (%)', fmt:fmtPct, kind:'calc'},
+  {key:'realAcos', label:'Real ACOS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
+  {key:'sessions', label:'Sessions', fmt:fmtInt, kind:'sum', targetKey:'target_sessions'},
+  {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc'},
+  {key:'impressions', label:'Impressions (from Sellerfox, optional)', fmt:fmtInt, kind:'sum'},
+  {key:'clicks', label:'Clicks (from Sellerfox, optional)', fmt:fmtInt, kind:'sum'},
+  {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc'},
+  {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc'},
+  {key:'bsr', label:'Best BSR (lowest = best)', fmt:fmtRank, kind:'min', lowerIsBetter:true, targetKey:'target_bsr'},
+];
+
+function heatColor(val, min, max){
+  if(max===min) return '#ffffff';
+  const t = (val-min)/(max-min);
+  const r = 255+(201-255)*t, g=255+(151-255)*t, b=255+(46-255)*t;
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+
+function weekDelta(vals, i, lowerIsBetter){
+  if(i===0) return '';
+  const cur = vals[i], prev = vals[i-1];
+  if(cur==null || prev==null || prev===0) return '';
+  const pct = ((cur-prev)/Math.abs(prev))*100;
+  if(Math.abs(pct) < 0.05) return `<div style="font-size:9.5px;color:var(--text-muted);margin-top:2px;">▬ 0%</div>`;
+  const isGood = lowerIsBetter ? pct<0 : pct>0;
+  const color = isGood ? 'var(--green)' : 'var(--red)';
+  const arrow = pct>0 ? '▲' : '▼';
+  return `<div style="font-size:9.5px;color:${color};margin-top:2px;font-weight:600;">${arrow} ${Math.abs(pct).toFixed(0)}%</div>`;
+}
+function buildScorecardTable(weeks, targets, colLabels){
+  const t = targets || {};
+  let html = '<thead><tr><th>Metric</th>';
+  colLabels.forEach(l=> html += `<th>${l}</th>`);
+  html += '<th>12-Wk Total/Avg</th><th>Target</th></tr></thead><tbody>';
+  METRICS.forEach(m=>{
+    const vals = weeks.map(w=>w[m.key]);
+    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
+    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+    html += `<tr><td>${m.label}</td>`;
+    vals.forEach((v,i)=>{
+      const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
+      html += `<td style="background:${bg}">${v===null?'–':m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</td>`;
+    });
+    let total;
+    if(m.kind==='sum') total = sum(weeks, m.key);
+    else if(m.kind==='min') total = minBSR(weeks);
+    else total = avg(weeks, m.key);
+    html += `<td class="total-col">${total===null?'–':m.fmt(total)}</td>`;
+
+    let targetCell = '–';
+    if(m.targetKey && t[m.targetKey]!=null){
+      const raw = t[m.targetKey];
+      const targetVal = m.targetIsPct ? raw/100 : raw;
+      targetCell = m.fmt(targetVal);
+    }
+    html += `<td style="background:var(--gold-light);font-weight:600;">${targetCell}</td></tr>`;
+  });
+  html += '</tbody>';
+  return html;
+}
+function renderTable(weeks, targets){
+  document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, weeks.map((_,i)=>'Wk '+(i+1)));
+}
+
+(async function init(){
+  const up = await checkServer();
+  if(!up) return;
+  await populateSelectors();
+  await loadDateRangeOverview();
+})();
+</script>
+</body>
+</html>
