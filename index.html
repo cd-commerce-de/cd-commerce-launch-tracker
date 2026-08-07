@@ -997,12 +997,13 @@ async function loadTagDashboard(tag){
       ageWeeks = +(ageDays / 7).toFixed(1);
       ageLabel = weekNum>=1 && weekNum<=12 ? `Week ${weekNum} of 12` : (weekNum>12 ? 'Past Week 12' : '');
     }
+    const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
     const metaFields = [
       {label:'Marketplace', value: product.marketplace || '–'},
       {label:'Product Line Code', value: product.product_line_code || '–'},
       {label:'Product Line', value: product.product_line || '–'},
       {label:'Parent ASIN', value: product.asin},
-      {label:'Date Launched', value: product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–'},
+      {label:'Date Launched', value: dateLaunchedStr},
       {label:'Stage', value: product.stage || '–'},
       {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
       {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
@@ -1016,6 +1017,7 @@ async function loadTagDashboard(tag){
         <div>
           <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${product.name||''}</h3>
           <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
+          <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">Date Launched: <strong>${dateLaunchedStr}</strong></div>
         </div>
         <button class="btn" onclick="document.getElementById('productSelect').value='${product.asin}'; switchView('weekly-pulse');">Open in Product Detail →</button>
       </div>
