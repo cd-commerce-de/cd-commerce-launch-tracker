@@ -151,9 +151,13 @@
   <nav class="sidebar">
     <div class="nav-burger">☰</div>
     <div class="nav-section-label">Overview</div>
-    <div class="nav-item active" data-view="date-range" onclick="switchView('date-range')" title="Everything at a glance — overall totals, trend, and every product for any date range">
+    <div class="nav-item active" data-view="launch-dash" onclick="switchView('launch-dash')" title="Everything about launch products in one place — overall totals and every product's week-by-week performance">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></div>
-      Dashboard
+      Launch Dashboard
+    </div>
+    <div class="nav-item" data-view="expansion-dash" onclick="switchView('expansion-dash')" title="Everything about expansion products in one place — overall totals and every product's week-by-week performance">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></div>
+      Expansion Dashboard
     </div>
     <div class="nav-item" data-view="all-products" onclick="switchView('all-products')" title="One row per product, 12-week totals — quick scan of who's ahead or behind">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="10" width="4" height="10"/><rect x="10" y="5" width="4" height="15"/><rect x="17" y="13" width="4" height="7"/></svg></div>
@@ -162,14 +166,6 @@
     <div class="nav-item" data-view="weekly-pulse" onclick="switchView('weekly-pulse')" title="Deep dive into one product's own 12-week launch window — KPIs, trend charts, full scorecard">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3,13 8,13 10,7 14,19 16,13 21,13"/></svg></div>
       Product Detail
-    </div>
-    <div class="nav-item" data-view="comparison" onclick="switchView('comparison')" title="Pick one metric and see every product side by side, week by week">
-      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg></div>
-      Metric Trends
-    </div>
-    <div class="nav-item" data-view="launch-report" onclick="switchView('launch-report')" title="Every product's full scorecard, one after another — for printing or sharing">
-      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/></svg></div>
-      Full Report
     </div>
     <div class="nav-section-label">Data</div>
     <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')" title="Upload weekly exports and manage your product list">
@@ -182,34 +178,54 @@
 
     <div class="banner err" id="serverDownBanner">Can't reach the backend API. Make sure the server is running — see README.</div>
 
-    <div class="view active" id="view-date-range">
+    <div class="view active" id="view-launch-dash">
       <div class="page-head">
-        <h2>Dashboard</h2>
-        <div class="meta">Every product at once, for any date range you pick</div>
+        <h2>Launch Dashboard</h2>
+        <div class="meta">Every launch product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
       <div class="panel">
         <div class="filter-bar">
-          <div class="filter-field"><label>From</label><input type="date" id="drStart" onchange="loadDateRangeOverview()"></div>
-          <div class="filter-field"><label>To</label><input type="date" id="drEnd" onchange="loadDateRangeOverview()"></div>
-          <div class="filter-field"><label>Marketplace</label><select id="drMarketplace" onchange="loadDateRangeOverview()"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Tag</label><select id="drTag" onchange="loadDateRangeOverview()"><option value="ALL">All</option><option value="launch">Launch</option><option value="expansion">Expansion</option></select></div>
+          <div class="filter-field"><label>Marketplace</label><select id="launchDashMarketplace" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
         </div>
       </div>
-      <div class="panel" id="drKpiPanel" style="display:none;">
+      <div class="panel" id="launchDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
-        <div class="kpi-grid" id="drKpiGrid"></div>
+        <div class="kpi-grid" id="launchDashKpiGrid"></div>
       </div>
-      <div class="panel" id="drTrendPanel" style="display:none;">
-        <h3>Portfolio Trend</h3>
-        <div class="chart-box" style="height:300px;"><canvas id="chartPortfolioTrend"></canvas></div>
+      <div class="panel" id="launchDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <div class="table-wrap"><table id="launchDashOverallTable"></table></div>
       </div>
-      <div id="dateRangeEmpty" class="panel empty-state" style="display:none;">
-        <div class="big">No data for this range</div>
-        Try a wider date range, or upload a weekly export that falls inside it.
+      <div id="launchDashEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No launch products yet</div>
+        Add a product tagged "launch" and upload data from the <b>Upload &amp; Manage</b> tab.
       </div>
-      <div class="panel" id="dateRangePanel" style="display:none;">
-        <div class="table-wrap"><table id="dateRangeTable"></table></div>
+      <div id="launchDashProductBlocks"></div>
+    </div>
+
+    <div class="view" id="view-expansion-dash">
+      <div class="page-head">
+        <h2>Expansion Dashboard</h2>
+        <div class="meta">Every expansion product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Marketplace</label><select id="expansionDashMarketplace" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+        </div>
+      </div>
+      <div class="panel" id="expansionDashKpiPanel" style="display:none;">
+        <h3>Overall</h3>
+        <div class="kpi-grid" id="expansionDashKpiGrid"></div>
+      </div>
+      <div class="panel" id="expansionDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <div class="table-wrap"><table id="expansionDashOverallTable"></table></div>
+      </div>
+      <div id="expansionDashEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">No expansion products yet</div>
+        Add a product tagged "expansion" and upload data from the <b>Upload &amp; Manage</b> tab.
+      </div>
+      <div id="expansionDashProductBlocks"></div>
     </div>
 
     <div class="view" id="view-all-products">
@@ -284,47 +300,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="view" id="view-comparison">
-      <div class="page-head">
-        <h2>Metric Trends</h2>
-        <div class="meta">Every product side by side, one metric at a time, week by week</div>
-      </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Metric</label><select id="comparisonMetric" onchange="renderComparison()"></select></div>
-          <div class="filter-field"><label>Marketplace</label><select id="comparisonMarketplace" onchange="loadComparison()"><option value="ALL">All</option></select></div>
-        </div>
-      </div>
-      <div id="comparisonEmpty" class="panel empty-state" style="display:none;">
-        <div class="big">No products yet</div>
-        Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
-      </div>
-      <div class="panel" id="comparisonPanel" style="display:none;">
-        <div class="table-wrap"><table id="comparisonTable"></table></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--text-muted);">
-          <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
-          <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="view" id="view-launch-report">
-      <div class="page-head">
-        <h2>Full Report</h2>
-        <div class="meta">Every product's full scorecard, one block after another — for printing or sharing</div>
-      </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Marketplace</label><select id="launchReportMarketplace" onchange="loadLaunchReport()"><option value="ALL">All</option></select></div>
-        </div>
-      </div>
-      <div id="launchReportEmpty" class="panel empty-state" style="display:none;">
-        <div class="big">No products yet</div>
-        Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
-      </div>
-      <div id="launchReportBody"></div>
     </div>
 
     <div class="view" id="view-data-manage">
@@ -454,9 +429,8 @@ function switchView(view){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
   if(view==='all-products') loadOverview();
   if(view==='weekly-pulse') loadDashboard();
-  if(view==='comparison') loadComparison();
-  if(view==='launch-report') loadLaunchReport();
-  if(view==='date-range') loadDateRangeOverview();
+  if(view==='launch-dash') loadTagDashboard('launch');
+  if(view==='expansion-dash') loadTagDashboard('expansion');
 }
 
 /* ---------------- Server / Supabase reachability check ---------------- */
@@ -669,7 +643,7 @@ async function uploadProductImage(asin, file){
   if(error){ alert('Image upload failed: ' + error.message); return; }
   const { data } = sb.storage.from('product-images').getPublicUrl(path);
   await sb.from('products').update({ image_url: data.publicUrl + '?t=' + Date.now() }).eq('asin', asin);
-  await renderProductsTable(); await populateSelectors(); await loadOverview(); await loadDateRangeOverview();
+  await renderProductsTable(); await populateSelectors(); await loadOverview();
 }
 async function addProductRow(){
   const asin = 'NEW-' + Date.now();
@@ -866,10 +840,10 @@ function openProductFromOverview(asin){
 }
 document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
-/* ---------------- Dashboard (Product Detail) ---------------- */
-async function loadLaunchReport(){
-  const products = await fetchProducts();
-  const mktSel = document.getElementById('launchReportMarketplace');
+/* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
+async function loadTagDashboard(tag){
+  const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
+  const mktSel = document.getElementById(p+'DashMarketplace');
   const curMkt = mktSel.value || 'ALL';
   const marketplaces = await getMarketplaces();
   mktSel.innerHTML = '<option value="ALL">All</option>';
@@ -877,13 +851,81 @@ async function loadLaunchReport(){
   if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
   const mkt = mktSel.value;
 
-  document.getElementById('launchReportEmpty').style.display = products.length ? 'none' : 'block';
-  const body = document.getElementById('launchReportBody');
-  body.innerHTML = '';
+  const products = (await fetchProducts()).filter(pr => pr.tag === tag);
 
-  for(const product of products){
+  document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
+  document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
+  document.getElementById(p+'DashOverallPanel').style.display = products.length ? 'block' : 'none';
+  const blocksContainer = document.getElementById(p+'DashProductBlocks');
+  blocksContainer.innerHTML = '';
+  if(!products.length) return;
+
+  const productData = await Promise.all(products.map(async product => {
     const { weeks, anchor } = await computeWeeks(product, mkt);
     const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+    return { product, weeks, anchor, targetRow };
+  }));
+
+  const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
+  const totalUnits = productData.reduce((a,pd)=>a+sum(pd.weeks,'units'),0);
+  const totalNetProfit = productData.reduce((a,pd)=>a+sum(pd.weeks,'netProfit'),0);
+  const avgMargin = totalSales? totalNetProfit/totalSales : 0;
+  document.getElementById(p+'DashKpiGrid').innerHTML = [
+    {label:'Total Sales', value:fmtMoney(totalSales)},
+    {label:'Total Units', value:fmtInt(totalUnits)},
+    {label:'Net Margin', value:fmtMoney(totalNetProfit)},
+    {label:'Net Margin %', value:fmtPct(avgMargin)},
+  ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
+
+  // Portfolio total, week by week (relative week index, since each product has its own launch date)
+  const weekTotals = Array.from({length:12}, (_,i)=>{
+    let sales=0, units=0, netProfit=0, adSpend=0, sessions=0, refunds=0;
+    productData.forEach(pd=>{
+      const w = pd.weeks[i];
+      sales += w.sales; units += w.units; netProfit += w.netProfit;
+      adSpend += w.adSpend; sessions += w.sessions; refunds += w.refunds;
+    });
+    return { sales, units, netProfit, adSpend, sessions, refunds,
+      margin: sales? netProfit/sales : 0, tacos: sales? adSpend/sales : 0, refundPct: units? refunds/units : 0 };
+  });
+  const overallMetrics = [
+    {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, lowerIsBetter:false},
+    {key:'units', label:'Units Sold', fmt:fmtInt, lowerIsBetter:false},
+    {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoney, lowerIsBetter:false},
+    {key:'margin', label:'Margin (%)', fmt:fmtPct, lowerIsBetter:false},
+    {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoney, lowerIsBetter:true},
+    {key:'tacos', label:'TACoS (%)', fmt:fmtPct, lowerIsBetter:true},
+    {key:'sessions', label:'Sessions', fmt:fmtInt, lowerIsBetter:false},
+    {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, lowerIsBetter:true},
+  ];
+  let ohtml = '<thead><tr><th>Metric</th>';
+  for(let i=1;i<=12;i++) ohtml += `<th>Wk ${i}</th>`;
+  ohtml += '<th>12-Wk Total/Avg</th></tr></thead><tbody>';
+  overallMetrics.forEach(m=>{
+    const vals = weekTotals.map(w=>w[m.key]);
+    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
+    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+    ohtml += `<tr><td>${m.label}</td>`;
+    vals.forEach((v,i)=>{
+      const bg = heatColor(v,min,max);
+      ohtml += `<td style="background:${bg}">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
+    });
+    const grandSales = weekTotals.reduce((a,w)=>a+w.sales,0);
+    const grandUnits = weekTotals.reduce((a,w)=>a+w.units,0);
+    const grandAdSpend = weekTotals.reduce((a,w)=>a+w.adSpend,0);
+    const grandRefunds = weekTotals.reduce((a,w)=>a+w.refunds,0);
+    let total;
+    if(m.key==='margin') total = grandSales? weekTotals.reduce((a,w)=>a+w.netProfit,0)/grandSales : 0;
+    else if(m.key==='tacos') total = grandSales? grandAdSpend/grandSales : 0;
+    else if(m.key==='refundPct') total = grandUnits? grandRefunds/grandUnits : 0;
+    else total = vals.reduce((a,v)=>a+v,0);
+    ohtml += `<td class="total-col">${m.fmt(total)}</td></tr>`;
+  });
+  ohtml += '</tbody>';
+  document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
+
+  // Per-product full scorecards
+  productData.forEach(({product, weeks, anchor, targetRow})=>{
     const colLabels = weeks.map((_,i)=>{
       const wkLabel = 'Wk '+(i+1);
       if(!anchor) return wkLabel;
@@ -892,295 +934,31 @@ async function loadLaunchReport(){
       const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
     });
-
+    let ageLabel = '';
+    if(anchor){
+      const ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
+      const ageWeeks = Math.floor(ageDays / 7) + 1;
+      ageLabel = ageWeeks>=1 && ageWeeks<=12 ? `Week ${ageWeeks} of 12` : (ageWeeks>12 ? 'Past Week 12' : '');
+    }
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
-      <div style="margin-bottom:14px;">
-        <h3 style="margin:0 0 4px;">${thumb(product.image_url, 36)}${shortenName(product.name)}</h3>
-        <div style="font-size:12.5px;color:var(--text-muted);">Parent ASIN: <strong>${product.asin}</strong></div>
+      <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${shortenName(product.name)}</h3>
+          <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
+        </div>
+        <button class="btn" onclick="document.getElementById('productSelect').value='${product.asin}'; switchView('weekly-pulse');">Open in Product Detail →</button>
       </div>
       <div class="table-wrap"><table></table></div>
     `;
     panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels);
-    body.appendChild(panel);
-  }
+    blocksContainer.appendChild(panel);
+  });
 }
 
-async function loadDateRangeOverview(){
-  const startEl = document.getElementById('drStart'), endEl = document.getElementById('drEnd');
-  if(!startEl.value || !endEl.value){
-    const [{ data: a }, { data: b }] = await Promise.all([
-      sb.from('sellerboard_rows').select('week').order('week', { ascending: false }).limit(1),
-      sb.from('sellerfox_rows').select('week').order('week', { ascending: false }).limit(1),
-    ]);
-    const latest = [...(a||[]), ...(b||[])].map(r=>r.week).filter(Boolean).sort().pop();
-    const end = latest ? new Date(latest) : new Date();
-    const start = new Date(end); start.setDate(end.getDate()-6);
-    startEl.value = start.toISOString().slice(0,10);
-    endEl.value = end.toISOString().slice(0,10);
-  }
-  const start = startEl.value, end = endEl.value;
-
-  const mktSel = document.getElementById('drMarketplace');
-  const curMkt = mktSel.value || 'ALL';
-  const marketplaces = await getMarketplaces();
-  mktSel.innerHTML = '<option value="ALL">All</option>';
-  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
-  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
-  const mkt = mktSel.value;
-
-  const tagSel = document.getElementById('drTag');
-  const tag = tagSel.value;
-
-  const products = (await fetchProducts()).filter(p => tag==='ALL' || p.tag===tag);
-
-  let sbQuery = sb.from('sellerboard_rows').select('*').gte('week', start).lte('week', end);
-  if(mkt!=='ALL') sbQuery = sbQuery.eq('marketplace', mkt);
-  const { data: sbRows } = await sbQuery;
-
-  let sfQuery = sb.from('sellerfox_rows').select('*').gte('week', start).lte('week', end);
-  if(mkt!=='ALL') sfQuery = sfQuery.eq('marketplace', mkt);
-  const { data: sfRows } = await sfQuery;
-
-  const byAsin = {};
-  products.forEach(p => byAsin[p.asin] = {
-    product:p, units:0, refunds:0, sales:0, adSpend:0, cogs:0, shipping:0, netProfit:0,
-    marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0, aspSum:0, aspN:0,
-    sessions:0, bsr:null, rowCount:0,
-  });
-  (sbRows||[]).forEach(r=>{
-    const b = byAsin[r.asin]; if(!b) return;
-    b.units+=+r.units||0; b.refunds+=+r.refunds||0; b.sales+=+r.sales||0; b.adSpend+=Math.abs(+r.ad_spend||0);
-    b.cogs+=Math.abs(+r.cogs||0); b.shipping+=Math.abs(+r.shipping||0); b.netProfit+=+r.net_profit||0;
-    b.sessions+=+r.sessions||0; b.rowCount++;
-    if(r.margin_pct!=null){ b.marginSum+=+r.margin_pct; b.marginN++; }
-    if(r.roi_pct!=null){ b.roiSum+=+r.roi_pct; b.roiN++; }
-    if(r.real_acos_pct!=null){ b.acosSum+=+r.real_acos_pct; b.acosN++; }
-    if(r.avg_sales_price!=null){ b.aspSum+=+r.avg_sales_price; b.aspN++; }
-    b.bsr = (b.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(b.bsr, r.bsr) : b.bsr);
-  });
-  (sfRows||[]).forEach(r=>{
-    const b = byAsin[r.asin]; if(!b) return;
-    if(!b.sessions && r.sessions) b.sessions += +r.sessions||0;
-  });
-
-  const rows = Object.values(byAsin).filter(b=>b.rowCount>0).map(b=>({
-    product:b.product, units:b.units, refunds:b.refunds, refundPct: b.units? b.refunds/b.units : 0,
-    sales:b.sales, adSpend:b.adSpend, cogs:b.cogs, shipping:b.shipping, netProfit:b.netProfit,
-    margin: b.marginN? (b.marginSum/b.marginN)/100 : (b.sales? b.netProfit/b.sales : 0),
-    roi: b.roiN? (b.roiSum/b.roiN)/100 : null,
-    realAcos: b.acosN? (b.acosSum/b.acosN)/100 : null,
-    asp: b.aspN? b.aspSum/b.aspN : null,
-    sessions:b.sessions, bsr:b.bsr,
-  })).sort((a,b)=>b.sales-a.sales);
-
-  document.getElementById('dateRangeEmpty').style.display = rows.length ? 'none' : 'block';
-  document.getElementById('dateRangePanel').style.display = rows.length ? 'block' : 'none';
-  document.getElementById('drKpiPanel').style.display = rows.length ? 'block' : 'none';
-  document.getElementById('drTrendPanel').style.display = rows.length ? 'block' : 'none';
-
-  if(rows.length){
-    const totalSales = rows.reduce((a,r)=>a+r.sales,0);
-    const totalUnits = rows.reduce((a,r)=>a+r.units,0);
-    const totalNetProfit = rows.reduce((a,r)=>a+r.netProfit,0);
-    const avgMargin = totalSales? totalNetProfit/totalSales : 0;
-    document.getElementById('drKpiGrid').innerHTML = [
-      {label:'Total Sales', value:fmtMoney(totalSales)},
-      {label:'Total Units', value:fmtInt(totalUnits)},
-      {label:'Net Margin', value:fmtMoney(totalNetProfit)},
-      {label:'Net Margin %', value:fmtPct(avgMargin)},
-    ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
-
-    const weekBuckets = {};
-    (sbRows||[]).forEach(r=>{
-      if(!byAsin[r.asin]) return;
-      if(!weekBuckets[r.week]) weekBuckets[r.week] = { sales:0, netProfit:0 };
-      weekBuckets[r.week].sales += +r.sales||0;
-      weekBuckets[r.week].netProfit += +r.net_profit||0;
-    });
-    const sortedWeeks = Object.keys(weekBuckets).sort();
-    const trendLabels = sortedWeeks.map(w => new Date(w).toLocaleDateString('en-GB',{day:'numeric',month:'short'}));
-    if(portfolioTrendChart) portfolioTrendChart.destroy();
-    portfolioTrendChart = new Chart(document.getElementById('chartPortfolioTrend'), {
-      type:'bar',
-      data:{ labels: trendLabels, datasets:[
-        {type:'bar', label:'Total Sales (€)', data:sortedWeeks.map(w=>weekBuckets[w].sales), backgroundColor:'#E2E8F0'},
-        {type:'line', label:'Net Margin (€)', data:sortedWeeks.map(w=>weekBuckets[w].netProfit), borderColor:'#D97757', backgroundColor:'#D97757', tension:.3, borderWidth:3},
-      ]},
-      options: chartOpts(),
-    });
-  }
-
-  dateRangeRowsData = rows;
-  renderDateRangeTable();
-}
-
-let dateRangeRowsData = [];
-let dateRangeSort = { key: 'sales', dir: 'desc' };
-function sortDateRangeBy(key){
-  if(dateRangeSort.key === key){ dateRangeSort.dir = dateRangeSort.dir === 'asc' ? 'desc' : 'asc'; }
-  else { dateRangeSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
-  renderDateRangeTable();
-}
-function renderDateRangeTable(){
-  const rows = sortRows(dateRangeRowsData, dateRangeSort.key, dateRangeSort.dir, r=>r.product.name||'');
-  if(!rows.length){ document.getElementById('dateRangeTable').innerHTML = ''; return; }
-
-  const cols = [
-    {key:'__name__', label:'Product'}, {key:'units', label:'Units'}, {key:'refunds', label:'Refunds'},
-    {key:'sales', label:'Sales'}, {key:'adSpend', label:'Ad Spend'}, {key:'refundPct', label:'% Refunds'},
-    {key:'cogs', label:'COGS'}, {key:'shipping', label:'Shipping'}, {key:'netProfit', label:'Net Profit'},
-    {key:'margin', label:'Margin'}, {key:'roi', label:'ROI'}, {key:'asp', label:'ASP'},
-    {key:'realAcos', label:'Real ACOS'}, {key:'sessions', label:'Sessions'},
-  ];
-  let html = '<thead><tr>' + cols.map(c=>
-    `<th style="cursor:pointer;user-select:none;" onclick="sortDateRangeBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, dateRangeSort)}</span></th>`
-  ).join('') + '</tr></thead><tbody>';
-  rows.forEach(r=>{
-    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-      <td style="max-width:220px;white-space:normal;">${thumb(r.product.image_url)}${nameWithAsin(r.product.name, r.product.asin)}</td>
-      <td>${fmtInt(r.units)}</td>
-      <td>${fmtInt(r.refunds)}</td>
-      <td>${fmtMoney(r.sales)}</td>
-      <td>${fmtMoney(r.adSpend)}</td>
-      <td>${fmtPct(r.refundPct)}</td>
-      <td>${fmtMoney(r.cogs)}</td>
-      <td>${fmtMoney(r.shipping)}</td>
-      <td>${fmtMoney(r.netProfit)}</td>
-      <td>${fmtPct(r.margin)}</td>
-      <td>${r.roi!=null?fmtPct(r.roi):'–'}</td>
-      <td>${r.asp!=null?fmtMoney(r.asp):'–'}</td>
-      <td>${r.realAcos!=null?fmtPct(r.realAcos):'–'}</td>
-      <td>${fmtInt(r.sessions)}</td>
-    </tr>`;
-  });
-
-  const tUnits=rows.reduce((a,r)=>a+r.units,0), tRefunds=rows.reduce((a,r)=>a+r.refunds,0),
-        tSales=rows.reduce((a,r)=>a+r.sales,0), tAdSpend=rows.reduce((a,r)=>a+r.adSpend,0),
-        tCogs=rows.reduce((a,r)=>a+r.cogs,0), tShipping=rows.reduce((a,r)=>a+r.shipping,0),
-        tNetProfit=rows.reduce((a,r)=>a+r.netProfit,0), tSessions=rows.reduce((a,r)=>a+r.sessions,0);
-  const wRefundPct = tUnits? tRefunds/tUnits : 0;
-  const wMargin = tSales? tNetProfit/tSales : 0;
-  const wAsp = tUnits? tSales/tUnits : null;
-  html += `</tbody><tfoot><tr style="font-weight:700;background:#F1F5F9;">
-    <td style="background:#F1F5F9;">Total</td>
-    <td>${fmtInt(tUnits)}</td>
-    <td>${fmtInt(tRefunds)}</td>
-    <td>${fmtMoney(tSales)}</td>
-    <td>${fmtMoney(tAdSpend)}</td>
-    <td>${fmtPct(wRefundPct)}</td>
-    <td>${fmtMoney(tCogs)}</td>
-    <td>${fmtMoney(tShipping)}</td>
-    <td>${fmtMoney(tNetProfit)}</td>
-    <td>${fmtPct(wMargin)}</td>
-    <td>–</td>
-    <td>${wAsp!=null?fmtMoney(wAsp):'–'}</td>
-    <td>–</td>
-    <td>${fmtInt(tSessions)}</td>
-  </tr></tfoot>`;
-  document.getElementById('dateRangeTable').innerHTML = html;
-}
-
-let comparisonData = [];
-async function loadComparison(){
-  const products = await fetchProducts();
-  const mktSel = document.getElementById('comparisonMarketplace');
-  const curMkt = mktSel.value || 'ALL';
-  const marketplaces = await getMarketplaces();
-  mktSel.innerHTML = '<option value="ALL">All</option>';
-  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
-  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
-  const mkt = mktSel.value;
-
-  comparisonData = await Promise.all(products.map(async product => {
-    const { weeks } = await computeWeeks(product, mkt);
-    return { product, weeks };
-  }));
-
-  const metricSel = document.getElementById('comparisonMetric');
-  if(!metricSel.options.length){
-    METRICS.forEach(m=>{ const o=document.createElement('option'); o.value=m.key; o.textContent=m.label; metricSel.appendChild(o); });
-  }
-  renderComparison();
-}
-let comparisonSort = { key: '__total__', dir: 'desc' };
-function sortComparisonBy(key){
-  if(comparisonSort.key === key){ comparisonSort.dir = comparisonSort.dir === 'asc' ? 'desc' : 'asc'; }
-  else { comparisonSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
-  renderComparison();
-}
-function renderComparison(){
-  document.getElementById('comparisonEmpty').style.display = comparisonData.length ? 'none' : 'block';
-  document.getElementById('comparisonPanel').style.display = comparisonData.length ? 'block' : 'none';
-  if(!comparisonData.length) return;
-
-  const key = document.getElementById('comparisonMetric').value;
-  const m = METRICS.find(x=>x.key===key) || METRICS[0];
-
-  const enriched = comparisonData.map(({product, weeks})=>{
-    let total;
-    if(m.kind==='sum') total = sum(weeks, m.key);
-    else if(m.kind==='min') total = minBSR(weeks);
-    else total = avg(weeks, m.key);
-    return { product, weeks, total };
-  });
-
-  const sorted = [...enriched].sort((a,b)=>{
-    let av, bv;
-    if(comparisonSort.key === '__name__'){ av = a.product.name||''; bv = b.product.name||''; }
-    else if(comparisonSort.key === '__total__'){ av = a.total; bv = b.total; }
-    else { const idx = parseInt(comparisonSort.key.replace('wk',''),10)-1; av = a.weeks[idx][m.key]; bv = b.weeks[idx][m.key]; }
-    const aNull = av==null, bNull = bv==null;
-    if(aNull && bNull) return 0;
-    if(aNull) return 1;
-    if(bNull) return -1;
-    if(typeof av === 'string') return comparisonSort.dir==='asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-    return comparisonSort.dir==='asc' ? av-bv : bv-av;
-  });
-
-  let html = '<thead><tr>';
-  html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('__name__')">Product <span style="font-size:9px;">${sortArrow('__name__', comparisonSort)}</span></th>`;
-  for(let i=1;i<=12;i++) html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('wk${i}')">Wk ${i} <span style="font-size:9px;">${sortArrow('wk'+i, comparisonSort)}</span></th>`;
-  html += `<th style="cursor:pointer;user-select:none;" onclick="sortComparisonBy('__total__')">12-Wk Total/Avg <span style="font-size:9px;">${sortArrow('__total__', comparisonSort)}</span></th></tr></thead><tbody>`;
-
-  sorted.forEach(({product, weeks, total})=>{
-    const vals = weeks.map(w=>w[m.key]);
-    const numericVals = vals.filter(v=>v!==null && !isNaN(v));
-    const min = Math.min(...numericVals), max = Math.max(...numericVals);
-
-    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${product.asin}')"><td style="max-width:220px;white-space:normal;">${thumb(product.image_url)}${nameWithAsin(product.name, product.asin)}</td>`;
-    vals.forEach(v=>{
-      const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
-      html += `<td style="background:${bg}">${v===null?'–':m.fmt(v)}</td>`;
-    });
-    html += `<td class="total-col">${total===null?'–':m.fmt(total)}</td></tr>`;
-  });
-  html += '</tbody>';
-
-  let footerCells = '';
-  for(let i=0;i<12;i++){
-    const colVals = sorted.map(s=>s.weeks[i][m.key]).filter(v=>v!=null && !isNaN(v));
-    let agg;
-    if(!colVals.length) agg = null;
-    else if(m.kind==='sum') agg = colVals.reduce((a,v)=>a+v,0);
-    else if(m.kind==='min') agg = Math.min(...colVals);
-    else agg = colVals.reduce((a,v)=>a+v,0)/colVals.length;
-    footerCells += `<td>${agg==null?'–':m.fmt(agg)}</td>`;
-  }
-  const totalVals = sorted.map(s=>s.total).filter(v=>v!=null && !isNaN(v));
-  let grandTotal;
-  if(!totalVals.length) grandTotal = null;
-  else if(m.kind==='sum') grandTotal = totalVals.reduce((a,v)=>a+v,0);
-  else if(m.kind==='min') grandTotal = Math.min(...totalVals);
-  else grandTotal = totalVals.reduce((a,v)=>a+v,0)/totalVals.length;
-  html += `<tfoot><tr style="font-weight:700;background:#F1F5F9;"><td style="background:#F1F5F9;">${m.kind==='sum'?'Total':'Avg'}</td>${footerCells}<td>${grandTotal==null?'–':m.fmt(grandTotal)}</td></tr></tfoot>`;
-
-  document.getElementById('comparisonTable').innerHTML = html;
-}
-
+/* ---------------- Dashboard (Product Detail) ---------------- */
 let charts = {};
-let portfolioTrendChart = null;
 function destroyCharts(){ Object.values(charts).forEach(c=>c && c.destroy()); charts = {}; }
 
 async function loadDashboard(){
@@ -1501,7 +1279,7 @@ function renderTable(weeks, targets, anchor){
   const up = await checkServer();
   if(!up) return;
   await populateSelectors();
-  await loadDateRangeOverview();
+  await loadTagDashboard('launch');
 })();
 </script>
 </body>
