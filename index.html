@@ -365,7 +365,7 @@
         <h3>Products &amp; launch dates</h3>
         <div class="table-wrap" style="max-height:280px;">
           <table class="products-table" id="productsTable">
-            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Marketplace</th><th>Launch Date</th><th></th></tr></thead>
+            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Marketplace</th><th>Launch Date</th><th>Product Line Code</th><th>Product Line</th><th>Stage</th><th>Sell Through</th><th>Sell Through Rate %</th><th></th></tr></thead>
             <tbody id="productsBody"></tbody>
           </table>
         </div>
@@ -634,6 +634,11 @@ async function renderProductsTable(){
       <td><input value="${p.tag||''}" onchange="updateProduct('${p.asin}','tag',this.value)"></td>
       <td><input value="${p.marketplace||''}" onchange="updateProduct('${p.asin}','marketplace',this.value)"></td>
       <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)"></td>
+      <td><input value="${p.product_line_code||''}" onchange="updateProduct('${p.asin}','product_line_code',this.value)" style="width:90px;"></td>
+      <td><input value="${p.product_line||''}" onchange="updateProduct('${p.asin}','product_line',this.value)" style="width:120px;"></td>
+      <td><input value="${p.stage||''}" onchange="updateProduct('${p.asin}','stage',this.value)" style="width:70px;"></td>
+      <td><input value="${p.sell_through||''}" onchange="updateProduct('${p.asin}','sell_through',this.value)" style="width:100px;"></td>
+      <td><input value="${p.sell_through_rate_pct??''}" onchange="updateProduct('${p.asin}','sell_through_rate_pct', this.value===''?null:parseFloat(this.value))" style="width:80px;" placeholder="e.g. 10.66"></td>
       <td><button class="btn btn-danger" onclick="removeProduct('${p.asin}')">✕</button></td>`;
     body.appendChild(tr);
   });
@@ -655,7 +660,8 @@ async function addProductRow(){
   await renderProductsTable(); await populateSelectors(); await loadOverview();
 }
 async function updateProduct(asin, field, val){
-  await sb.from('products').update({ [field]: val || null }).eq('asin', asin);
+  await sb.from('products').update({ [field]: (val==null || val==='') ? null : val }).eq('asin', asin);
+  if(field === 'marketplace') marketplacesCache = null;
   await populateSelectors(); await loadDashboard(); await loadOverview();
 }
 async function removeProduct(asin){
@@ -759,11 +765,12 @@ function finalizeWeek(w){
 let marketplacesCache = null;
 async function getMarketplaces(){
   if(marketplacesCache) return marketplacesCache;
-  const [{ data: a }, { data: b }] = await Promise.all([
+  const [{ data: a }, { data: b }, { data: c }] = await Promise.all([
     sb.from('sellerboard_rows').select('marketplace'),
     sb.from('sellerfox_rows').select('marketplace'),
+    sb.from('products').select('marketplace'),
   ]);
-  const set = new Set([...(a||[]), ...(b||[])].map(r=>r.marketplace).filter(Boolean));
+  const set = new Set([...(a||[]), ...(b||[]), ...(c||[])].map(r=>r.marketplace).filter(Boolean));
   marketplacesCache = [...set];
   return marketplacesCache;
 }
@@ -943,12 +950,25 @@ async function loadTagDashboard(tag){
       const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
     });
-    let ageLabel = '';
+    let ageDays = null, ageWeeks = null, ageLabel = '';
     if(anchor){
-      const ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
-      const ageWeeks = Math.floor(ageDays / 7) + 1;
-      ageLabel = ageWeeks>=1 && ageWeeks<=12 ? `Week ${ageWeeks} of 12` : (ageWeeks>12 ? 'Past Week 12' : '');
+      ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
+      const weekNum = Math.floor(ageDays / 7) + 1;
+      ageWeeks = +(ageDays / 7).toFixed(1);
+      ageLabel = weekNum>=1 && weekNum<=12 ? `Week ${weekNum} of 12` : (weekNum>12 ? 'Past Week 12' : '');
     }
+    const metaFields = [
+      {label:'Marketplace', value: product.marketplace || '–'},
+      {label:'Product Line Code', value: product.product_line_code || '–'},
+      {label:'Product Line', value: product.product_line || '–'},
+      {label:'Parent ASIN', value: product.asin},
+      {label:'Date Launched', value: product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–'},
+      {label:'Stage', value: product.stage || '–'},
+      {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
+      {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
+      {label:'Sell Through', value: product.sell_through || '–'},
+      {label:'Sell Through Rate %', value: product.sell_through_rate_pct!=null ? product.sell_through_rate_pct+'%' : '–'},
+    ];
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
@@ -958,6 +978,9 @@ async function loadTagDashboard(tag){
           <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
         </div>
         <button class="btn" onclick="document.getElementById('productSelect').value='${product.asin}'; switchView('weekly-pulse');">Open in Product Detail →</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;margin-bottom:14px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);">
+        ${metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('')}
       </div>
       <div class="table-wrap"><table></table></div>
     `;
