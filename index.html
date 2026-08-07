@@ -184,11 +184,6 @@
         <h2>Launch Dashboard</h2>
         <div class="meta">Every launch product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Marketplace</label><select id="launchDashMarketplace" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
-        </div>
-      </div>
       <div class="panel" id="launchDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
         <div class="kpi-grid" id="launchDashKpiGrid"></div>
@@ -208,11 +203,6 @@
       <div class="page-head">
         <h2>Expansion Dashboard</h2>
         <div class="meta">Every expansion product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
-      </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Marketplace</label><select id="expansionDashMarketplace" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
-        </div>
       </div>
       <div class="panel" id="expansionDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
@@ -689,7 +679,7 @@ function weekNumber(launchDate, rowDate){
   return Math.floor(diffDays / 7) + 1;
 }
 
-async function computeWeeks(product, marketplaceFilter){
+function computeWeeksFromRows(product, sbRows, sfRows){
   const emptyWeeks = () => Array.from({ length: 12 }, () => ({
     sales:0, units:0, refunds:0, refundPctSum:0, refundPctN:0,
     adSpend:0, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0,
@@ -699,15 +689,6 @@ async function computeWeeks(product, marketplaceFilter){
   }));
   if(!product) return { weeks: emptyWeeks().map(finalizeWeek), anchor: null, autoAnchor: false };
 
-  let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
-  if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
-  let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
-  if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
-  const [{ data: sbRows }, { data: sfRows }] = await Promise.all([sbQuery, sfQuery]);
-
-  // No launch date? Use the earliest uploaded week for this product as Week 1
-  // instead. This re-derives itself automatically if an earlier week ever
-  // gets backfilled later — it's never stored, always computed fresh.
   const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
   const autoAnchor = !product.launch;
   const anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
@@ -744,6 +725,15 @@ async function computeWeeks(product, marketplaceFilter){
   });
 
   return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor };
+}
+async function computeWeeks(product, marketplaceFilter){
+  if(!product) return computeWeeksFromRows(null, [], []);
+  let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
+  if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
+  let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
+  if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
+  const [{ data: sbRows }, { data: sfRows }] = await Promise.all([sbQuery, sfQuery]);
+  return computeWeeksFromRows(product, sbRows, sfRows);
 }
 function finalizeWeek(w){
   return {
@@ -788,8 +778,18 @@ async function loadOverview(){
   const hideNoLaunch = document.getElementById('hideNoLaunch').checked;
   const filtered = hideNoLaunch ? products.filter(p=>p.launch) : products;
 
-  overviewRowsData = await Promise.all(filtered.map(async product => {
-    const { weeks } = await computeWeeks(product, 'ALL');
+  if(!filtered.length){ overviewRowsData = []; renderOverviewTable(); return; }
+  const asins = filtered.map(p => p.asin);
+  const [{ data: allSbRows }, { data: allSfRows }] = await Promise.all([
+    sb.from('sellerboard_rows').select('*').in('asin', asins),
+    sb.from('sellerfox_rows').select('*').in('asin', asins),
+  ]);
+  const sbByAsin = {}, sfByAsin = {};
+  (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
+  (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
+
+  overviewRowsData = filtered.map(product => {
+    const { weeks } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
     const sum = key => weeks.reduce((a,w)=>a+w[key],0);
     const avg = key => weeks.reduce((a,w)=>a+w[key],0)/weeks.length;
     const bsrVals = weeks.map(w=>w.bsr).filter(x=>x!==null&&x>0);
@@ -798,7 +798,7 @@ async function loadOverview(){
       units: sum('units'), sessions: sum('sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
       weeksWithData: weeks.filter(w=>w.sales>0||w.sessions>0).length,
     };
-  }));
+  });
   renderOverviewTable();
 }
 function renderOverviewTable(){
@@ -857,15 +857,7 @@ document.getElementById('hideNoLaunch').addEventListener('change', loadOverview)
 /* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
 async function loadTagDashboard(tag){
   const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
-  const mktSel = document.getElementById(p+'DashMarketplace');
-  const curMkt = mktSel.value || 'ALL';
-  const [marketplaces, allProducts] = await Promise.all([getMarketplaces(), fetchProducts()]);
-  mktSel.innerHTML = '<option value="ALL">All</option>';
-  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
-  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
-  const mkt = mktSel.value;
-
-  const products = allProducts.filter(pr => pr.tag === tag);
+  const products = (await fetchProducts()).filter(pr => pr.tag === tag);
 
   document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
   document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
@@ -874,13 +866,22 @@ async function loadTagDashboard(tag){
   blocksContainer.innerHTML = '';
   if(!products.length) return;
 
-  const productData = await Promise.all(products.map(async product => {
-    const [{ weeks, anchor }, { data: targetRow }] = await Promise.all([
-      computeWeeks(product, mkt),
-      sb.from('targets').select('*').eq('asin', product.asin).maybeSingle(),
-    ]);
-    return { product, weeks, anchor, targetRow };
-  }));
+  const asins = products.map(pr => pr.asin);
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }] = await Promise.all([
+    sb.from('sellerboard_rows').select('*').in('asin', asins),
+    sb.from('sellerfox_rows').select('*').in('asin', asins),
+    sb.from('targets').select('*').in('asin', asins),
+  ]);
+
+  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {};
+  (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
+  (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
+  (allTargets||[]).forEach(r=>{ targetsByAsin[r.asin] = r; });
+
+  const productData = products.map(product => {
+    const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
+    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null };
+  });
 
   const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
   const totalUnits = productData.reduce((a,pd)=>a+sum(pd.weeks,'units'),0);
