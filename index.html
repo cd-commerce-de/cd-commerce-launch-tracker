@@ -686,6 +686,16 @@ function mondayOf(dateStr){
   dt.setUTCDate(dt.getUTCDate() - diff);
   return dt.toISOString().slice(0, 10);
 }
+function getISOWeekLabel(dateStr){
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const dayNum = (d.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+  d.setUTCDate(d.getUTCDate() - dayNum + 3); // nearest Thursday
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  const weekNum = 1 + Math.round((d - firstThursday) / (7*86400000));
+  return d.getUTCFullYear() + '-' + String(weekNum).padStart(2,'0');
+}
 function weekNumber(launchDate, rowDate){
   const l = new Date(launchDate), d = new Date(rowDate);
   const diffDays = Math.round((d - l) / 86400000);
@@ -930,7 +940,10 @@ async function loadTagDashboard(tag){
     const b = calBuckets[wk];
     return { ...b, margin: b.sales? b.netProfit/b.sales : 0, tacos: b.sales? b.adSpend/b.sales : 0, refundPct: b.units? b.refunds/b.units : 0 };
   });
-  const colLabelsOverall = sortedCalWeeks.map(wk => new Date(wk).toLocaleDateString('en-GB',{day:'numeric',month:'short'}));
+  const colLabelsOverall = sortedCalWeeks.map(wk => {
+    const dateStr = new Date(wk).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    return `${getISOWeekLabel(wk)}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+  });
   const overallMetrics = [
     {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, lowerIsBetter:false},
     {key:'units', label:'Units Sold', fmt:fmtInt, lowerIsBetter:false},
