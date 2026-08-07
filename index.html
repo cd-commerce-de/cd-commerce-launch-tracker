@@ -675,6 +675,17 @@ async function populateSelectors(){
 }
 
 /* ---------------- Week aggregation (computed client-side from raw rows — data volume is tiny) ---------------- */
+function mondayOf(dateStr){
+  // Snaps to the Monday on/before this date, matching Sellerboard's Monday–Sunday
+  // reporting weeks. Uses Date.UTC/getUTCDay throughout so the local browser's
+  // timezone can never shift the date across midnight and pick the wrong day.
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay(); // 0=Sun,1=Mon,...,6=Sat
+  const diff = day === 0 ? 6 : day - 1;
+  dt.setUTCDate(dt.getUTCDate() - diff);
+  return dt.toISOString().slice(0, 10);
+}
 function weekNumber(launchDate, rowDate){
   const l = new Date(launchDate), d = new Date(rowDate);
   const diffDays = Math.round((d - l) / 86400000);
@@ -693,7 +704,8 @@ function computeWeeksFromRows(product, sbRows, sfRows){
 
   const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
   const autoAnchor = !product.launch;
-  const anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
+  let anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
+  if(anchor) anchor = mondayOf(anchor);
 
   const weeks = emptyWeeks();
   if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor };
