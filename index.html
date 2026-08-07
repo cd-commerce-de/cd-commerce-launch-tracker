@@ -85,9 +85,10 @@
   .chart-box{position:relative;height:270px;}
 
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
-  th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;}
-  thead th{background:#F1F5F9;color:var(--text-dark);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;vertical-align:top;}
+  th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;z-index:2;box-shadow:2px 0 4px -2px rgba(15,23,42,0.12);}
+  thead th{background:#F1F5F9;color:var(--text-dark);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;z-index:3;}
+  thead th:first-child{background:#F1F5F9;z-index:4;}
   thead th:first-child{background:#F1F5F9;}
   tbody tr:nth-child(even) td{background:#F8FAFC;}
   tbody tr:nth-child(even) td:first-child{background:#F8FAFC;}
@@ -275,7 +276,7 @@
           </div>
           <div class="charts-grid">
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Week-over-Week Change</h4><div class="chart-box"><canvas id="chartWow"></canvas></div>
-              <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Green means the change is good for this metric, red means it isn't — e.g. a BSR drop is good, so it's green even though the bar points down.</p></div>
+              <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Columns are the raw weekly value; the line is week-over-week % change. Dots are green when the change is good for this metric and red when it isn't — e.g. a BSR drop is good, so it's green even though the line points down.</p></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Revenue &amp; Profit</h4><div class="chart-box"><canvas id="chartRevenue"></canvas></div></div>
             <div><h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Units Sold vs. Margin &amp; ACOS</h4><div class="chart-box"><canvas id="chartUnitsMargin"></canvas></div>
               <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Bars are Units Sold (left axis); the two lines are Margin % and Real ACOS % (right axis) — watch for volume growing while margin holds or improves.</p></div>
@@ -509,6 +510,7 @@ async function uploadFile(functionName, file, statusId, buttonId){
     const count = data.rowsLoaded ?? data.productsLoaded ?? data.targetsLoaded;
     setStatus(statusId, 'ok', `${count} rows loaded${extra}${skipped}`);
     if(buttonId) document.getElementById(buttonId).style.display = 'none';
+    marketplacesCache = null;
     await populateSelectors(); await loadDashboard(); await loadOverview();
   }catch(e){ setStatus(statusId, 'err', 'Could not reach Supabase Edge Function'); }
 }
@@ -552,6 +554,7 @@ async function confirmUploadSB(){
     const skipped = data.skippedChildRows ? `, ${data.skippedChildRows} child SKU rows skipped` : '';
     setStatus('statusSB', 'ok', `${data.rowsLoaded} parent products loaded${extra}${skipped}`);
     document.getElementById('btnUploadSB').style.display = 'none';
+    marketplacesCache = null;
     await populateSelectors(); await loadDashboard(); await loadOverview();
   }catch(err){ setStatus('statusSB', 'err', 'Could not reach Supabase Edge Function'); }
 }
@@ -600,6 +603,7 @@ async function clearAllData(){
   await sb.from('sellerfox_rows').delete().neq('id', -1);
   await sb.from('targets').delete().neq('asin', '');
   await sb.from('products').delete().neq('asin', '');
+  marketplacesCache = null;
   await populateSelectors(); await loadDashboard(); await loadOverview();
 }
 
@@ -691,11 +695,9 @@ async function computeWeeks(product, marketplaceFilter){
 
   let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
   if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
-  const { data: sbRows } = await sbQuery;
-
   let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
   if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
-  const { data: sfRows } = await sfQuery;
+  const [{ data: sbRows }, { data: sfRows }] = await Promise.all([sbQuery, sfQuery]);
 
   // No launch date? Use the earliest uploaded week for this product as Week 1
   // instead. This re-derives itself automatically if an earlier week ever
@@ -754,11 +756,16 @@ function finalizeWeek(w){
   };
 }
 
+let marketplacesCache = null;
 async function getMarketplaces(){
-  const { data: a } = await sb.from('sellerboard_rows').select('marketplace');
-  const { data: b } = await sb.from('sellerfox_rows').select('marketplace');
+  if(marketplacesCache) return marketplacesCache;
+  const [{ data: a }, { data: b }] = await Promise.all([
+    sb.from('sellerboard_rows').select('marketplace'),
+    sb.from('sellerfox_rows').select('marketplace'),
+  ]);
   const set = new Set([...(a||[]), ...(b||[])].map(r=>r.marketplace).filter(Boolean));
-  return [...set];
+  marketplacesCache = [...set];
+  return marketplacesCache;
 }
 
 /* ---------------- Overview (All Products) ---------------- */
@@ -845,13 +852,13 @@ async function loadTagDashboard(tag){
   const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
   const mktSel = document.getElementById(p+'DashMarketplace');
   const curMkt = mktSel.value || 'ALL';
-  const marketplaces = await getMarketplaces();
+  const [marketplaces, allProducts] = await Promise.all([getMarketplaces(), fetchProducts()]);
   mktSel.innerHTML = '<option value="ALL">All</option>';
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
   if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
   const mkt = mktSel.value;
 
-  const products = (await fetchProducts()).filter(pr => pr.tag === tag);
+  const products = allProducts.filter(pr => pr.tag === tag);
 
   document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
   document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
@@ -861,8 +868,10 @@ async function loadTagDashboard(tag){
   if(!products.length) return;
 
   const productData = await Promise.all(products.map(async product => {
-    const { weeks, anchor } = await computeWeeks(product, mkt);
-    const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+    const [{ weeks, anchor }, { data: targetRow }] = await Promise.all([
+      computeWeeks(product, mkt),
+      sb.from('targets').select('*').eq('asin', product.asin).maybeSingle(),
+    ]);
     return { product, weeks, anchor, targetRow };
   }));
 
@@ -945,7 +954,7 @@ async function loadTagDashboard(tag){
     panel.innerHTML = `
       <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
         <div>
-          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${shortenName(product.name)}</h3>
+          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${product.name||''}</h3>
           <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
         </div>
         <button class="btn" onclick="document.getElementById('productSelect').value='${product.asin}'; switchView('weekly-pulse');">Open in Product Detail →</button>
@@ -964,12 +973,11 @@ function destroyCharts(){ Object.values(charts).forEach(c=>c && c.destroy()); ch
 async function loadDashboard(){
   const sel = document.getElementById('productSelect');
   if(!sel.value){ document.getElementById('emptyState').style.display='block'; document.getElementById('dashboardBody').style.display='none'; return; }
-  const products = await fetchProducts();
-  const product = products.find(p=>p.asin===sel.value);
-
   const mktSel = document.getElementById('marketplaceSelect');
   const curMkt = mktSel.value || 'ALL';
-  const marketplaces = await getMarketplaces();
+  const [products, marketplaces] = await Promise.all([fetchProducts(), getMarketplaces()]);
+  const product = products.find(p=>p.asin===sel.value);
+
   mktSel.innerHTML = '<option value="ALL">All</option>';
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
   if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
@@ -983,6 +991,7 @@ async function loadDashboard(){
     : 'Select a product to see its 12-week scorecard';
   if(!hasAnyData){ destroyCharts(); return; }
 
+  const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt);
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
@@ -994,7 +1003,7 @@ async function loadDashboard(){
   } else {
     banner.classList.remove('show');
   }
-  const { data: targetRow } = await sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+  const { data: targetRow } = await targetsPromise;
   const labels = weeks.map((_,i)=>'Wk '+(i+1));
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
@@ -1170,19 +1179,30 @@ function renderWowChart(){
     if(v==null || prev==null || prev===0) return null;
     return +(((v-prev)/Math.abs(prev))*100).toFixed(1);
   });
-  const colors = changes.map(c=>{
-    if(c==null) return '#E2E8F0';
+  const pointColors = changes.map(c=>{
+    if(c==null) return '#94A3B8';
     const isGood = m.lowerIsBetter ? c<0 : c>0;
     return isGood ? '#10B981' : '#EF4444';
   });
   if(charts.wow) charts.wow.destroy();
   charts.wow = new Chart(document.getElementById('chartWow'), {
-    type:'bar',
-    data:{labels, datasets:[{label:m.label+' — % change vs. prior week', data:changes, backgroundColor:colors}]},
+    data:{labels, datasets:[
+      {type:'bar', label:m.label, data:vals, backgroundColor:'#E2E8F0', yAxisID:'y', order:2},
+      {type:'line', label:'WoW change (%)', data:changes, borderColor:'#D97757', backgroundColor:'#D97757', tension:.3, borderWidth:3, yAxisID:'y1', spanGaps:true, pointBackgroundColor:pointColors, pointBorderColor:pointColors, pointRadius:5, pointHoverRadius:6, order:1},
+    ]},
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>(ctx.raw==null?'No prior week to compare':ctx.raw+'%')}} },
-      scales:{ x:{grid:{display:false}, ticks:{color:'#64748B'}}, y:{grid:{color:'#E2E8F0'}, ticks:{color:'#64748B', callback:v=>v+'%'}} },
+      plugins:{
+        legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, boxWidth:10, color:'#64748B'}},
+        tooltip:{callbacks:{ label: ctx => ctx.dataset.yAxisID==='y1'
+          ? (ctx.raw==null ? 'No prior week to compare' : 'WoW change: '+ctx.raw+'%')
+          : m.label+': '+(ctx.raw==null?'–':m.fmt(ctx.raw)) }},
+      },
+      scales:{
+        x:{grid:{display:false}, ticks:{color:'#64748B'}},
+        y:{grid:{color:'#E2E8F0'}, ticks:{color:'#64748B', callback:v=>m.fmt(v)}},
+        y1:{position:'right', grid:{display:false}, ticks:{color:'#64748B', callback:v=>v+'%'}},
+      },
     }
   });
 }
@@ -1223,11 +1243,11 @@ function weekDelta(vals, i, lowerIsBetter){
   const cur = vals[i], prev = vals[i-1];
   if(cur==null || prev==null || prev===0) return '';
   const pct = ((cur-prev)/Math.abs(prev))*100;
-  if(Math.abs(pct) < 0.05) return `<div style="font-size:8.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
+  if(Math.abs(pct) < 0.05) return `<div style="font-size:7.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
   const isGood = lowerIsBetter ? pct<0 : pct>0;
   const color = isGood ? '#0F7A52' : '#B91C1C';
   const arrow = pct>0 ? '▲' : '▼';
-  return `<div style="margin-top:3px;"><span style="display:inline-block;padding:1px 5px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:8.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
+  return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
 function buildScorecardTable(weeks, targets, colLabels){
   const t = targets || {};
