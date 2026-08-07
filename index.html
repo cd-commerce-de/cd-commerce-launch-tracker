@@ -190,6 +190,7 @@
       </div>
       <div class="panel" id="launchDashOverallPanel" style="display:none;">
         <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
         <div class="table-wrap"><table id="launchDashOverallTable"></table></div>
       </div>
       <div id="launchDashEmpty" class="panel empty-state" style="display:none;">
@@ -210,6 +211,7 @@
       </div>
       <div class="panel" id="expansionDashOverallPanel" style="display:none;">
         <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
         <div class="table-wrap"><table id="expansionDashOverallTable"></table></div>
       </div>
       <div id="expansionDashEmpty" class="panel empty-state" style="display:none;">
@@ -894,17 +896,29 @@ async function loadTagDashboard(tag){
     {label:'Net Margin %', value:fmtPct(avgMargin)},
   ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
 
-  // Portfolio total, week by week (relative week index, since each product has its own launch date)
-  const weekTotals = Array.from({length:12}, (_,i)=>{
-    let sales=0, units=0, netProfit=0, adSpend=0, sessions=0, refunds=0;
-    productData.forEach(pd=>{
-      const w = pd.weeks[i];
-      sales += w.sales; units += w.units; netProfit += w.netProfit;
-      adSpend += w.adSpend; sessions += w.sessions; refunds += w.refunds;
-    });
-    return { sales, units, netProfit, adSpend, sessions, refunds,
-      margin: sales? netProfit/sales : 0, tacos: sales? adSpend/sales : 0, refundPct: units? refunds/units : 0 };
+  // Portfolio total, bucketed by REAL calendar week — not relative week index.
+  // Relative-week bucketing would sum "Week 1" across products that actually
+  // launched months apart, conflating unrelated points in time. This uses the
+  // raw dated rows so each column is a genuine, simultaneous portfolio total.
+  const calBuckets = {};
+  (allSbRows||[]).forEach(r=>{
+    if(!asins.includes(r.asin)) return;
+    if(!calBuckets[r.week]) calBuckets[r.week] = { sales:0, units:0, netProfit:0, adSpend:0, sessions:0, refunds:0 };
+    const b = calBuckets[r.week];
+    b.sales += +r.sales||0; b.units += +r.units||0; b.netProfit += +r.net_profit||0;
+    b.adSpend += Math.abs(+r.ad_spend||0); b.sessions += +r.sessions||0; b.refunds += +r.refunds||0;
   });
+  (allSfRows||[]).forEach(r=>{
+    if(!asins.includes(r.asin)) return;
+    if(!calBuckets[r.week]) calBuckets[r.week] = { sales:0, units:0, netProfit:0, adSpend:0, sessions:0, refunds:0 };
+    if(!calBuckets[r.week].sessions && r.sessions) calBuckets[r.week].sessions += +r.sessions||0;
+  });
+  const sortedCalWeeks = Object.keys(calBuckets).sort();
+  const weekTotals = sortedCalWeeks.map(wk=>{
+    const b = calBuckets[wk];
+    return { ...b, margin: b.sales? b.netProfit/b.sales : 0, tacos: b.sales? b.adSpend/b.sales : 0, refundPct: b.units? b.refunds/b.units : 0 };
+  });
+  const colLabelsOverall = sortedCalWeeks.map(wk => new Date(wk).toLocaleDateString('en-GB',{day:'numeric',month:'short'}));
   const overallMetrics = [
     {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, lowerIsBetter:false},
     {key:'units', label:'Units Sold', fmt:fmtInt, lowerIsBetter:false},
@@ -916,12 +930,12 @@ async function loadTagDashboard(tag){
     {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, lowerIsBetter:true},
   ];
   let ohtml = '<thead><tr><th>Metric</th>';
-  for(let i=1;i<=12;i++) ohtml += `<th>Wk ${i}</th>`;
-  ohtml += '<th>12-Wk Total/Avg</th></tr></thead><tbody>';
+  colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
+  ohtml += '<th>Total/Avg</th></tr></thead><tbody>';
   overallMetrics.forEach(m=>{
     const vals = weekTotals.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
-    const min = Math.min(...numericVals), max = Math.max(...numericVals);
+    const min = numericVals.length?Math.min(...numericVals):0, max = numericVals.length?Math.max(...numericVals):0;
     ohtml += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
       const bg = heatColor(v,min,max);
