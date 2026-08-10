@@ -893,20 +893,22 @@ async function loadTagDashboard(tag){
   if(!products.length) return;
 
   const asins = products.map(pr => pr.asin);
-  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }] = await Promise.all([
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').in('asin', asins),
     sb.from('sellerfox_rows').select('*').in('asin', asins),
     sb.from('targets').select('*').in('asin', asins),
+    sb.from('week_notes').select('*').in('asin', asins),
   ]);
 
-  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {};
+  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
   (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
   (allTargets||[]).forEach(r=>{ targetsByAsin[r.asin] = r; });
+  (allNotes||[]).forEach(r=>{ if(!notesByAsin[r.asin]) notesByAsin[r.asin] = {}; notesByAsin[r.asin][r.week] = r.note; });
 
   const productData = products.map(product => {
     const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
-    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null };
+    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
   const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
@@ -983,7 +985,7 @@ async function loadTagDashboard(tag){
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
   // Per-product full scorecards
-  productData.forEach(({product, weeks, anchor, targetRow})=>{
+  productData.forEach(({product, weeks, anchor, targetRow, notesMap})=>{
     const colLabels = weeks.map((_,i)=>{
       const wkLabel = 'Wk '+(i+1);
       if(!anchor) return wkLabel;
@@ -991,6 +993,12 @@ async function loadTagDashboard(tag){
       d.setDate(d.getDate() + i*7);
       const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+    });
+    const weekDates = weeks.map((_,i)=>{
+      if(!anchor) return null;
+      const d = new Date(anchor);
+      d.setDate(d.getDate() + i*7);
+      return d.toISOString().slice(0,10);
     });
     let ageDays = null, ageWeeks = null, ageLabel = '';
     if(anchor){
@@ -1028,7 +1036,7 @@ async function loadTagDashboard(tag){
       </div>
       <div class="table-wrap"><table></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels);
+    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
     blocksContainer.appendChild(panel);
   });
 }
@@ -1059,6 +1067,7 @@ async function loadDashboard(){
   if(!hasAnyData){ destroyCharts(); return; }
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
+  const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
   const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt);
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
@@ -1070,11 +1079,13 @@ async function loadDashboard(){
   } else {
     banner.classList.remove('show');
   }
-  const { data: targetRow } = await targetsPromise;
+  const [{ data: targetRow }, { data: noteRows }] = await Promise.all([targetsPromise, notesPromise]);
+  const notesMap = {};
+  (noteRows||[]).forEach(r=>{ notesMap[r.week] = r.note; });
   const labels = weeks.map((_,i)=>'Wk '+(i+1));
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
-  renderTable(weeks, targetRow, anchor);
+  renderTable(weeks, targetRow, anchor, product.asin, notesMap);
 }
 
 function sum(arr, key){ return arr.reduce((a,w)=>a+w[key],0); }
@@ -1318,7 +1329,7 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap){
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l=> html += `<th>${l}</th>`);
@@ -1349,10 +1360,28 @@ function buildScorecardTable(weeks, targets, colLabels){
     }
     html += `<td style="background:#F1F5F9;">${targetCell}</td></tr>`;
   });
+  if(asin && weekDates){
+    html += `<tr><td style="font-weight:700;">Notes</td>`;
+    weekDates.forEach(wd=>{
+      const existing = (wd && notesMap && notesMap[wd]) ? notesMap[wd] : '';
+      const cell = wd
+        ? `<input value="${existing.replace(/"/g,'&quot;')}" placeholder="Add note…" style="width:100%;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:3px 5px;" onchange="saveWeekNote('${asin}','${wd}',this.value)">`
+        : '–';
+      html += `<td style="background:#fff;">${cell}</td>`;
+    });
+    html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
+  }
   html += '</tbody>';
   return html;
 }
-function renderTable(weeks, targets, anchor){
+async function saveWeekNote(asin, week, note){
+  if(note && note.trim()){
+    await sb.from('week_notes').upsert({ asin, week, note: note.trim() }, { onConflict: 'asin,week' });
+  } else {
+    await sb.from('week_notes').delete().eq('asin', asin).eq('week', week);
+  }
+}
+function renderTable(weeks, targets, anchor, asin, notesMap){
   const colLabels = weeks.map((_,i)=>{
     const wkLabel = 'Wk '+(i+1);
     if(!anchor) return wkLabel;
@@ -1361,7 +1390,13 @@ function renderTable(weeks, targets, anchor){
     const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
-  document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels);
+  const weekDates = weeks.map((_,i)=>{
+    if(!anchor) return null;
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + i*7);
+    return d.toISOString().slice(0,10);
+  });
+  document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap);
 }
 
 (async function init(){
