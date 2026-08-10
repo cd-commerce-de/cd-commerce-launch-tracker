@@ -370,6 +370,18 @@
 
 <footer>CD Commerce GmbH — internal tool. All data lives on the backend server, shared by everyone who opens this page.</footer>
 
+<div id="noteModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this) closeNoteModal();">
+  <div style="background:#fff;border-radius:14px;padding:22px;width:100%;max-width:520px;box-shadow:0 20px 50px rgba(15,23,42,0.3);">
+    <h3 style="margin:0 0 2px;font-size:15px;font-weight:700;">Week Note</h3>
+    <div id="noteModalWeekLabel" style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;"></div>
+    <textarea id="noteModalTextarea" style="width:100%;min-height:160px;padding:12px;border:1px solid var(--border);border-radius:10px;font-family:var(--font-b);font-size:13.5px;resize:vertical;box-sizing:border-box;" placeholder="What happened this week?"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button class="btn" onclick="closeNoteModal()">Cancel</button>
+      <button class="btn btn-primary" id="noteModalSaveBtn" onclick="saveNoteModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 const EDGE_BASE = window.SUPABASE_URL + '/functions/v1';
@@ -1363,11 +1375,12 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   if(asin && weekDates){
     html += `<tr><td style="font-weight:700;">Notes</td>`;
     weekDates.forEach(wd=>{
-      const existing = (wd && notesMap && notesMap[wd]) ? notesMap[wd] : '';
-      const cell = wd
-        ? `<input value="${existing.replace(/"/g,'&quot;')}" placeholder="Add note…" style="width:100%;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:3px 5px;" onchange="saveWeekNote('${asin}','${wd}',this.value)">`
-        : '–';
-      html += `<td style="background:#fff;">${cell}</td>`;
+      if(!wd){ html += `<td style="background:#fff;">–</td>`; return; }
+      const existing = (notesMap && notesMap[wd]) ? notesMap[wd] : '';
+      const preview = existing ? (existing.length>26 ? existing.slice(0,26)+'…' : existing) : 'Add note…';
+      html += `<td style="background:#fff;cursor:pointer;" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
+        <span style="font-size:11px;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</span>
+      </td>`;
     });
     html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
   }
@@ -1380,6 +1393,36 @@ async function saveWeekNote(asin, week, note){
   } else {
     await sb.from('week_notes').delete().eq('asin', asin).eq('week', week);
   }
+}
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+let noteModalCell = null, noteModalAsin = null, noteModalWeek = null;
+function openNoteModal(asin, week, cellEl){
+  noteModalCell = cellEl; noteModalAsin = asin; noteModalWeek = week;
+  document.getElementById('noteModalWeekLabel').textContent = new Date(week).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('noteModalTextarea').value = cellEl.dataset.note || '';
+  document.getElementById('noteModalOverlay').style.display = 'flex';
+  setTimeout(()=>document.getElementById('noteModalTextarea').focus(), 50);
+}
+function closeNoteModal(){
+  document.getElementById('noteModalOverlay').style.display = 'none';
+}
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && document.getElementById('noteModalOverlay').style.display === 'flex') closeNoteModal();
+});
+async function saveNoteModal(){
+  const text = document.getElementById('noteModalTextarea').value;
+  const btn = document.getElementById('noteModalSaveBtn');
+  btn.disabled = true;
+  await saveWeekNote(noteModalAsin, noteModalWeek, text);
+  btn.disabled = false;
+  const trimmed = text.trim();
+  noteModalCell.dataset.note = trimmed;
+  const span = noteModalCell.querySelector('span');
+  span.textContent = trimmed ? (trimmed.length>26 ? trimmed.slice(0,26)+'…' : trimmed) : 'Add note…';
+  span.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
+  closeNoteModal();
 }
 function renderTable(weeks, targets, anchor, asin, notesMap){
   const colLabels = weeks.map((_,i)=>{
