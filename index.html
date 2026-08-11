@@ -585,7 +585,7 @@ async function confirmUploadSB(){
   const tag = document.getElementById('sbTag').value;
   const btn = document.getElementById('btnUploadSB');
   btn.disabled = true;
-  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalNewProducts = 0;
+  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalNewProducts = 0, totalDuplicates = 0;
   const failMessages = [];
 
   for(let i=0;i<sbSelectedFiles.length;i++){
@@ -619,6 +619,7 @@ async function confirmUploadSB(){
         totalRows += data.rowsLoaded || 0;
         totalChildRows += data.childRowsLoaded || 0;
         totalNewProducts += data.newProducts || 0;
+        totalDuplicates += data.skippedDuplicateChildRows || 0;
       }
     }catch(err){
       statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
@@ -630,7 +631,8 @@ async function confirmUploadSB(){
   if(failCount === 0){
     const extra = totalNewProducts ? ` (${totalNewProducts} new product${totalNewProducts>1?'s':''} added)` : '';
     const children = totalChildRows ? `, ${totalChildRows} child SKU rows loaded` : '';
-    setStatus('statusSB', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows${extra}${children}`);
+    const dupes = totalDuplicates ? `, ${totalDuplicates} duplicate child row${totalDuplicates>1?'s':''} skipped` : '';
+    setStatus('statusSB', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows${extra}${children}${dupes}`);
     sbSelectedFiles = [];
     document.getElementById('fileSB').value = '';
     renderSbFileList();
