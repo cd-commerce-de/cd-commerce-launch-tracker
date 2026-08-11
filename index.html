@@ -1646,6 +1646,9 @@ function sortChildrenBy(key){
   else { childSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
   renderChildSkuSummary();
 }
+function childLabel(c){
+  return c.sku ? `${c.sku} · ${c.childAsin}` : c.childAsin;
+}
 function renderChildSkuSummary(){
   const enriched = currentChildrenData.map(c=>{
     const bsrVals = c.weeks.map(w=>w.bsr).filter(x=>x!=null&&x>0);
@@ -1655,7 +1658,7 @@ function renderChildSkuSummary(){
       avgMargin: avg(c.weeks,'margin'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
     };
   });
-  const rows = sortRows(enriched, childSort.key, childSort.dir, r=>r.name||'');
+  const rows = sortRows(enriched, childSort.key, childSort.dir, r=>childLabel(r));
   const cols = [
     {key:'__name__', label:'Child SKU'}, {key:'totalSales', label:'12-Wk Sales'},
     {key:'totalUnits', label:'12-Wk Units'}, {key:'avgMargin', label:'Avg. Margin'}, {key:'bestBSR', label:'Best BSR'},
@@ -1665,7 +1668,7 @@ function renderChildSkuSummary(){
   ).join('') + '</tr></thead><tbody>';
   rows.forEach(r=>{
     html += `<tr>
-      <td style="max-width:260px;white-space:normal;"><div>${escapeHtml(r.name)}</div><div style="font-size:10px;font-weight:400;color:var(--text-muted);margin-top:2px;">SKU: ${escapeHtml(r.sku)} · ASIN: ${r.childAsin}</div></td>
+      <td style="max-width:260px;white-space:normal;">${escapeHtml(childLabel(r))}</td>
       <td>${fmtMoney(r.totalSales)}</td>
       <td>${fmtInt(r.totalUnits)}</td>
       <td>${fmtPct(r.avgMargin)}</td>
@@ -1683,7 +1686,7 @@ function renderChildCompareChart(){
   const labels = Array.from({length:12},(_,i)=>'Wk '+(i+1));
   const palette = ['#D97757','#0F172A','#10B981','#F59E0B','#7893A8','#B91C1C','#8B5CF6','#0EA5E9'];
   const datasets = currentChildrenData.map((c,i)=>({
-    label: c.name.length>28 ? c.name.slice(0,28)+'…' : c.name,
+    label: childLabel(c),
     data: c.weeks.map(w=>w[m.key]),
     borderColor: palette[i%palette.length], backgroundColor: palette[i%palette.length],
     tension:.3, borderWidth:2, spanGaps:true,
@@ -1706,7 +1709,7 @@ function renderChildDetailBlocks(){
   container.innerHTML = currentChildrenData.map((c,i)=>{
     const colLabels = c.weeks.map((_,idx)=>'Wk '+(idx+1));
     return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-      <button class="btn" id="childDetailBtn${i}" style="width:100%;text-align:left;border:none;border-radius:0;background:#F8FAFC;" onclick="toggleChildDetail(${i})">▸ ${escapeHtml(c.name)} (SKU: ${escapeHtml(c.sku)})</button>
+      <button class="btn" id="childDetailBtn${i}" style="width:100%;text-align:left;border:none;border-radius:0;background:#F8FAFC;" onclick="toggleChildDetail(${i})">▸ ${escapeHtml(childLabel(c))}</button>
       <div id="childDetail${i}" style="display:none;padding:14px;">
         <div class="table-wrap"><table>${buildScorecardTable(c.weeks, null, colLabels)}</table></div>
       </div>
@@ -1719,7 +1722,7 @@ function toggleChildDetail(i){
   const open = box.style.display !== 'none';
   box.style.display = open ? 'none' : 'block';
   const c = currentChildrenData[i];
-  btn.textContent = (open?'▸ ':'▾ ') + c.name + ' (SKU: ' + c.sku + ')';
+  btn.textContent = (open?'▸ ':'▾ ') + childLabel(c);
 }
 
 (async function init(){
