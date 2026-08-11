@@ -334,10 +334,14 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropSF">
-              <label for="fileSF">Choose Sellerfox CSV</label>
-              <input type="file" id="fileSF" accept=".csv">
-              <div class="hint">Sessions, Impressions, Clicks, Orders, Highest BSR</div>
-              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadSF" style="display:none;" onclick="confirmUpload('upload-sellerfox', 'fileSF', 'statusSF', 'btnUploadSF')">Upload</button></div>
+              <label for="fileSF">Choose Sellerfox CSV(s)</label>
+              <input type="file" id="fileSF" accept=".csv" multiple>
+              <div class="hint">Sessions, Impressions, Clicks, Orders, Ad Spend, per child ASIN — marketplace is read directly from each row, no need to set it</div>
+              <div id="sfFileList" style="margin-top:8px;"></div>
+              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
+                <select id="sfTag"><option value="launch">launch</option><option value="expansion">expansion</option></select>
+              </div>
+              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadSF" style="display:none;" onclick="confirmUploadSF()">Upload</button></div>
               <div class="status-line" id="statusSF"></div>
             </div>
           </div>
@@ -541,6 +545,13 @@ function extractWeekFromFilename(name){
   if(!m) return '';
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
+function extractWeekFromSellerfoxFilename(name){
+  // Sellerfox export filenames embed the report range like 2026-29-06_-_2026-05-07
+  // — note the day comes BEFORE the month here, unlike Sellerboard's filenames.
+  const m = name.match(/(\d{4})-(\d{2})-(\d{2})_-_\d{4}-\d{2}-\d{2}/);
+  if(!m) return '';
+  return `${m[1]}-${m[3]}-${m[2]}`;
+}
 
 /* Selecting a file only stages it — nothing uploads until the Upload button is clicked */
 let sbSelectedFiles = [];
@@ -640,7 +651,91 @@ async function confirmUpload(functionName, fileInputId, statusId, buttonId){
   if(!file){ setStatus(statusId, 'err', 'Choose a file first.'); return; }
   await uploadFile(functionName, file, statusId, buttonId);
 }
-document.getElementById('fileSF').addEventListener('change', ()=> stageFile('fileSF','statusSF','btnUploadSF'));
+let sfSelectedFiles = [];
+document.getElementById('fileSF').addEventListener('change', e=>{
+  sfSelectedFiles = Array.from(e.target.files);
+  renderSfFileList();
+});
+function renderSfFileList(){
+  const container = document.getElementById('sfFileList');
+  const btn = document.getElementById('btnUploadSF');
+  if(!sfSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
+  container.innerHTML = sfSelectedFiles.map((file,i)=>{
+    const guessed = extractWeekFromSellerfoxFilename(file.name) || '';
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <input type="date" id="sfFileDate${i}" value="${guessed}" style="min-width:130px;font-size:11px;padding:2px 4px;">
+      <button class="btn btn-sm" onclick="removeSfFile(${i})" style="padding:1px 7px;">✕</button>
+      <span id="sfFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+    </div>`;
+  }).join('');
+  btn.style.display = 'inline-block';
+  btn.textContent = `Upload ${sfSelectedFiles.length} file${sfSelectedFiles.length>1?'s':''}`;
+}
+function removeSfFile(i){
+  sfSelectedFiles.splice(i,1);
+  renderSfFileList();
+}
+async function confirmUploadSF(){
+  if(!sfSelectedFiles.length){ setStatus('statusSF', 'err', 'Choose at least one file first.'); return; }
+  const tag = document.getElementById('sfTag').value;
+  const btn = document.getElementById('btnUploadSF');
+  btn.disabled = true;
+  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalNewProducts = 0, totalSkipped = 0;
+  const failMessages = [];
+
+  for(let i=0;i<sfSelectedFiles.length;i++){
+    const file = sfSelectedFiles[i];
+    const week = document.getElementById('sfFileDate'+i).value;
+    const statusEl = document.getElementById('sfFileStatus'+i);
+    if(!week){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not read a date from the filename`);
+      continue;
+    }
+    setStatus('statusSF', 'busy', `Uploading ${i+1} of ${sfSelectedFiles.length}: ${file.name}…`);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('week', week);
+    fd.append('tag', tag);
+    try{
+      const res = await fetch(`${EDGE_BASE}/upload-sellerfox`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if(!res.ok){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+      } else {
+        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+        successCount++;
+        totalRows += data.rowsLoaded || 0;
+        totalChildRows += data.childRowsLoaded || 0;
+        totalNewProducts += data.newProducts || 0;
+        totalSkipped += data.skippedUnlinked || 0;
+      }
+    }catch(err){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+    }
+  }
+
+  btn.disabled = false;
+  if(failCount === 0){
+    const extra = totalNewProducts ? ` (${totalNewProducts} new product${totalNewProducts>1?'s':''} added)` : '';
+    const skipped = totalSkipped ? `, ${totalSkipped} row${totalSkipped>1?'s':''} skipped (no Parent ASIN)` : '';
+    setStatus('statusSF', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows, ${totalChildRows} child rows${extra}${skipped}`);
+    sfSelectedFiles = [];
+    document.getElementById('fileSF').value = '';
+    renderSfFileList();
+  } else {
+    setStatus('statusSF', 'err', `${successCount} of ${sfSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
+  }
+  marketplacesCache = null;
+  await populateSelectors(); await loadDashboard(); await loadOverview();
+}
 document.getElementById('filePR').addEventListener('change', ()=> stageFile('filePR','statusPR','btnUploadPR'));
 document.getElementById('fileTG').addEventListener('change', ()=> stageFile('fileTG','statusTG','btnUploadTG'));
 
