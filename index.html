@@ -292,6 +292,23 @@
             <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
           </div>
         </div>
+
+        <div class="panel" id="childSkuPanel" style="display:none;">
+          <h3>Child SKUs</h3>
+          <div class="meta" style="margin:-6px 0 16px;">This product is sold as <span id="childSkuCount"></span> — here's how they compare to each other.</div>
+
+          <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Summary</h4>
+          <div class="table-wrap" style="margin-bottom:22px;"><table id="childSkuSummaryTable"></table></div>
+
+          <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Compare Over Time</h4>
+          <div class="filter-bar" style="margin-bottom:10px;">
+            <div class="filter-field"><label>Metric</label><select id="childCompareMetric" onchange="renderChildCompareChart()"></select></div>
+          </div>
+          <div class="chart-box" style="height:300px;margin-bottom:22px;"><canvas id="chartChildCompare"></canvas></div>
+
+          <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Full Breakdown per SKU</h4>
+          <div id="childDetailBlocks"></div>
+        </div>
       </div>
     </div>
 
@@ -303,11 +320,11 @@
         <div class="row">
           <div class="col">
             <div class="upload-box" id="dropSB">
-              <label for="fileSB">Choose Sellerboard CSV</label>
-              <input type="file" id="fileSB" accept=".csv">
-              <div class="hint">Export from Sellerboard with "Group by Parent" — upload as-is</div>
+              <label for="fileSB">Choose Sellerboard CSV(s)</label>
+              <input type="file" id="fileSB" accept=".csv" multiple>
+              <div class="hint">Export from Sellerboard with "Group by Parent" — select one or several weekly files at once, each week's date is read from its own filename</div>
+              <div id="sbFileList" style="margin-top:8px;"></div>
               <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
-                <input type="date" id="sbWeek" title="Week start date (auto-filled from the filename if possible)" style="min-width:140px;">
                 <input type="text" id="sbMarketplace" placeholder="Marketplace (e.g. DE)" style="min-width:110px;">
                 <select id="sbTag"><option value="launch">launch</option><option value="expansion">expansion</option></select>
               </div>
@@ -526,41 +543,91 @@ function extractWeekFromFilename(name){
 }
 
 /* Selecting a file only stages it — nothing uploads until the Upload button is clicked */
+let sbSelectedFiles = [];
 document.getElementById('fileSB').addEventListener('change', e=>{
-  const file = e.target.files[0]; if(!file) return;
-  const guessed = extractWeekFromFilename(file.name);
-  if(guessed) document.getElementById('sbWeek').value = guessed;
-  setStatus('statusSB', 'busy', `Selected: ${file.name} — click Upload when ready.`);
-  document.getElementById('btnUploadSB').style.display = 'inline-block';
+  sbSelectedFiles = Array.from(e.target.files);
+  renderSbFileList();
 });
+function renderSbFileList(){
+  const container = document.getElementById('sbFileList');
+  const btn = document.getElementById('btnUploadSB');
+  if(!sbSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
+  container.innerHTML = sbSelectedFiles.map((file,i)=>{
+    const guessed = extractWeekFromFilename(file.name) || '';
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <input type="date" id="sbFileDate${i}" value="${guessed}" style="min-width:130px;font-size:11px;padding:2px 4px;">
+      <button class="btn btn-sm" onclick="removeSbFile(${i})" style="padding:1px 7px;">✕</button>
+      <span id="sbFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+    </div>`;
+  }).join('');
+  btn.style.display = 'inline-block';
+  btn.textContent = `Upload ${sbSelectedFiles.length} file${sbSelectedFiles.length>1?'s':''}`;
+}
+function removeSbFile(i){
+  sbSelectedFiles.splice(i,1);
+  renderSbFileList();
+}
 async function confirmUploadSB(){
-  const file = document.getElementById('fileSB').files[0];
-  if(!file){ setStatus('statusSB', 'err', 'Choose a file first.'); return; }
-  if(!document.getElementById('sbWeek').value){
-    setStatus('statusSB', 'err', 'Could not read the week from the filename — set the date field above, then click Upload again.');
-    return;
+  if(!sbSelectedFiles.length){ setStatus('statusSB', 'err', 'Choose at least one file first.'); return; }
+  const marketplace = document.getElementById('sbMarketplace').value || '';
+  const tag = document.getElementById('sbTag').value;
+  const btn = document.getElementById('btnUploadSB');
+  btn.disabled = true;
+  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalNewProducts = 0;
+  const failMessages = [];
+
+  for(let i=0;i<sbSelectedFiles.length;i++){
+    const file = sbSelectedFiles[i];
+    const week = document.getElementById('sbFileDate'+i).value;
+    const statusEl = document.getElementById('sbFileStatus'+i);
+    if(!week){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not read a date from the filename`);
+      continue;
+    }
+    setStatus('statusSB', 'busy', `Uploading ${i+1} of ${sbSelectedFiles.length}: ${file.name}…`);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('week', week);
+    fd.append('marketplace', marketplace);
+    fd.append('tag', tag);
+    try{
+      const res = await fetch(`${EDGE_BASE}/upload-sellerboard`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if(!res.ok){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+      } else {
+        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+        successCount++;
+        totalRows += data.rowsLoaded || 0;
+        totalChildRows += data.childRowsLoaded || 0;
+        totalNewProducts += data.newProducts || 0;
+      }
+    }catch(err){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+    }
   }
-  setStatus('statusSB', 'busy', 'Uploading…');
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('week', document.getElementById('sbWeek').value);
-  fd.append('marketplace', document.getElementById('sbMarketplace').value || '');
-  fd.append('tag', document.getElementById('sbTag').value);
-  try{
-    const res = await fetch(`${EDGE_BASE}/upload-sellerboard`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
-      body: fd,
-    });
-    const data = await res.json();
-    if(!res.ok){ setStatus('statusSB', 'err', data.error || 'Upload failed'); return; }
-    const extra = data.newProducts ? ` (${data.newProducts} new product${data.newProducts>1?'s':''} added)` : '';
-    const children = data.childRowsLoaded ? `, ${data.childRowsLoaded} child SKU rows loaded` : '';
-    setStatus('statusSB', 'ok', `${data.rowsLoaded} parent products loaded${extra}${children}`);
-    document.getElementById('btnUploadSB').style.display = 'none';
-    marketplacesCache = null;
-    await populateSelectors(); await loadDashboard(); await loadOverview();
-  }catch(err){ setStatus('statusSB', 'err', 'Could not reach Supabase Edge Function'); }
+
+  btn.disabled = false;
+  if(failCount === 0){
+    const extra = totalNewProducts ? ` (${totalNewProducts} new product${totalNewProducts>1?'s':''} added)` : '';
+    const children = totalChildRows ? `, ${totalChildRows} child SKU rows loaded` : '';
+    setStatus('statusSB', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows${extra}${children}`);
+    sbSelectedFiles = [];
+    document.getElementById('fileSB').value = '';
+    renderSbFileList();
+  } else {
+    setStatus('statusSB', 'err', `${successCount} of ${sbSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
+  }
+  marketplacesCache = null;
+  await populateSelectors(); await loadDashboard(); await loadOverview();
 }
 
 function stageFile(fileInputId, statusId, buttonId){
@@ -905,28 +972,22 @@ async function loadTagDashboard(tag){
   if(!products.length) return;
 
   const asins = products.map(pr => pr.asin);
-  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }, { data: allChildRows }] = await Promise.all([
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').in('asin', asins),
     sb.from('sellerfox_rows').select('*').in('asin', asins),
     sb.from('targets').select('*').in('asin', asins),
     sb.from('week_notes').select('*').in('asin', asins),
-    sb.from('sellerboard_child_rows').select('*').in('parent_asin', asins),
   ]);
 
-  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {}, childrenByParent = {};
+  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
   (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
   (allTargets||[]).forEach(r=>{ targetsByAsin[r.asin] = r; });
   (allNotes||[]).forEach(r=>{ if(!notesByAsin[r.asin]) notesByAsin[r.asin] = {}; notesByAsin[r.asin][r.week] = r.note; });
-  (allChildRows||[]).forEach(r=>{
-    if(!childrenByParent[r.parent_asin]) childrenByParent[r.parent_asin] = {};
-    if(!childrenByParent[r.parent_asin][r.child_asin]) childrenByParent[r.parent_asin][r.child_asin] = [];
-    childrenByParent[r.parent_asin][r.child_asin].push(r);
-  });
 
   const productData = products.map(product => {
     const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
-    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {}, children: childrenByParent[product.asin] || {} };
+    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
   const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
@@ -1003,7 +1064,7 @@ async function loadTagDashboard(tag){
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
   // Per-product full scorecards
-  productData.forEach(({product, weeks, anchor, targetRow, notesMap, children})=>{
+  productData.forEach(({product, weeks, anchor, targetRow, notesMap})=>{
     const colLabels = weeks.map((_,i)=>{
       const wkLabel = 'Wk '+(i+1);
       if(!anchor) return wkLabel;
@@ -1018,24 +1079,6 @@ async function loadTagDashboard(tag){
       d.setDate(d.getDate() + i*7);
       return d.toISOString().slice(0,10);
     });
-    const childAsins = Object.keys(children||{});
-    const childSkusHtml = childAsins.map(childAsin=>{
-      const childRows = children[childAsin];
-      const childName = childRows[0]?.name || childAsin;
-      const childSku = childRows[0]?.sku || '';
-      const { weeks: childWeeks, anchor: childAnchor } = computeWeeksFromRows({ asin: childAsin, launch: product.launch }, childRows, []);
-      const childColLabels = childWeeks.map((_,i)=>{
-        const wkLabel = 'Wk '+(i+1);
-        if(!childAnchor) return wkLabel;
-        const d = new Date(childAnchor); d.setDate(d.getDate()+i*7);
-        const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-        return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
-      });
-      return `<div style="margin-bottom:16px;padding-left:14px;border-left:3px solid var(--border);">
-        <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">${escapeHtml(childName)} <span style="font-weight:400;color:var(--text-muted);">· SKU: ${escapeHtml(childSku)} · ASIN: ${childAsin}</span></div>
-        <div class="table-wrap"><table>${buildScorecardTable(childWeeks, null, childColLabels)}</table></div>
-      </div>`;
-    }).join('');
     let ageDays = null, ageWeeks = null, ageLabel = '';
     if(anchor){
       ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
@@ -1070,15 +1113,9 @@ async function loadTagDashboard(tag){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;margin-bottom:14px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);">
         ${metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('')}
       </div>
-      ${childAsins.length ? `
-      <div style="margin-bottom:12px;">
-        <button class="btn btn-sm" onclick="const box=this.nextElementSibling; const open=box.style.display!=='none'; box.style.display=open?'none':'block'; this.textContent=open?'Show ${childAsins.length} child SKU${childAsins.length>1?'s':''} ▾':'Hide child SKUs ▴';">Show ${childAsins.length} child SKU${childAsins.length>1?'s':''} ▾</button>
-        <div style="display:none;margin-top:12px;">${childSkusHtml}</div>
-      </div>
-      ` : ''}
-      <div class="table-wrap parent-scorecard"><table></table></div>
+      <div class="table-wrap"><table></table></div>
     `;
-    panel.querySelector('.parent-scorecard table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
+    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
     blocksContainer.appendChild(panel);
   });
 }
@@ -1110,6 +1147,7 @@ async function loadDashboard(){
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
+  const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
   const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt);
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
@@ -1121,13 +1159,14 @@ async function loadDashboard(){
   } else {
     banner.classList.remove('show');
   }
-  const [{ data: targetRow }, { data: noteRows }] = await Promise.all([targetsPromise, notesPromise]);
+  const [{ data: targetRow }, { data: noteRows }, { data: childRows }] = await Promise.all([targetsPromise, notesPromise, childrenPromise]);
   const notesMap = {};
   (noteRows||[]).forEach(r=>{ notesMap[r.week] = r.note; });
   const labels = weeks.map((_,i)=>'Wk '+(i+1));
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
   renderTable(weeks, targetRow, anchor, product.asin, notesMap);
+  renderChildSkus(childRows, anchor);
 }
 
 function sum(arr, key){ return arr.reduce((a,w)=>a+w[key],0); }
@@ -1287,6 +1326,8 @@ function renderCharts(weeks, labels){
 }
 
 let currentWeeksData = [];
+let currentChildrenData = [];
+let childSort = { key: 'sales', dir: 'desc' };
 function renderWowChart(){
   if(!currentWeeksData.length) return;
   const key = document.getElementById('wowMetric').value || 'sales';
@@ -1470,6 +1511,120 @@ function renderTable(weeks, targets, anchor, asin, notesMap){
     return d.toISOString().slice(0,10);
   });
   document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap);
+}
+
+function renderChildSkus(childRows, parentAnchor){
+  const panel = document.getElementById('childSkuPanel');
+  const byChild = {};
+  (childRows||[]).forEach(r=>{ if(!byChild[r.child_asin]) byChild[r.child_asin] = []; byChild[r.child_asin].push(r); });
+  const childAsins = Object.keys(byChild);
+
+  if(!childAsins.length){
+    panel.style.display = 'none';
+    currentChildrenData = [];
+    return;
+  }
+  panel.style.display = 'block';
+  document.getElementById('childSkuCount').textContent = `${childAsins.length} child SKU${childAsins.length>1?'s':''}`;
+
+  // Every child is aligned to the PARENT's own anchor (not its own auto-detected
+  // one) so they all share the exact same Week 1–12 grid — otherwise comparing
+  // children with different alignments would be meaningless.
+  currentChildrenData = childAsins.map(childAsin=>{
+    const rows = byChild[childAsin];
+    const { weeks } = computeWeeksFromRows({ asin: childAsin, launch: parentAnchor }, rows, []);
+    return { childAsin, sku: rows[0]?.sku || '', name: rows[0]?.name || childAsin, weeks };
+  });
+
+  renderChildSkuSummary();
+  const metricSel = document.getElementById('childCompareMetric');
+  if(!metricSel.options.length){
+    METRICS.forEach(m=>{ const o=document.createElement('option'); o.value=m.key; o.textContent=m.label; metricSel.appendChild(o); });
+    metricSel.value = 'sales';
+  }
+  renderChildCompareChart();
+  renderChildDetailBlocks();
+}
+
+function sortChildrenBy(key){
+  if(childSort.key === key){ childSort.dir = childSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { childSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
+  renderChildSkuSummary();
+}
+function renderChildSkuSummary(){
+  const enriched = currentChildrenData.map(c=>{
+    const bsrVals = c.weeks.map(w=>w.bsr).filter(x=>x!=null&&x>0);
+    return {
+      ...c,
+      totalSales: sum(c.weeks,'sales'), totalUnits: sum(c.weeks,'units'),
+      avgMargin: avg(c.weeks,'margin'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
+    };
+  });
+  const rows = sortRows(enriched, childSort.key, childSort.dir, r=>r.name||'');
+  const cols = [
+    {key:'__name__', label:'Child SKU'}, {key:'totalSales', label:'12-Wk Sales'},
+    {key:'totalUnits', label:'12-Wk Units'}, {key:'avgMargin', label:'Avg. Margin'}, {key:'bestBSR', label:'Best BSR'},
+  ];
+  let html = '<thead><tr>' + cols.map(c=>
+    `<th style="cursor:pointer;user-select:none;" onclick="sortChildrenBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, childSort)}</span></th>`
+  ).join('') + '</tr></thead><tbody>';
+  rows.forEach(r=>{
+    html += `<tr>
+      <td style="max-width:260px;white-space:normal;"><div>${escapeHtml(r.name)}</div><div style="font-size:10px;font-weight:400;color:var(--text-muted);margin-top:2px;">SKU: ${escapeHtml(r.sku)} · ASIN: ${r.childAsin}</div></td>
+      <td>${fmtMoney(r.totalSales)}</td>
+      <td>${fmtInt(r.totalUnits)}</td>
+      <td>${fmtPct(r.avgMargin)}</td>
+      <td>${fmtRank(r.bestBSR)}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('childSkuSummaryTable').innerHTML = html;
+}
+
+function renderChildCompareChart(){
+  if(!currentChildrenData.length) return;
+  const key = document.getElementById('childCompareMetric').value || 'sales';
+  const m = METRICS.find(x=>x.key===key) || METRICS[0];
+  const labels = Array.from({length:12},(_,i)=>'Wk '+(i+1));
+  const palette = ['#D97757','#0F172A','#10B981','#F59E0B','#7893A8','#B91C1C','#8B5CF6','#0EA5E9'];
+  const datasets = currentChildrenData.map((c,i)=>({
+    label: c.name.length>28 ? c.name.slice(0,28)+'…' : c.name,
+    data: c.weeks.map(w=>w[m.key]),
+    borderColor: palette[i%palette.length], backgroundColor: palette[i%palette.length],
+    tension:.3, borderWidth:2, spanGaps:true,
+  }));
+  if(charts.childCompare) charts.childCompare.destroy();
+  charts.childCompare = new Chart(document.getElementById('chartChildCompare'), {
+    type:'line',
+    data:{labels, datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, boxWidth:10, color:'#64748B'}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw==null?'–':m.fmt(ctx.raw)}`}} },
+      scales:{ x:{grid:{display:false}, ticks:{color:'#64748B'}}, y:{grid:{color:'#E2E8F0'}, ticks:{color:'#64748B', callback:v=>m.fmt(v)}} },
+    }
+  });
+}
+
+function renderChildDetailBlocks(){
+  const container = document.getElementById('childDetailBlocks');
+  container.innerHTML = currentChildrenData.map((c,i)=>{
+    const colLabels = c.weeks.map((_,idx)=>'Wk '+(idx+1));
+    return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <button class="btn" id="childDetailBtn${i}" style="width:100%;text-align:left;border:none;border-radius:0;background:#F8FAFC;" onclick="toggleChildDetail(${i})">▸ ${escapeHtml(c.name)} (SKU: ${escapeHtml(c.sku)})</button>
+      <div id="childDetail${i}" style="display:none;padding:14px;">
+        <div class="table-wrap"><table>${buildScorecardTable(c.weeks, null, colLabels)}</table></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleChildDetail(i){
+  const box = document.getElementById('childDetail'+i);
+  const btn = document.getElementById('childDetailBtn'+i);
+  const open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  const c = currentChildrenData[i];
+  btn.textContent = (open?'▸ ':'▾ ') + c.name + ' (SKU: ' + c.sku + ')';
 }
 
 (async function init(){
