@@ -555,8 +555,8 @@ async function confirmUploadSB(){
     const data = await res.json();
     if(!res.ok){ setStatus('statusSB', 'err', data.error || 'Upload failed'); return; }
     const extra = data.newProducts ? ` (${data.newProducts} new product${data.newProducts>1?'s':''} added)` : '';
-    const skipped = data.skippedChildRows ? `, ${data.skippedChildRows} child SKU rows skipped` : '';
-    setStatus('statusSB', 'ok', `${data.rowsLoaded} parent products loaded${extra}${skipped}`);
+    const children = data.childRowsLoaded ? `, ${data.childRowsLoaded} child SKU rows loaded` : '';
+    setStatus('statusSB', 'ok', `${data.rowsLoaded} parent products loaded${extra}${children}`);
     document.getElementById('btnUploadSB').style.display = 'none';
     marketplacesCache = null;
     await populateSelectors(); await loadDashboard(); await loadOverview();
@@ -905,22 +905,28 @@ async function loadTagDashboard(tag){
   if(!products.length) return;
 
   const asins = products.map(pr => pr.asin);
-  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }, { data: allChildRows }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').in('asin', asins),
     sb.from('sellerfox_rows').select('*').in('asin', asins),
     sb.from('targets').select('*').in('asin', asins),
     sb.from('week_notes').select('*').in('asin', asins),
+    sb.from('sellerboard_child_rows').select('*').in('parent_asin', asins),
   ]);
 
-  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
+  const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {}, childrenByParent = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
   (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
   (allTargets||[]).forEach(r=>{ targetsByAsin[r.asin] = r; });
   (allNotes||[]).forEach(r=>{ if(!notesByAsin[r.asin]) notesByAsin[r.asin] = {}; notesByAsin[r.asin][r.week] = r.note; });
+  (allChildRows||[]).forEach(r=>{
+    if(!childrenByParent[r.parent_asin]) childrenByParent[r.parent_asin] = {};
+    if(!childrenByParent[r.parent_asin][r.child_asin]) childrenByParent[r.parent_asin][r.child_asin] = [];
+    childrenByParent[r.parent_asin][r.child_asin].push(r);
+  });
 
   const productData = products.map(product => {
     const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
-    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
+    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {}, children: childrenByParent[product.asin] || {} };
   });
 
   const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
@@ -997,7 +1003,7 @@ async function loadTagDashboard(tag){
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
   // Per-product full scorecards
-  productData.forEach(({product, weeks, anchor, targetRow, notesMap})=>{
+  productData.forEach(({product, weeks, anchor, targetRow, notesMap, children})=>{
     const colLabels = weeks.map((_,i)=>{
       const wkLabel = 'Wk '+(i+1);
       if(!anchor) return wkLabel;
@@ -1012,6 +1018,24 @@ async function loadTagDashboard(tag){
       d.setDate(d.getDate() + i*7);
       return d.toISOString().slice(0,10);
     });
+    const childAsins = Object.keys(children||{});
+    const childSkusHtml = childAsins.map(childAsin=>{
+      const childRows = children[childAsin];
+      const childName = childRows[0]?.name || childAsin;
+      const childSku = childRows[0]?.sku || '';
+      const { weeks: childWeeks, anchor: childAnchor } = computeWeeksFromRows({ asin: childAsin, launch: product.launch }, childRows, []);
+      const childColLabels = childWeeks.map((_,i)=>{
+        const wkLabel = 'Wk '+(i+1);
+        if(!childAnchor) return wkLabel;
+        const d = new Date(childAnchor); d.setDate(d.getDate()+i*7);
+        const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+        return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+      });
+      return `<div style="margin-bottom:16px;padding-left:14px;border-left:3px solid var(--border);">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">${escapeHtml(childName)} <span style="font-weight:400;color:var(--text-muted);">· SKU: ${escapeHtml(childSku)} · ASIN: ${childAsin}</span></div>
+        <div class="table-wrap"><table>${buildScorecardTable(childWeeks, null, childColLabels)}</table></div>
+      </div>`;
+    }).join('');
     let ageDays = null, ageWeeks = null, ageLabel = '';
     if(anchor){
       ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
@@ -1046,9 +1070,15 @@ async function loadTagDashboard(tag){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;margin-bottom:14px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);">
         ${metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('')}
       </div>
-      <div class="table-wrap"><table></table></div>
+      ${childAsins.length ? `
+      <div style="margin-bottom:12px;">
+        <button class="btn btn-sm" onclick="const box=this.nextElementSibling; const open=box.style.display!=='none'; box.style.display=open?'none':'block'; this.textContent=open?'Show ${childAsins.length} child SKU${childAsins.length>1?'s':''} ▾':'Hide child SKUs ▴';">Show ${childAsins.length} child SKU${childAsins.length>1?'s':''} ▾</button>
+        <div style="display:none;margin-top:12px;">${childSkusHtml}</div>
+      </div>
+      ` : ''}
+      <div class="table-wrap parent-scorecard"><table></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
+    panel.querySelector('.parent-scorecard table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
     blocksContainer.appendChild(panel);
   });
 }
@@ -1377,9 +1407,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     weekDates.forEach(wd=>{
       if(!wd){ html += `<td style="background:#fff;">–</td>`; return; }
       const existing = (notesMap && notesMap[wd]) ? notesMap[wd] : '';
-      const preview = existing ? (existing.length>26 ? existing.slice(0,26)+'…' : existing) : 'Add note…';
-      html += `<td style="background:#fff;cursor:pointer;" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
-        <span style="font-size:11px;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</span>
+      const preview = existing ? (existing.length>90 ? existing.slice(0,90)+'…' : existing) : 'Add note…';
+      html += `<td style="background:#fff;cursor:pointer;white-space:normal;vertical-align:top;min-width:150px;max-width:220px;" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
+        <span style="font-size:12.5px;line-height:1.5;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</span>
       </td>`;
     });
     html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
