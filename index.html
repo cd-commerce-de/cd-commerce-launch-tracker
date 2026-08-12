@@ -168,9 +168,9 @@
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3,13 8,13 10,7 14,19 16,13 21,13"/></svg></div>
       Product Detail
     </div>
-    <div class="nav-item" data-view="tse-forecast" onclick="switchView('tse-forecast')" title="Weekly Soll (target) vs Ist (actual), matching the Annahmen & Prognosen template">
+    <div class="nav-item" data-view="tse-forecast" onclick="switchView('tse-forecast')" title="Every week's actual performance compared to your Good/Better/Best targets, matching the Annahmen & Prognosen template's metric list">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19V5"/><path d="M4 15l5-5 4 4 7-7"/></svg></div>
-      TSE Forecast
+      Actual vs. Target
     </div>
     <div class="nav-section-label">Data</div>
     <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')" title="Upload weekly exports and manage your product list">
@@ -318,8 +318,8 @@
 
     <div class="view" id="view-tse-forecast">
       <div class="page-head">
-        <h2>TSE Forecast</h2>
-        <div class="meta">Weekly Soll (target) vs Ist (actual) — matches the Annahmen &amp; Prognosen template. Sales price, Units, CPC, CR, and Organic % are the primary inputs; every other row is calculated from them, exactly like the spreadsheet.</div>
+        <h2>Actual vs. Target</h2>
+        <div class="meta">Every week's actual performance, sourced from your Sellerboard and Sellerfox uploads, compared against the Good/Better/Best targets already set for this product.</div>
       </div>
       <div class="panel">
         <div class="filter-bar">
@@ -332,19 +332,8 @@
       </div>
       <div id="tseBody" style="display:none;">
         <div class="panel">
-          <h3>Assumptions</h3>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
-            <div class="filter-field"><label>Item No. (Product Line Code)</label><input id="tseItemNo" disabled style="background:#F1F5F9;"></div>
-            <div class="filter-field"><label>COGS (€)</label><input type="number" step="0.01" id="tseCogs" onchange="saveTseAssumptions()"></div>
-            <div class="filter-field"><label>FBA/FBM costs (€)</label><input type="number" step="0.01" id="tseFbaFbm" onchange="saveTseAssumptions()"></div>
-            <div class="filter-field"><label>Amazon Selling Fees (%)</label><input type="number" step="0.1" id="tseSellingFees" placeholder="e.g. 13" onchange="saveTseAssumptions()"></div>
-          </div>
-        </div>
-        <div class="panel">
-          <h3>Weekly Soll vs. Ist</h3>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Soll cells with a white background are editable (the 5 primary inputs); everything else is calculated. Ist cells show "–" where we genuinely don't have the data yet (see note below).</p>
           <div class="table-wrap"><table id="tseTable"></table></div>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Ø CPC, Number of clicks, and Organic sales % (and anything derived from it) need a Sellerfox upload for that week to compute an actual — without one, those Ist cells show "–". Organic % is an approximation (Units − Ad Orders) ÷ Units, not an exact split.</p>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Avg. CPC and Number of clicks need a Sellerfox upload for that week to show a value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split. Rows with no matching target show "–" in the Target column; only Units, Total Revenue, Margin, and Total Profit currently have targets set.</p>
         </div>
       </div>
     </div>
@@ -981,6 +970,10 @@ async function computeWeeks(product, marketplaceFilter){
   return computeWeeksFromRows(product, sbRows, sfRows);
 }
 function finalizeWeek(w){
+  // Approximation only — assumes 1 ad order ≈ 1 unit, and that Sellerboard's
+  // Units and Sellerfox's Ad Orders line up cleanly for the same week. Null
+  // (not 0) when Sellerfox wasn't uploaded, so it's visibly "unknown" not "0%".
+  const organicPct = (w.clicks || w.adsOrders) ? (w.units? Math.max(0, (w.units - w.adsOrders) / w.units) : null) : null;
   return {
     sales:w.sales, units:w.units, refunds:w.refunds,
     refundPct: w.refundPctN? (w.refundPctSum/w.refundPctN)/100 : (w.units? w.refunds/w.units : 0),
@@ -998,10 +991,9 @@ function finalizeWeek(w){
     impressions:w.impressions, clicks:w.clicks, adsOrders:w.adsOrders,
     ctr: w.impressions? w.clicks/w.impressions : 0,
     cpc: w.clicks? w.adSpend/w.clicks : null,
-    // Approximation only — assumes 1 ad order ≈ 1 unit, and that Sellerboard's
-    // Units and Sellerfox's Ad Orders line up cleanly for the same week. Null
-    // (not 0) when Sellerfox wasn't uploaded, so it's visibly "unknown" not "0%".
-    organicPct: (w.clicks || w.adsOrders) ? (w.units? Math.max(0, (w.units - w.adsOrders) / w.units) : null) : null,
+    organicPct,
+    organicRevenue: organicPct!=null ? w.sales*organicPct : null,
+    advertisedRevenue: organicPct!=null ? w.sales*(1-organicPct) : null,
   };
 }
 
@@ -1528,8 +1520,13 @@ const METRICS = [
   {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', tierKeys:{good:'target_margin_pct_good',better:'target_margin_pct_better',best:'target_margin_pct_best'}, targetIsPct:true},
   {key:'roi', label:'ROI (%)', fmt:fmtPct, kind:'calc'},
   {key:'realAcos', label:'Real ACOS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
+  {key:'tacos', label:'TACoS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
   {key:'cpo', label:'Cost Per Order (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
   {key:'profitPerOrder', label:'Profit Per Order (€)', fmt:fmtMoney, kind:'calc'},
+  {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
+  {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc'},
+  {key:'organicRevenue', label:'Organic Revenue (€)', fmt:fmtMoney, kind:'sum'},
+  {key:'advertisedRevenue', label:'Advertised Revenue (€)', fmt:fmtMoney, kind:'sum'},
   {key:'sessions', label:'Sessions', fmt:fmtInt, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
   {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc'},
   {key:'impressions', label:'Impressions (from Sellerfox, optional)', fmt:fmtInt, kind:'sum'},
@@ -1538,6 +1535,10 @@ const METRICS = [
   {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc'},
   {key:'bsr', label:'Best BSR (lowest = best)', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}},
 ];
+
+// Matches the Annahmen & Prognosen template's own row order, in English.
+const TSE_METRIC_KEYS = ['avgSalesPrice','units','cpc','cvr','organicPct','sales','organicRevenue','advertisedRevenue','adSpend','realAcos','tacos','cpo','clicks','profitPerOrder','margin','roi','netProfit'];
+const TSE_METRIC_LIST = TSE_METRIC_KEYS.map(k => METRICS.find(m=>m.key===k)).filter(Boolean);
 
 // Colors each cell relative to OTHER WEEKS IN THAT SAME ROW only (white = lowest
 // value that row saw across its 12 weeks, ember = highest) — it's a within-row
@@ -1560,12 +1561,13 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList){
+  const metrics = metricList || METRICS;
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l=> html += `<th>${l}</th>`);
   html += '<th>12-Wk Total/Avg</th><th>Target</th></tr></thead><tbody>';
-  METRICS.forEach(m=>{
+  metrics.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
     const min = Math.min(...numericVals), max = Math.max(...numericVals);
@@ -1778,66 +1780,7 @@ function toggleChildDetail(i){
   btn.textContent = (open?'▸ ':'▾ ') + childLabel(c);
 }
 
-/* ---------------- TSE Forecast (Soll vs Ist, matching the Annahmen & Prognosen template) ---------------- */
-const TSE_METRICS = [
-  {key:'salesPrice', label:'Sales price', kind:'input', fmt:fmtMoney},
-  {key:'units', label:'Sales (units)', kind:'input', fmt:fmtInt},
-  {key:'cpc', label:'Ø CPC', kind:'input', fmt:fmtMoney},
-  {key:'cr', label:'Ø CR', kind:'input', fmt:fmtPct},
-  {key:'organicPct', label:'Organic sales (%)', kind:'input', fmt:fmtPct},
-  {key:'totalRevenue', label:'Total Revenue', kind:'derived', fmt:fmtMoney},
-  {key:'organicRevenue', label:'Organic revenue', kind:'derived', fmt:fmtMoney},
-  {key:'advertisedRevenue', label:'Advertised revenue', kind:'derived', fmt:fmtMoney},
-  {key:'adSpend', label:'Advertising expenses', kind:'derived', fmt:fmtMoney},
-  {key:'acos', label:'ACOS', kind:'derived', fmt:fmtPct},
-  {key:'tacos', label:'TACOS', kind:'derived', fmt:fmtPct},
-  {key:'cpo', label:'Costs per order (CPO)', kind:'derived', fmt:fmtMoney},
-  {key:'clicks', label:'Number of clicks', kind:'derived', fmt:fmtInt},
-  {key:'profitPerOrder', label:'Profit per order', kind:'derived', fmt:fmtMoney},
-  {key:'margin', label:'Margin', kind:'derived', fmt:fmtPct},
-  {key:'roi', label:'ROI', kind:'derived', fmt:fmtPct},
-  {key:'totalProfit', label:'Total profit', kind:'derived', fmt:fmtMoney},
-];
-
-// Replicates the exact spreadsheet formulas from the Soll (target) side of
-// the template: Total Revenue = Price×Units, Clicks = Units÷CR, Ad Spend =
-// CPC×Clicks, Total Profit = Revenue(ex-VAT) − Ad Spend − (COGS+FBA/FBM+Amazon
-// commission)×Units, and so on down the chain.
-function computeDerivedSoll(inputs, assumptions, week1SalesPrice){
-  const {salesPrice, units, cpc, cr, organicPct} = inputs;
-  const totalRevenue = (salesPrice!=null && units!=null) ? salesPrice*units : null;
-  const organicRevenue = (totalRevenue!=null && organicPct!=null) ? totalRevenue*organicPct : null;
-  const advertisedRevenue = (totalRevenue!=null && organicPct!=null) ? totalRevenue*(1-organicPct) : null;
-  const clicks = (units!=null && cr) ? units/cr : null;
-  const adSpend = (cpc!=null && clicks!=null) ? cpc*clicks : null;
-  const acos = (adSpend!=null && advertisedRevenue) ? adSpend/advertisedRevenue : null;
-  const tacos = (adSpend!=null && totalRevenue) ? adSpend/totalRevenue : null;
-  const cpo = (adSpend!=null && units) ? adSpend/units : null;
-  const amazonCommission = (week1SalesPrice!=null && assumptions.amazon_selling_fees_pct!=null) ? week1SalesPrice*(assumptions.amazon_selling_fees_pct/100) : 0;
-  const perUnitCost = (assumptions.cogs_eur||0) + (assumptions.fba_fbm_costs_eur||0) + amazonCommission;
-  const totalProfit = (totalRevenue!=null && adSpend!=null && units!=null) ? totalRevenue/1.19 - adSpend - perUnitCost*units : null;
-  const profitPerOrder = (totalProfit!=null && units) ? totalProfit/units : null;
-  const margin = (profitPerOrder!=null && salesPrice) ? profitPerOrder/salesPrice : null;
-  const roi = (profitPerOrder!=null && assumptions.cogs_eur) ? profitPerOrder/assumptions.cogs_eur : null;
-  return {salesPrice, units, cpc, cr, organicPct, totalRevenue, organicRevenue, advertisedRevenue, adSpend, acos, tacos, cpo, clicks, profitPerOrder, margin, roi, totalProfit};
-}
-// Same shape, built from actual weekly data — organicPct (and anything that
-// depends on it) is null when Sellerfox wasn't uploaded for that week.
-function computeIstRow(w){
-  const organicPct = w.organicPct;
-  const organicRevenue = (organicPct!=null) ? w.sales*organicPct : null;
-  const advertisedRevenue = (organicPct!=null) ? w.sales*(1-organicPct) : null;
-  return {
-    salesPrice: w.avgSalesPrice, units: w.units, cpc: w.cpc, cr: w.cvr, organicPct,
-    totalRevenue: w.sales, organicRevenue, advertisedRevenue, adSpend: w.adSpend,
-    acos: w.realAcos, tacos: w.tacos, cpo: w.cpo, clicks: w.clicks||null,
-    profitPerOrder: w.profitPerOrder, margin: w.margin, roi: w.roi, totalProfit: w.netProfit,
-  };
-}
-
-let tseSollByWeek = [];
-let tseCurrentWeeks = [];
-let tseCurrentAssumptions = {};
+/* ---------------- Actual vs. Target ---------------- */
 async function loadTseForecast(){
   const sel = document.getElementById('tseProductSelect');
   if(!sel.value){ document.getElementById('tseEmpty').style.display='block'; document.getElementById('tseBody').style.display='none'; return; }
@@ -1847,89 +1790,21 @@ async function loadTseForecast(){
   document.getElementById('tseBody').style.display = product ? 'block' : 'none';
   if(!product) return;
 
-  const [{ weeks }, { data: assumptionsRow }, { data: sollRows }] = await Promise.all([
+  const [{ weeks, anchor }, { data: targetRow }] = await Promise.all([
     computeWeeks(product, 'ALL'),
-    sb.from('tse_assumptions').select('*').eq('asin', product.asin).maybeSingle(),
-    sb.from('tse_weekly_soll').select('*').eq('asin', product.asin),
+    sb.from('targets').select('*').eq('asin', product.asin).maybeSingle(),
   ]);
 
-  tseCurrentWeeks = weeks;
-  tseCurrentAssumptions = assumptionsRow || {};
-  document.getElementById('tseItemNo').value = product.product_line_code || '';
-  document.getElementById('tseCogs').value = tseCurrentAssumptions.cogs_eur ?? '';
-  document.getElementById('tseFbaFbm').value = tseCurrentAssumptions.fba_fbm_costs_eur ?? '';
-  document.getElementById('tseSellingFees').value = tseCurrentAssumptions.amazon_selling_fees_pct ?? '';
-
-  tseSollByWeek = Array.from({length:12}, (_,i)=>{
-    const row = (sollRows||[]).find(r=>r.week_index===i+1);
-    return {
-      salesPrice: row?.sales_price ?? null, units: row?.units ?? null, cpc: row?.cpc ?? null,
-      cr: row?.cr!=null ? row.cr/100 : null, organicPct: row?.organic_pct!=null ? row.organic_pct/100 : null,
-    };
+  const colLabels = weeks.map((_,i)=>{
+    const wkLabel = 'Wk '+(i+1);
+    if(!anchor) return wkLabel;
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + i*7);
+    const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
 
-  renderTseTable();
-}
-
-async function saveTseAssumptions(){
-  const asin = document.getElementById('tseProductSelect').value;
-  if(!asin) return;
-  const cogs = document.getElementById('tseCogs').value;
-  const fbaFbm = document.getElementById('tseFbaFbm').value;
-  const sellingFees = document.getElementById('tseSellingFees').value;
-  tseCurrentAssumptions = {
-    cogs_eur: cogs===''?null:parseFloat(cogs),
-    fba_fbm_costs_eur: fbaFbm===''?null:parseFloat(fbaFbm),
-    amazon_selling_fees_pct: sellingFees===''?null:parseFloat(sellingFees),
-  };
-  await sb.from('tse_assumptions').upsert({ asin, ...tseCurrentAssumptions }, { onConflict: 'asin' });
-  renderTseTable();
-}
-
-async function saveTseWeeklySoll(weekIndex, field, rawValue){
-  const asin = document.getElementById('tseProductSelect').value;
-  if(!asin) return;
-  const isPct = field === 'organicPct' || field === 'cr';
-  const parsed = rawValue==='' ? null : parseFloat(rawValue);
-  tseSollByWeek[weekIndex-1][field] = (parsed==null) ? null : (isPct ? parsed/100 : parsed);
-  const w = tseSollByWeek[weekIndex-1];
-  await sb.from('tse_weekly_soll').upsert({
-    asin, week_index: weekIndex,
-    sales_price: w.salesPrice, units: w.units, cpc: w.cpc,
-    cr: w.cr!=null ? w.cr*100 : null, organic_pct: w.organicPct!=null ? w.organicPct*100 : null,
-  }, { onConflict: 'asin,week_index' });
-  renderTseTable();
-}
-
-function renderTseTable(){
-  const week1Price = tseSollByWeek[0].salesPrice;
-  const sollRows = tseSollByWeek.map(inputs => computeDerivedSoll(inputs, tseCurrentAssumptions, week1Price));
-  const istRows = tseCurrentWeeks.map(w => computeIstRow(w));
-
-  let html = '<thead><tr><th>Metric</th>';
-  for(let i=1;i<=12;i++) html += `<th colspan="2">Wk ${i}</th>`;
-  html += '</tr><tr><th></th>';
-  for(let i=1;i<=12;i++) html += `<th>Soll</th><th>Ist</th>`;
-  html += '</tr></thead><tbody>';
-
-  TSE_METRICS.forEach(m=>{
-    html += `<tr><td>${m.label}</td>`;
-    for(let i=0;i<12;i++){
-      const sollVal = sollRows[i][m.key];
-      const istVal = istRows[i] ? istRows[i][m.key] : null;
-      if(m.kind==='input'){
-        const isPctField = (m.key==='organicPct' || m.key==='cr');
-        const rawEditValue = sollVal==null ? '' : (isPctField ? +(sollVal*100).toFixed(1) : sollVal);
-        html += `<td style="background:#fff;padding:2px;"><input type="number" step="any" value="${rawEditValue}" style="width:64px;font-size:11px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;" onchange="saveTseWeeklySoll(${i+1},'${m.key}',this.value)"></td>`;
-      } else {
-        html += `<td style="background:#F8FAFC;">${sollVal==null?'–':m.fmt(sollVal)}</td>`;
-      }
-      html += `<td>${istVal==null?'–':m.fmt(istVal)}</td>`;
-    }
-    html += '</tr>';
-  });
-  html += '</tbody>';
-  document.getElementById('tseTable').innerHTML = html;
+  document.getElementById('tseTable').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, null, null, null, TSE_METRIC_LIST);
 }
 
 (async function init(){
