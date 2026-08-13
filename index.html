@@ -73,6 +73,22 @@
     font-family:var(--font-b);font-size:13.5px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text-dark);min-width:160px;
   }
 
+  /* Multi-select filter widget: a button that opens a checkbox panel. */
+  .msel{position:relative;}
+  .msel-control{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--font-b);font-size:13.5px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text-dark);min-width:160px;cursor:pointer;user-select:none;}
+  .msel-control:hover{border-color:var(--gold);}
+  .msel-control .msel-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;}
+  .msel-control .msel-caret{color:var(--text-muted);font-size:11px;flex-shrink:0;}
+  .msel-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:40;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,0.18);min-width:220px;max-width:280px;max-height:260px;overflow-y:auto;padding:6px;}
+  .msel-panel.open{display:block;}
+  .msel-panel .msel-actions{display:flex;justify-content:space-between;padding:4px 8px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;}
+  .msel-panel .msel-actions a{font-size:11px;color:var(--gold-dark);cursor:pointer;font-weight:600;}
+  .msel-option{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer;}
+  .msel-option:hover{background:#F1F5F9;}
+  .msel-option input{width:14px;height:14px;accent-color:var(--gold);flex-shrink:0;}
+  .msel-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .msel-empty{padding:8px;font-size:12px;color:var(--text-muted);}
+
   .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;}
   @media (max-width:1150px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
   @media (max-width:640px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
@@ -195,10 +211,26 @@
       </div>
       <div class="panel">
         <div class="filter-bar">
-          <div class="filter-field"><label>Marketplace</label><select id="launchFilterMarketplace" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Brand</label><select id="launchFilterBrand" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Month</label><select id="launchFilterMonth" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Week</label><select id="launchFilterWeek" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
+          <div class="filter-field msel" id="launchFilterMarketplace" data-tag="launch">
+            <label>Marketplace</label>
+            <div class="msel-control" onclick="toggleMultiSelect('launchFilterMarketplace')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="launchFilterBrand" data-tag="launch">
+            <label>Brand</label>
+            <div class="msel-control" onclick="toggleMultiSelect('launchFilterBrand')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="launchFilterMonth" data-tag="launch">
+            <label>Month</label>
+            <div class="msel-control" onclick="toggleMultiSelect('launchFilterMonth')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="launchFilterWeek" data-tag="launch">
+            <label>Week</label>
+            <div class="msel-control" onclick="toggleMultiSelect('launchFilterWeek')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
           <button class="btn" onclick="resetTagFilters('launch')">Reset filters</button>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks.</p>
@@ -226,10 +258,26 @@
       </div>
       <div class="panel">
         <div class="filter-bar">
-          <div class="filter-field"><label>Marketplace</label><select id="expansionFilterMarketplace" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Brand</label><select id="expansionFilterBrand" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Month</label><select id="expansionFilterMonth" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
-          <div class="filter-field"><label>Week</label><select id="expansionFilterWeek" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+          <div class="filter-field msel" id="expansionFilterMarketplace" data-tag="expansion">
+            <label>Marketplace</label>
+            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterMarketplace')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="expansionFilterBrand" data-tag="expansion">
+            <label>Brand</label>
+            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterBrand')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="expansionFilterMonth" data-tag="expansion">
+            <label>Month</label>
+            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterMonth')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
+          <div class="filter-field msel" id="expansionFilterWeek" data-tag="expansion">
+            <label>Week</label>
+            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterWeek')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
+            <div class="msel-panel"></div>
+          </div>
           <button class="btn" onclick="resetTagFilters('expansion')">Reset filters</button>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks.</p>
@@ -1192,15 +1240,93 @@ function openProductFromOverview(asin){
 document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
 /* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
-function populateFilterSelect(id, values, formatLabel){
-  const sel = document.getElementById(id);
-  if(!sel) return;
-  const current = sel.value || 'ALL';
-  sel.innerHTML = '<option value="ALL">All</option>' + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(formatLabel?formatLabel(v):v)}</option>`).join('');
-  sel.value = values.includes(current) ? current : 'ALL';
+// Multi-select filter widget: each field id maps to a Set of selected values.
+// An empty Set means "All" (no filter applied) for that field. Formatters are
+// kept per-id so the "N selected" label can still show a real name when N=1.
+const multiSelectState = {};
+const multiSelectFormatters = {};
+function getMultiSelectValues(id){
+  return Array.from(multiSelectState[id] || []);
+}
+function closeAllMultiSelects(exceptId){
+  document.querySelectorAll('.msel-panel.open').forEach(panel=>{
+    if(panel.closest('.msel').id !== exceptId) panel.classList.remove('open');
+  });
+}
+function toggleMultiSelect(id){
+  const field = document.getElementById(id);
+  const panel = field.querySelector('.msel-panel');
+  const isOpen = panel.classList.contains('open');
+  closeAllMultiSelects(id);
+  panel.classList.toggle('open', !isOpen);
+}
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.msel')) closeAllMultiSelects(null);
+});
+function updateMultiSelectLabel(id){
+  const field = document.getElementById(id);
+  const labelEl = field.querySelector('.msel-label');
+  const selected = multiSelectState[id] || new Set();
+  const formatLabel = multiSelectFormatters[id];
+  if(!selected.size) labelEl.textContent = 'All';
+  else if(selected.size === 1) labelEl.textContent = formatLabel ? formatLabel([...selected][0]) : [...selected][0];
+  else labelEl.textContent = `${selected.size} selected`;
+}
+function onMultiSelectOptionChange(id, value, checked, tag){
+  if(!multiSelectState[id]) multiSelectState[id] = new Set();
+  if(checked) multiSelectState[id].add(value); else multiSelectState[id].delete(value);
+  updateMultiSelectLabel(id);
+  loadTagDashboard(tag);
+}
+function populateMultiSelect(id, values, formatLabel){
+  const field = document.getElementById(id);
+  if(!field) return;
+  const tag = field.dataset.tag;
+  multiSelectFormatters[id] = formatLabel;
+  if(!multiSelectState[id]) multiSelectState[id] = new Set();
+  // Drop any previously-selected values that no longer exist in this data set.
+  multiSelectState[id] = new Set([...multiSelectState[id]].filter(v=>values.includes(v)));
+  const panel = field.querySelector('.msel-panel');
+  const wasOpen = panel.classList.contains('open');
+  if(!values.length){
+    panel.innerHTML = '<div class="msel-empty">No options yet</div>';
+  } else {
+    const actions = `<div class="msel-actions"><a onclick="event.stopPropagation(); selectAllMultiSelect('${id}')">Select all</a><a onclick="event.stopPropagation(); clearMultiSelect('${id}')">Clear</a></div>`;
+    const options = values.map(v=>{
+      const checked = multiSelectState[id].has(v) ? 'checked' : '';
+      const displayLabel = formatLabel ? formatLabel(v) : v;
+      return `<label class="msel-option"><input type="checkbox" value="${escapeHtml(v)}" data-id="${id}" data-tag="${tag}" ${checked} onclick="event.stopPropagation();" onchange="onMultiSelectOptionChange(this.dataset.id, this.value, this.checked, this.dataset.tag)"><span>${escapeHtml(displayLabel)}</span></label>`;
+    }).join('');
+    panel.innerHTML = actions + options;
+  }
+  panel.classList.toggle('open', wasOpen);
+  updateMultiSelectLabel(id);
+}
+function selectAllMultiSelect(id){
+  const field = document.getElementById(id);
+  const tag = field.dataset.tag;
+  const allValues = Array.from(field.querySelectorAll('.msel-option input')).map(cb=>cb.value);
+  multiSelectState[id] = new Set(allValues);
+  field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = true; });
+  updateMultiSelectLabel(id);
+  loadTagDashboard(tag);
+}
+function clearMultiSelect(id){
+  const field = document.getElementById(id);
+  const tag = field.dataset.tag;
+  multiSelectState[id] = new Set();
+  field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
+  updateMultiSelectLabel(id);
+  loadTagDashboard(tag);
 }
 function resetTagFilters(tag){
-  ['Marketplace','Brand','Month','Week'].forEach(f=>{ const el = document.getElementById(tag+'Filter'+f); if(el) el.value = 'ALL'; });
+  ['Marketplace','Brand','Month','Week'].forEach(f=>{
+    const id = tag+'Filter'+f;
+    multiSelectState[id] = new Set();
+    const field = document.getElementById(id);
+    if(field) field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
+    updateMultiSelectLabel(id);
+  });
   loadTagDashboard(tag);
 }
 async function loadTagDashboard(tag){
@@ -1210,17 +1336,15 @@ async function loadTagDashboard(tag){
   // so the dropdowns stay populated even if the current selection filters
   // everything else down to zero rows.
   const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
-  populateFilterSelect(p+'FilterMarketplace', [...new Set(allTagProducts.map(pr=>pr.marketplace).filter(Boolean))].sort());
-  populateFilterSelect(p+'FilterBrand', [...new Set(allTagProducts.map(pr=>pr.brand).filter(Boolean))].sort());
+  populateMultiSelect(p+'FilterMarketplace', [...new Set(allTagProducts.map(pr=>pr.marketplace).filter(Boolean))].sort());
+  populateMultiSelect(p+'FilterBrand', [...new Set(allTagProducts.map(pr=>pr.brand).filter(Boolean))].sort());
 
-  const mktFilter = document.getElementById(p+'FilterMarketplace').value || 'ALL';
-  const brandFilter = document.getElementById(p+'FilterBrand').value || 'ALL';
-  const monthFilter = document.getElementById(p+'FilterMonth').value || 'ALL';
-  const weekFilter = document.getElementById(p+'FilterWeek').value || 'ALL';
+  const mktFilter = getMultiSelectValues(p+'FilterMarketplace');
+  const brandFilter = getMultiSelectValues(p+'FilterBrand');
 
   const products = allTagProducts
-    .filter(pr => mktFilter==='ALL' || pr.marketplace===mktFilter)
-    .filter(pr => brandFilter==='ALL' || pr.brand===brandFilter);
+    .filter(pr => !mktFilter.length || mktFilter.includes(pr.marketplace))
+    .filter(pr => !brandFilter.length || brandFilter.includes(pr.brand));
 
   document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
   document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
@@ -1241,14 +1365,17 @@ async function loadTagDashboard(tag){
   // for the currently marketplace/brand-filtered products, so picking a
   // marketplace or brand first narrows these lists down sensibly too.
   const allCalWeeks = [...new Set([...(allSbRows||[]), ...(allSfRows||[])].map(r=>r.week).filter(Boolean))].sort();
-  populateFilterSelect(p+'FilterMonth', [...new Set(allCalWeeks.map(wk=>wk.slice(0,7)))].sort(), (v)=>{
+  populateMultiSelect(p+'FilterMonth', [...new Set(allCalWeeks.map(wk=>wk.slice(0,7)))].sort(), (v)=>{
     const d = new Date(v+'-01T00:00:00Z');
     return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   });
-  populateFilterSelect(p+'FilterWeek', allCalWeeks, (v)=>{
+  populateMultiSelect(p+'FilterWeek', allCalWeeks, (v)=>{
     const dateStr = new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     return `${getISOWeekLabel(v)} (${dateStr})`;
   });
+  // Re-read after populate, since out-of-range selections may have been dropped.
+  const monthFilterFinal = getMultiSelectValues(p+'FilterMonth');
+  const weekFilterFinal = getMultiSelectValues(p+'FilterWeek');
 
   const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
@@ -1268,12 +1395,13 @@ async function loadTagDashboard(tag){
   });
 
   // A week index passes the Month/Week filter if its real calendar date
-  // (weekDates[i]) falls in the selected month and/or matches the selected
-  // week exactly. With no filter set, everything passes.
+  // (weekDates[i]) falls in one of the selected months and/or matches one of
+  // the selected weeks exactly. With nothing selected in a field, that field
+  // imposes no restriction (multi-select empty = "All").
   function passesDateFilter(dateStr){
-    if(!dateStr) return monthFilter==='ALL' && weekFilter==='ALL';
-    if(monthFilter!=='ALL' && dateStr.slice(0,7)!==monthFilter) return false;
-    if(weekFilter!=='ALL' && dateStr!==weekFilter) return false;
+    if(!dateStr) return !monthFilterFinal.length && !weekFilterFinal.length;
+    if(monthFilterFinal.length && !monthFilterFinal.includes(dateStr.slice(0,7))) return false;
+    if(weekFilterFinal.length && !weekFilterFinal.includes(dateStr)) return false;
     return true;
   }
   function filteredSum(weeks, weekDates, key){
@@ -1407,7 +1535,7 @@ async function loadTagDashboard(tag){
   // showing an empty table.
   productData.forEach(({product, weeks, anchor, weekDates, targetRow, notesMap})=>{
     const visibleIdx = weeks.map((_,i)=>i).filter(i=>passesDateFilter(weekDates[i]));
-    if((monthFilter!=='ALL' || weekFilter!=='ALL') && !visibleIdx.length) return;
+    if((monthFilterFinal.length || weekFilterFinal.length) && !visibleIdx.length) return;
     const shownWeeks = visibleIdx.map(i=>weeks[i]);
     const shownWeekDates = visibleIdx.map(i=>weekDates[i]);
     const colLabels = visibleIdx.map(i=>{
