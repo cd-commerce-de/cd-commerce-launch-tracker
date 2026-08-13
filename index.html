@@ -193,6 +193,16 @@
         <h2>Launch Dashboard</h2>
         <div class="meta">Every launch product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Marketplace</label><select id="launchFilterMarketplace" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Brand</label><select id="launchFilterBrand" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Month</label><select id="launchFilterMonth" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Week</label><select id="launchFilterWeek" onchange="loadTagDashboard('launch')"><option value="ALL">All</option></select></div>
+          <button class="btn" onclick="resetTagFilters('launch')">Reset filters</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks.</p>
+      </div>
       <div class="panel" id="launchDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
         <div class="kpi-grid" id="launchDashKpiGrid"></div>
@@ -213,6 +223,16 @@
       <div class="page-head">
         <h2>Expansion Dashboard</h2>
         <div class="meta">Every expansion product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
+      </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Marketplace</label><select id="expansionFilterMarketplace" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Brand</label><select id="expansionFilterBrand" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Month</label><select id="expansionFilterMonth" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+          <div class="filter-field"><label>Week</label><select id="expansionFilterWeek" onchange="loadTagDashboard('expansion')"><option value="ALL">All</option></select></div>
+          <button class="btn" onclick="resetTagFilters('expansion')">Reset filters</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks.</p>
       </div>
       <div class="panel" id="expansionDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
@@ -429,7 +449,7 @@
         <h3>Products &amp; launch dates</h3>
         <div class="table-wrap" style="max-height:280px;">
           <table class="products-table" id="productsTable">
-            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Marketplace</th><th>Launch Date</th><th>Product Line Code</th><th>Product Line</th><th>Stage</th><th>Sell Through</th><th>Sell Through Rate %</th><th></th></tr></thead>
+            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Brand</th><th>Marketplace</th><th>Launch Date</th><th>Product Line Code</th><th>Product Line</th><th>Stage</th><th>Sell Through</th><th>Sell Through Rate %</th><th></th></tr></thead>
             <tbody id="productsBody"></tbody>
           </table>
         </div>
@@ -871,6 +891,7 @@ async function renderProductsTable(){
       <td><input value="${p.name||''}" onchange="updateProduct('${p.asin}','name',this.value)"></td>
       <td><input value="${p.asin||''}" disabled title="Delete and re-add to change the ASIN"></td>
       <td><input value="${p.tag||''}" onchange="updateProduct('${p.asin}','tag',this.value)"></td>
+      <td><input value="${p.brand||''}" onchange="updateProduct('${p.asin}','brand',this.value)" style="width:100px;" placeholder="e.g. Heimfleiss"></td>
       <td><input value="${p.marketplace||''}" onchange="updateProduct('${p.asin}','marketplace',this.value)"></td>
       <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)"></td>
       <td><input value="${p.product_line_code||''}" onchange="updateProduct('${p.asin}','product_line_code',this.value)" style="width:90px;"></td>
@@ -895,7 +916,7 @@ async function uploadProductImage(asin, file){
 }
 async function addProductRow(){
   const asin = 'NEW-' + Date.now();
-  await sb.from('products').insert({ name:'New Product', asin, tag:'launch', marketplace:'', launch:null });
+  await sb.from('products').insert({ name:'New Product', asin, tag:'launch', brand:'', marketplace:'', launch:null });
   await renderProductsTable(); await refreshAllViews();
 }
 async function updateProduct(asin, field, val){
@@ -1171,9 +1192,35 @@ function openProductFromOverview(asin){
 document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
 /* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
+function populateFilterSelect(id, values, formatLabel){
+  const sel = document.getElementById(id);
+  if(!sel) return;
+  const current = sel.value || 'ALL';
+  sel.innerHTML = '<option value="ALL">All</option>' + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(formatLabel?formatLabel(v):v)}</option>`).join('');
+  sel.value = values.includes(current) ? current : 'ALL';
+}
+function resetTagFilters(tag){
+  ['Marketplace','Brand','Month','Week'].forEach(f=>{ const el = document.getElementById(tag+'Filter'+f); if(el) el.value = 'ALL'; });
+  loadTagDashboard(tag);
+}
 async function loadTagDashboard(tag){
   const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
-  const products = (await fetchProducts()).filter(pr => pr.tag === tag);
+
+  // Marketplace and Brand options come from the full tag-scoped product list,
+  // so the dropdowns stay populated even if the current selection filters
+  // everything else down to zero rows.
+  const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
+  populateFilterSelect(p+'FilterMarketplace', [...new Set(allTagProducts.map(pr=>pr.marketplace).filter(Boolean))].sort());
+  populateFilterSelect(p+'FilterBrand', [...new Set(allTagProducts.map(pr=>pr.brand).filter(Boolean))].sort());
+
+  const mktFilter = document.getElementById(p+'FilterMarketplace').value || 'ALL';
+  const brandFilter = document.getElementById(p+'FilterBrand').value || 'ALL';
+  const monthFilter = document.getElementById(p+'FilterMonth').value || 'ALL';
+  const weekFilter = document.getElementById(p+'FilterWeek').value || 'ALL';
+
+  const products = allTagProducts
+    .filter(pr => mktFilter==='ALL' || pr.marketplace===mktFilter)
+    .filter(pr => brandFilter==='ALL' || pr.brand===brandFilter);
 
   document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
   document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
@@ -1190,6 +1237,19 @@ async function loadTagDashboard(tag){
     sb.from('week_notes').select('*').in('asin', asins),
   ]);
 
+  // Month/Week options are derived from the calendar weeks actually present
+  // for the currently marketplace/brand-filtered products, so picking a
+  // marketplace or brand first narrows these lists down sensibly too.
+  const allCalWeeks = [...new Set([...(allSbRows||[]), ...(allSfRows||[])].map(r=>r.week).filter(Boolean))].sort();
+  populateFilterSelect(p+'FilterMonth', [...new Set(allCalWeeks.map(wk=>wk.slice(0,7)))].sort(), (v)=>{
+    const d = new Date(v+'-01T00:00:00Z');
+    return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  });
+  populateFilterSelect(p+'FilterWeek', allCalWeeks, (v)=>{
+    const dateStr = new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    return `${getISOWeekLabel(v)} (${dateStr})`;
+  });
+
   const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
   (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
@@ -1198,12 +1258,31 @@ async function loadTagDashboard(tag){
 
   const productData = products.map(product => {
     const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
-    return { product, weeks, anchor, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
+    const weekDates = weeks.map((_,i)=>{
+      if(!anchor) return null;
+      const d = new Date(anchor);
+      d.setDate(d.getDate() + i*7);
+      return d.toISOString().slice(0,10);
+    });
+    return { product, weeks, anchor, weekDates, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
-  const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
-  const totalUnits = productData.reduce((a,pd)=>a+sum(pd.weeks,'units'),0);
-  const totalNetProfit = productData.reduce((a,pd)=>a+sum(pd.weeks,'netProfit'),0);
+  // A week index passes the Month/Week filter if its real calendar date
+  // (weekDates[i]) falls in the selected month and/or matches the selected
+  // week exactly. With no filter set, everything passes.
+  function passesDateFilter(dateStr){
+    if(!dateStr) return monthFilter==='ALL' && weekFilter==='ALL';
+    if(monthFilter!=='ALL' && dateStr.slice(0,7)!==monthFilter) return false;
+    if(weekFilter!=='ALL' && dateStr!==weekFilter) return false;
+    return true;
+  }
+  function filteredSum(weeks, weekDates, key){
+    return weeks.reduce((a,w,i)=> passesDateFilter(weekDates[i]) ? a+(+w[key]||0) : a, 0);
+  }
+
+  const totalSales = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
+  const totalUnits = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
+  const totalNetProfit = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
   const avgMargin = totalSales? totalNetProfit/totalSales : 0;
   document.getElementById(p+'DashKpiGrid').innerHTML = [
     {label:'Total Sales', value:fmtMoney(totalSales)},
@@ -1239,7 +1318,7 @@ async function loadTagDashboard(tag){
     if(!includedByWeek[calWeek]) includedByWeek[calWeek] = new Set();
     if(!excludedByWeek[calWeek]) excludedByWeek[calWeek] = new Set();
     const product = products.find(pr=>pr.asin===asin);
-    const label = (product && shortenName(product.name)) || asin;
+    const label = productDisplayName(product) || asin;
     if(wk>=1 && wk<=12){
       includedByWeek[calWeek].add(`${label} (Wk ${wk})`);
       return true;
@@ -1262,7 +1341,9 @@ async function loadTagDashboard(tag){
     if(!calBuckets[r.week]) calBuckets[r.week] = { sales:0, units:0, netProfit:0, adSpend:0, sessions:0, refunds:0 };
     if(!calBuckets[r.week].sessions && r.sessions) calBuckets[r.week].sessions += +r.sessions||0;
   });
-  const sortedCalWeeks = Object.keys(calBuckets).sort();
+  // Month/Week filters narrow down which calendar-week columns are shown —
+  // applied after 12-week eligibility, so both rules stack correctly.
+  const sortedCalWeeks = Object.keys(calBuckets).sort().filter(passesDateFilter);
   const weekTotals = sortedCalWeeks.map(wk=>{
     const b = calBuckets[wk];
     return { ...b, margin: b.sales? b.netProfit/b.sales : 0, tacos: b.sales? b.adSpend/b.sales : 0, refundPct: b.units? b.refunds/b.units : 0 };
@@ -1294,6 +1375,9 @@ async function loadTagDashboard(tag){
   let ohtml = '<thead><tr><th>Metric</th>';
   colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
   ohtml += '<th>Total/Avg</th></tr></thead><tbody>';
+  if(!sortedCalWeeks.length){
+    ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks match the current filters.</td></tr>`;
+  }
   overallMetrics.forEach(m=>{
     const vals = weekTotals.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
@@ -1317,21 +1401,20 @@ async function loadTagDashboard(tag){
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
-  // Per-product full scorecards
-  productData.forEach(({product, weeks, anchor, targetRow, notesMap})=>{
-    const colLabels = weeks.map((_,i)=>{
+  // Per-product full scorecards — each product's own columns are also
+  // narrowed to whichever of its weeks fall inside the selected Month/Week,
+  // and a product with zero matching weeks is skipped entirely rather than
+  // showing an empty table.
+  productData.forEach(({product, weeks, anchor, weekDates, targetRow, notesMap})=>{
+    const visibleIdx = weeks.map((_,i)=>i).filter(i=>passesDateFilter(weekDates[i]));
+    if((monthFilter!=='ALL' || weekFilter!=='ALL') && !visibleIdx.length) return;
+    const shownWeeks = visibleIdx.map(i=>weeks[i]);
+    const shownWeekDates = visibleIdx.map(i=>weekDates[i]);
+    const colLabels = visibleIdx.map(i=>{
       const wkLabel = 'Wk '+(i+1);
       if(!anchor) return wkLabel;
-      const d = new Date(anchor);
-      d.setDate(d.getDate() + i*7);
-      const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      const dateStr = new Date(weekDates[i]).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
-    });
-    const weekDates = weeks.map((_,i)=>{
-      if(!anchor) return null;
-      const d = new Date(anchor);
-      d.setDate(d.getDate() + i*7);
-      return d.toISOString().slice(0,10);
     });
     let ageDays = null, ageWeeks = null, ageLabel = '';
     if(anchor){
@@ -1343,6 +1426,7 @@ async function loadTagDashboard(tag){
     const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
     const metaFields = [
       {label:'Marketplace', value: product.marketplace || '–'},
+      {label:'Brand', value: product.brand || '–'},
       {label:'Product Line Code', value: product.product_line_code || '–'},
       {label:'Product Line', value: product.product_line || '–'},
       {label:'Parent ASIN', value: product.asin},
@@ -1369,10 +1453,11 @@ async function loadTagDashboard(tag){
       </div>
       <div class="table-wrap"><table></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap);
+    panel.querySelector('table').innerHTML = buildScorecardTable(shownWeeks, targetRow, colLabels, product.asin, shownWeekDates, notesMap);
     blocksContainer.appendChild(panel);
   });
 }
+
 
 /* ---------------- Dashboard (Product Detail) ---------------- */
 let charts = {};
