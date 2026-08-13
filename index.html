@@ -333,7 +333,7 @@
       <div id="tseBody" style="display:none;">
         <div class="panel">
           <div class="table-wrap"><table id="tseTable"></table></div>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Avg. CPC and Number of clicks need a Sellerfox upload for that week to show a value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split. Rows with no matching target show "–" in the Target column; only Units, Total Revenue, Margin, and Total Profit currently have targets set.</p>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Every week shows Target and Actual side by side. Targets are your existing Good/Better/Best thresholds — since those are a flat target rather than a week-by-week forecast, the same numbers repeat every week. Only Units, Total Revenue, Margin, and Total Profit currently have targets set; other rows show "–" under Target. Avg. CPC and Number of clicks need a Sellerfox upload for that week to show an Actual value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split.</p>
         </div>
       </div>
     </div>
@@ -1314,6 +1314,7 @@ function avg(arr, key){ return arr.reduce((a,w)=>a+w[key],0)/arr.length; }
 function minBSR(arr){ const v = arr.map(w=>w.bsr).filter(x=>x!==null&&x>0); return v.length?Math.min(...v):null; }
 
 const TIER_COLORS = { best:'#D4AF37', better:'#10B981', good:'#F59E0B', below:'#EF4444' };
+const TIER_ABBREV = { good:'G', better:'Bt', best:'Bs' };
 const TIER_LABELS = { best:'Best', better:'Better', good:'Good', below:'Below Good' };
 
 function computeTier(actual, thresholds, lowerIsBetter){
@@ -1346,7 +1347,7 @@ function targetLine(actual, thresholds, fmt, lowerIsBetter=false){
   if(!thresholds) return '';
   const tier = computeTier(actual, thresholds, lowerIsBetter);
   if(!tier) return '';
-  const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${k[0].toUpperCase()}${k.slice(1,2)}:${fmt(thresholds[k])}`);
+  const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${fmt(thresholds[k])}`);
   return `<div class="desc" style="margin-top:4px;">
     <span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;color:#fff;background:${TIER_COLORS[tier]};">${TIER_LABELS[tier]}</span>
     <span style="color:var(--text-muted);"> · ${parts.join(' · ')}</span>
@@ -1538,7 +1539,19 @@ const METRICS = [
 
 // Matches the Annahmen & Prognosen template's own row order, in English.
 const TSE_METRIC_KEYS = ['avgSalesPrice','units','cpc','cvr','organicPct','sales','organicRevenue','advertisedRevenue','adSpend','realAcos','tacos','cpo','clicks','profitPerOrder','margin','roi','netProfit'];
-const TSE_METRIC_LIST = TSE_METRIC_KEYS.map(k => METRICS.find(m=>m.key===k)).filter(Boolean);
+// The shared METRICS array uses this app's own naming elsewhere (e.g. "Total
+// Sales", "Units Sold") — these overrides match the template's own wording
+// for just this one table, via shallow copies that don't touch METRICS itself.
+const TSE_LABEL_OVERRIDES = {
+  avgSalesPrice: 'Sales price', units: 'Sales (units)', cpc: 'Avg. CPC (€)', cvr: 'Avg. CR (%)',
+  sales: 'Total Revenue (€)', adSpend: 'Advertising Expenses (€)', realAcos: 'ACOS (%)',
+  cpo: 'Cost Per Order (€)', clicks: 'Number of Clicks', netProfit: 'Total Profit (€)',
+};
+const TSE_METRIC_LIST = TSE_METRIC_KEYS.map(k => {
+  const m = METRICS.find(x=>x.key===k);
+  if(!m) return null;
+  return TSE_LABEL_OVERRIDES[k] ? {...m, label: TSE_LABEL_OVERRIDES[k]} : m;
+}).filter(Boolean);
 
 // Colors each cell relative to OTHER WEEKS IN THAT SAME ROW only (white = lowest
 // value that row saw across its 12 weeks, ember = highest) — it's a within-row
@@ -1588,7 +1601,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
 
     let targetCell = '–';
     if(thresholds){
-      const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${k[0].toUpperCase()}:${m.fmt(thresholds[k])}`);
+      const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${m.fmt(thresholds[k])}`);
       targetCell = `<span style="font-size:10.5px;">${parts.join(' · ')}</span>`;
     }
     html += `<td style="background:#F1F5F9;">${targetCell}</td></tr>`;
@@ -1804,7 +1817,43 @@ async function loadTseForecast(){
     return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
 
-  document.getElementById('tseTable').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, null, null, null, TSE_METRIC_LIST);
+  document.getElementById('tseTable').innerHTML = buildActualVsTargetTable(weeks, targetRow, colLabels);
+}
+// Your targets are flat Good/Better/Best thresholds (not a week-by-week
+// forecast curve), so the same threshold string repeats every week — but it
+// sits right next to that week's Actual, matching the template's side-by-side
+// layout, rather than only appearing once at the end of the row.
+function formatTargetTiers(m, targetRow){
+  if(!m.tierKeys || !targetRow) return '–';
+  const thresholds = getThresholds(targetRow, m.tierKeys, m.targetIsPct);
+  if(!thresholds) return '–';
+  const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${m.fmt(thresholds[k])}`);
+  return parts.length ? parts.join(' · ') : '–';
+}
+function buildActualVsTargetTable(weeks, targetRow, colLabels){
+  let html = '<thead><tr><th>Metric</th>';
+  colLabels.forEach(l => html += `<th colspan="2">${l}</th>`);
+  html += '<th>12-Wk Total/Avg</th></tr><tr><th></th>';
+  colLabels.forEach(()=> html += `<th style="font-size:9.5px;">Target</th><th style="font-size:9.5px;">Actual</th>`);
+  html += '<th></th></tr></thead><tbody>';
+
+  TSE_METRIC_LIST.forEach(m=>{
+    const vals = weeks.map(w=>w[m.key]);
+    const targetStr = formatTargetTiers(m, targetRow);
+    let total;
+    if(m.kind==='sum') total = sum(weeks, m.key);
+    else if(m.kind==='min') total = minBSR(weeks);
+    else total = avg(weeks, m.key);
+
+    html += `<tr><td>${m.label}</td>`;
+    vals.forEach((v,i)=>{
+      html += `<td style="background:#F8FAFC;font-size:10px;white-space:normal;">${targetStr}</td>`;
+      html += `<td>${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
+    });
+    html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td></tr>`;
+  });
+  html += '</tbody>';
+  return html;
 }
 
 (async function init(){
