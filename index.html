@@ -478,8 +478,16 @@ function shortenName(name){
   }
   return s;
 }
-function nameWithAsin(name, asin){
-  return `<div>${shortenName(name)}</div><div style="font-size:10px;font-weight:400;color:var(--text-muted);margin-top:2px;">${asin||''}</div>`;
+// Standardized display name: ASIN - Product Line Code - Product Line.
+// Falls back gracefully to the raw listing name if those two fields haven't
+// been filled in yet for a product, so it's never just a bare ASIN.
+function productDisplayName(product){
+  if(!product) return '';
+  const segments = [product.asin];
+  if(product.product_line_code) segments.push(product.product_line_code);
+  if(product.product_line) segments.push(product.product_line);
+  if(segments.length === 1) segments.push(shortenName(product.name) || '');
+  return segments.join(' - ');
 }
 function sortArrow(key, sortState){
   if(sortState.key !== key) return '<span style="opacity:.25;">↕</span>';
@@ -909,7 +917,7 @@ async function populateSelectors(){
   const tseCurrent = tseSel.value;
   tseSel.innerHTML = '';
   products.forEach(p=>{
-    const label = shortenName(p.name) + (p.asin?' ('+p.asin+')':'');
+    const label = productDisplayName(p);
     const o = document.createElement('option'); o.value = p.asin; o.textContent = label;
     sel.appendChild(o);
     const o2 = document.createElement('option'); o2.value = p.asin; o2.textContent = label;
@@ -1083,7 +1091,7 @@ async function loadOverview(){
   renderOverviewTable();
 }
 function renderOverviewTable(){
-  const rows = sortRows(overviewRowsData, overviewSort.key, overviewSort.dir, r=>r.product.name||'');
+  const rows = sortRows(overviewRowsData, overviewSort.key, overviewSort.dir, r=>productDisplayName(r.product));
 
   document.getElementById('overviewEmpty').style.display = rows.length ? 'none' : 'block';
   document.getElementById('overviewPanel').style.display = rows.length ? 'block' : 'none';
@@ -1100,7 +1108,7 @@ function renderOverviewTable(){
 
   rows.forEach(r=>{
     html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${nameWithAsin(r.product.name, r.product.asin)}</td>
+      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${escapeHtml(productDisplayName(r.product))}</td>
       <td>${fmtMoney(r.totalSales)}</td>
       <td>${fmtMoney(r.netProfit)}</td>
       <td>${fmtPct(r.avgMargin)}</td>
@@ -1223,7 +1231,7 @@ async function loadTagDashboard(tag){
     ohtml += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
       const bg = heatColor(v,min,max);
-      ohtml += `<td style="background:${bg};max-width:80px;">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
+      ohtml += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
     const grandSales = weekTotals.reduce((a,w)=>a+w.sales,0);
     const grandUnits = weekTotals.reduce((a,w)=>a+w.units,0);
@@ -1280,7 +1288,7 @@ async function loadTagDashboard(tag){
     panel.innerHTML = `
       <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
         <div>
-          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${product.name||''}</h3>
+          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}</h3>
           <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
           <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">Date Launched: <strong>${dateLaunchedStr}</strong></div>
         </div>
@@ -1317,7 +1325,7 @@ async function loadDashboard(){
   document.getElementById('emptyState').style.display = hasAnyData ? 'none' : 'block';
   document.getElementById('dashboardBody').style.display = hasAnyData ? 'block' : 'none';
   document.getElementById('pulseMeta').innerHTML = product
-    ? `${thumb(product.image_url, 44)}<strong>${shortenName(product.name)}</strong> · Parent ASIN: <strong>${product.asin}</strong>`
+    ? `${thumb(product.image_url, 44)}<strong>${escapeHtml(productDisplayName(product))}</strong>`
     : 'Select a product to see its 12-week scorecard';
   if(!hasAnyData){ destroyCharts(); return; }
 
@@ -1623,7 +1631,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
       const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
-      html += `<td style="background:${bg};max-width:80px;">${v===null?'–':m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</td>`;
+      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v===null?'–':m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
@@ -1925,7 +1933,7 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
       const tier = thresholds ? computeTier(v, thresholds, m.lowerIsBetter) : null;
       const cellStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
       html += `<td style="background:#F8FAFC;font-size:10px;">${goodStr}</td>`;
-      html += `<td style="${cellStyle}max-width:80px;">${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
+      html += `<td style="${cellStyle}"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
     html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td></tr>`;
   });
