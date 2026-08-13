@@ -1216,9 +1216,40 @@ async function loadTagDashboard(tag){
   // Relative-week bucketing would sum "Week 1" across products that actually
   // launched months apart, conflating unrelated points in time. This uses the
   // raw dated rows so each column is a genuine, simultaneous portfolio total.
+  //
+  // Each product only contributes to a given calendar week while it's still
+  // inside its OWN first 12 weeks (its F3M / "first three months" window,
+  // anchored on its own launch date). Once a product is past its Week 12,
+  // its rows for later calendar weeks are excluded from the portfolio sum —
+  // otherwise a long-running product would keep inflating totals for weeks
+  // that are no longer part of its launch window.
+  const anchorByAsin = {};
+  productData.forEach(pd=>{ anchorByAsin[pd.product.asin] = pd.anchor; });
+
   const calBuckets = {};
+  const includedByWeek = {}, excludedByWeek = {}; // for the hover note per column
+  function relativeWeekOf(asin, rowWeek){
+    const anchor = anchorByAsin[asin];
+    if(!anchor) return null; // no anchor known — can't judge eligibility
+    return weekNumber(anchor, rowWeek); // 1-12 = within window, else outside
+  }
+  function trackEligibility(asin, rowWeek, calWeek){
+    const wk = relativeWeekOf(asin, rowWeek);
+    if(wk===null) return true; // no anchor: fall back to including it (previous behavior)
+    if(!includedByWeek[calWeek]) includedByWeek[calWeek] = new Set();
+    if(!excludedByWeek[calWeek]) excludedByWeek[calWeek] = new Set();
+    const product = products.find(pr=>pr.asin===asin);
+    const label = (product && shortenName(product.name)) || asin;
+    if(wk>=1 && wk<=12){
+      includedByWeek[calWeek].add(`${label} (Wk ${wk})`);
+      return true;
+    }
+    excludedByWeek[calWeek].add(`${label} (${wk<1?'not launched yet':'past 12-wk window, Wk '+wk})`);
+    return false;
+  }
   (allSbRows||[]).forEach(r=>{
     if(!asins.includes(r.asin)) return;
+    if(!trackEligibility(r.asin, r.week, r.week)) return;
     if(!calBuckets[r.week]) calBuckets[r.week] = { sales:0, units:0, netProfit:0, adSpend:0, sessions:0, refunds:0 };
     const b = calBuckets[r.week];
     b.sales += +r.sales||0; b.units += +r.units||0; b.netProfit += +r.net_profit||0;
@@ -1226,6 +1257,8 @@ async function loadTagDashboard(tag){
   });
   (allSfRows||[]).forEach(r=>{
     if(!asins.includes(r.asin)) return;
+    const wk = relativeWeekOf(r.asin, r.week);
+    if(wk!==null && (wk<1||wk>12)) return; // outside the product's 12-wk window — excluded (already tracked above via sellerboard rows for this asin/week when present)
     if(!calBuckets[r.week]) calBuckets[r.week] = { sales:0, units:0, netProfit:0, adSpend:0, sessions:0, refunds:0 };
     if(!calBuckets[r.week].sessions && r.sessions) calBuckets[r.week].sessions += +r.sessions||0;
   });
@@ -1236,7 +1269,17 @@ async function loadTagDashboard(tag){
   });
   const colLabelsOverall = sortedCalWeeks.map(wk => {
     const dateStr = new Date(wk).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    return `${getISOWeekLabel(wk)}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+    const included = Array.from(includedByWeek[wk]||[]).sort();
+    const excluded = Array.from(excludedByWeek[wk]||[]).sort();
+    let noteHtml = '';
+    if(included.length || excluded.length){
+      const parts = [];
+      if(included.length) parts.push(`<div><strong>Counted in total:</strong><br>${included.map(escapeHtml).join('<br>')}</div>`);
+      if(excluded.length) parts.push(`<div style="margin-top:6px;"><strong>Excluded:</strong><br>${excluded.map(escapeHtml).join('<br>')}</div>`);
+      noteHtml = `<div class="note-hover-tooltip" style="text-align:left;">${parts.join('')}</div>`;
+    }
+    const underline = excluded.length ? 'border-bottom:1px dotted var(--text-muted);' : '';
+    return `<div class="note-cell" style="position:relative;display:inline-block;cursor:${noteHtml?'help':'default'};"><span style="${underline}">${getISOWeekLabel(wk)}</span><div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>${noteHtml}</div>`;
   });
   const overallMetrics = [
     {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, lowerIsBetter:false},
