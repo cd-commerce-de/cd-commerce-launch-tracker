@@ -458,9 +458,9 @@
 const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 const EDGE_BASE = window.SUPABASE_URL + '/functions/v1';
 
-function fmtMoney(n){ return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
-function fmtInt(n){ return Math.round(n).toLocaleString('en-US'); }
-function fmtPct(n){ return (n*100).toFixed(1)+'%'; }
+function fmtMoney(n){ if(n==null||isNaN(n)) return '–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtInt(n){ if(n==null||isNaN(n)) return '–'; return Math.round(n).toLocaleString('en-US'); }
+function fmtPct(n){ if(n==null||isNaN(n)) return '–'; return (n*100).toFixed(1)+'%'; }
 function fmtRank(n){ return n?fmtInt(n):'–'; }
 
 function thumb(imageUrl, size=28){
@@ -605,7 +605,7 @@ async function uploadFile(functionName, file, statusId, buttonId){
     setStatus(statusId, 'ok', `${count} rows loaded${extra}${skipped}`);
     if(buttonId) document.getElementById(buttonId).style.display = 'none';
     marketplacesCache = null;
-    await populateSelectors(); await loadDashboard(); await loadOverview();
+    await refreshAllViews();
   }catch(e){ setStatus(statusId, 'err', 'Could not reach Supabase Edge Function'); }
 }
 function extractWeekFromFilename(name){
@@ -709,7 +709,7 @@ async function confirmUploadSB(){
     setStatus('statusSB', 'err', `${successCount} of ${sbSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
   }
   marketplacesCache = null;
-  await populateSelectors(); await loadDashboard(); await loadOverview();
+  await refreshAllViews();
 }
 
 function stageFile(fileInputId, statusId, buttonId){
@@ -805,7 +805,7 @@ async function confirmUploadSF(){
     setStatus('statusSF', 'err', `${successCount} of ${sfSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
   }
   marketplacesCache = null;
-  await populateSelectors(); await loadDashboard(); await loadOverview();
+  await refreshAllViews();
 }
 document.getElementById('filePR').addEventListener('change', ()=> stageFile('filePR','statusPR','btnUploadPR'));
 document.getElementById('fileTG').addEventListener('change', ()=> stageFile('fileTG','statusTG','btnUploadTG'));
@@ -832,7 +832,7 @@ document.getElementById('fileBackup').addEventListener('change', async e=>{
     if(json.sellerboard?.length) await sb.from('sellerboard_rows').upsert(json.sellerboard, { onConflict: 'asin,week' });
     if(json.sellerfox?.length) await sb.from('sellerfox_rows').upsert(json.sellerfox, { onConflict: 'asin,week' });
     if(json.targets?.length) await sb.from('targets').upsert(json.targets, { onConflict: 'asin' });
-    alert('Backup restored.'); await populateSelectors(); await loadDashboard(); await loadOverview();
+    alert('Backup restored.'); await refreshAllViews();
   }catch(err){ alert('Invalid backup file: ' + err.message); }
 });
 
@@ -843,7 +843,7 @@ async function clearAllData(){
   await sb.from('targets').delete().neq('asin', '');
   await sb.from('products').delete().neq('asin', '');
   marketplacesCache = null;
-  await populateSelectors(); await loadDashboard(); await loadOverview();
+  await refreshAllViews();
 }
 
 /* ---------------- Products (read/write directly via Supabase, RLS allows it) ---------------- */
@@ -891,23 +891,35 @@ async function uploadProductImage(asin, file){
   if(error){ alert('Image upload failed: ' + error.message); return; }
   const { data } = sb.storage.from('product-images').getPublicUrl(path);
   await sb.from('products').update({ image_url: data.publicUrl + '?t=' + Date.now() }).eq('asin', asin);
-  await renderProductsTable(); await populateSelectors(); await loadOverview();
+  await renderProductsTable(); await refreshAllViews();
 }
 async function addProductRow(){
   const asin = 'NEW-' + Date.now();
   await sb.from('products').insert({ name:'New Product', asin, tag:'launch', marketplace:'', launch:null });
-  await renderProductsTable(); await populateSelectors(); await loadOverview();
+  await renderProductsTable(); await refreshAllViews();
 }
 async function updateProduct(asin, field, val){
   await sb.from('products').update({ [field]: (val==null || val==='') ? null : val }).eq('asin', asin);
   if(field === 'marketplace') marketplacesCache = null;
-  await populateSelectors(); await loadDashboard(); await loadOverview();
+  await refreshAllViews();
 }
 async function removeProduct(asin){
   await sb.from('products').delete().eq('asin', asin);
-  await renderProductsTable(); await populateSelectors(); await loadDashboard(); await loadOverview();
+  await renderProductsTable(); await refreshAllViews();
 }
 
+// Refreshes every view's own cached data after any product change (add,
+// edit, delete, upload, restore, clear). Without this, a view you're not
+// currently looking at can keep showing a deleted product's tables/charts
+// until you happen to switch away and back.
+async function refreshAllViews(){
+  await populateSelectors();
+  await loadDashboard();
+  await loadOverview();
+  await loadTagDashboard('launch');
+  await loadTagDashboard('expansion');
+  await loadTseForecast();
+}
 async function populateSelectors(){
   const products = await fetchProducts();
   const sel = document.getElementById('productSelect');
@@ -958,6 +970,7 @@ function weekNumber(launchDate, rowDate){
 
 function computeWeeksFromRows(product, sbRows, sfRows){
   const emptyWeeks = () => Array.from({ length: 12 }, () => ({
+    hasData:false,
     sales:0, units:0, refunds:0, refundPctSum:0, refundPctN:0,
     adSpend:0, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0,
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
@@ -978,6 +991,7 @@ function computeWeeksFromRows(product, sbRows, sfRows){
     const wk = weekNumber(anchor, r.week);
     if(wk<1||wk>12) return;
     const w = weeks[wk-1];
+    w.hasData = true;
     w.sales+=+r.sales||0; w.units+=+r.units||0; w.refunds+=+r.refunds||0;
     w.adSpend+=Math.abs(+r.ad_spend||0); w.amazonFees+=Math.abs(+r.amazon_fees||0); w.cogs+=Math.abs(+r.cogs||0);
     w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0; w.netProfit+=+r.net_profit||0;
@@ -997,6 +1011,7 @@ function computeWeeksFromRows(product, sbRows, sfRows){
     const wk = weekNumber(anchor, r.week);
     if(wk<1||wk>12) return;
     const w = weeks[wk-1];
+    w.hasData = true;
     w.impressions+=+r.impressions||0; w.clicks+=+r.clicks||0; w.adsOrders+=+r.orders||0;
     if(!w.sessions && r.sessions) w.sessions+=+r.sessions;
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
@@ -1014,6 +1029,17 @@ async function computeWeeks(product, marketplaceFilter){
   return computeWeeksFromRows(product, sbRows, sfRows);
 }
 function finalizeWeek(w){
+  if(!w.hasData){
+    return {
+      sales:null, units:null, refunds:null, refundPct:null,
+      adSpend:null, amazonFees:null, cogs:null, vat:null, shipping:null,
+      grossProfit:null, netProfit:null, margin:null, roi:null, realAcos:null,
+      tacos:null, cpo:null, profitPerOrder:null, bsr:null, sessions:null,
+      cvr:null, avgSalesPrice:null, impressions:null, clicks:null, adsOrders:null,
+      ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
+      hasData:false,
+    };
+  }
   // Approximation only — assumes 1 ad order ≈ 1 unit, and that Sellerboard's
   // Units and Sellerfox's Ad Orders line up cleanly for the same week. Null
   // (not 0) when Sellerfox wasn't uploaded, so it's visibly "unknown" not "0%".
@@ -1038,6 +1064,7 @@ function finalizeWeek(w){
     organicPct,
     organicRevenue: organicPct!=null ? w.sales*organicPct : null,
     advertisedRevenue: organicPct!=null ? w.sales*(1-organicPct) : null,
+    hasData:true,
   };
 }
 
@@ -1354,7 +1381,10 @@ async function loadDashboard(){
 }
 
 function sum(arr, key){ return arr.reduce((a,w)=>a+w[key],0); }
-function avg(arr, key){ return arr.reduce((a,w)=>a+w[key],0)/arr.length; }
+function avg(arr, key){
+  const vals = arr.map(w=>w[key]).filter(v=>v!=null && !isNaN(v));
+  return vals.length ? vals.reduce((a,v)=>a+v,0)/vals.length : null;
+}
 function minBSR(arr){ const v = arr.map(w=>w.bsr).filter(x=>x!==null&&x>0); return v.length?Math.min(...v):null; }
 
 const TIER_COLORS = { best:'#D4AF37', better:'#10B981', good:'#F59E0B', below:'#EF4444' };
@@ -1433,6 +1463,14 @@ function chartOpts(stacked=false, dualAxis=false){
 
 function renderCharts(weeks, labels){
   destroyCharts();
+  // Charts should only plot real weeks — trailing weeks with no data yet would
+  // otherwise draw a misleading drop to zero, making it look like a decline.
+  let lastDataIndex = -1;
+  weeks.forEach((w,i)=>{ if(w.hasData) lastDataIndex = i; });
+  if(lastDataIndex >= 0){
+    weeks = weeks.slice(0, lastDataIndex+1);
+    labels = labels.slice(0, lastDataIndex+1);
+  }
   const gold='#D97757', olive='#F59E0B', green='#10B981', red='#EF4444', slate='#94A3B8', dark='#0F172A';
 
   charts.revenue = new Chart(document.getElementById('chartRevenue'), {
@@ -1630,7 +1668,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const min = Math.min(...numericVals), max = Math.max(...numericVals);
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
-      const bg = (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
+      const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v===null?'–':m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
