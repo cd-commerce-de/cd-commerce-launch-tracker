@@ -1693,9 +1693,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     weekDates.forEach(wd=>{
       if(!wd){ html += `<td style="background:#fff;">–</td>`; return; }
       const existing = (notesMap && notesMap[wd]) ? notesMap[wd] : '';
-      const preview = existing ? (existing.length>90 ? existing.slice(0,90)+'…' : existing) : 'Add note…';
-      html += `<td style="background:#fff;cursor:pointer;white-space:normal;vertical-align:top;min-width:150px;max-width:220px;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
-        <span style="font-size:12.5px;line-height:1.5;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</span>
+      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
+      html += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
+        <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
         ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
       </td>`;
     });
@@ -1736,9 +1736,20 @@ async function saveNoteModal(){
   btn.disabled = false;
   const trimmed = text.trim();
   noteModalCell.dataset.note = trimmed;
-  const span = noteModalCell.querySelector('span');
-  span.textContent = trimmed ? (trimmed.length>26 ? trimmed.slice(0,26)+'…' : trimmed) : 'Add note…';
-  span.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
+  const preview = noteModalCell.querySelector('div');
+  preview.textContent = trimmed ? (trimmed.length>13 ? trimmed.slice(0,13)+'…' : trimmed) : '+ Note';
+  preview.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
+  let tooltip = noteModalCell.querySelector('.note-hover-tooltip');
+  if(trimmed){
+    if(!tooltip){
+      tooltip = document.createElement('div');
+      tooltip.className = 'note-hover-tooltip';
+      noteModalCell.appendChild(tooltip);
+    }
+    tooltip.textContent = trimmed;
+  } else if(tooltip){
+    tooltip.remove();
+  }
   closeNoteModal();
 }
 function renderTable(weeks, targets, anchor, asin, notesMap){
