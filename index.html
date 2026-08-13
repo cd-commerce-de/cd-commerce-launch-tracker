@@ -333,7 +333,7 @@
       <div id="tseBody" style="display:none;">
         <div class="panel">
           <div class="table-wrap"><table id="tseTable"></table></div>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Every week shows Target and Actual side by side. Targets are your existing Good/Better/Best thresholds — since those are a flat target rather than a week-by-week forecast, the same numbers repeat every week. Only Units, Total Revenue, Margin, and Total Profit currently have targets set; other rows show "–" under Target. Avg. CPC and Number of clicks need a Sellerfox upload for that week to show an Actual value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split.</p>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Target shows your Good threshold; since that's a flat target rather than a week-by-week forecast, the same number repeats every week. Each week's Actual cell is colored by which tier that week hit: <span style="color:#EF4444;font-weight:700;">red</span> below Good, <span style="color:#F59E0B;font-weight:700;">yellow</span> Good to Better, <span style="color:#10B981;font-weight:700;">green</span> Better to Best, <span style="color:#D4AF37;font-weight:700;">gold</span> above Best. Only Units, Total Revenue, Margin, and Total Profit currently have targets set; other rows show "–" and stay uncolored. Avg. CPC and Number of clicks need a Sellerfox upload for that week to show an Actual value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split.</p>
         </div>
       </div>
     </div>
@@ -1823,12 +1823,11 @@ async function loadTseForecast(){
 // forecast curve), so the same threshold string repeats every week — but it
 // sits right next to that week's Actual, matching the template's side-by-side
 // layout, rather than only appearing once at the end of the row.
-function formatTargetTiers(m, targetRow){
+function formatGoodTarget(m, targetRow){
   if(!m.tierKeys || !targetRow) return '–';
   const thresholds = getThresholds(targetRow, m.tierKeys, m.targetIsPct);
-  if(!thresholds) return '–';
-  const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${m.fmt(thresholds[k])}`);
-  return parts.length ? parts.join(' · ') : '–';
+  if(!thresholds || thresholds.good==null) return '–';
+  return m.fmt(thresholds.good);
 }
 function buildActualVsTargetTable(weeks, targetRow, colLabels){
   let html = '<thead><tr><th>Metric</th>';
@@ -1839,7 +1838,8 @@ function buildActualVsTargetTable(weeks, targetRow, colLabels){
 
   TSE_METRIC_LIST.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
-    const targetStr = formatTargetTiers(m, targetRow);
+    const thresholds = m.tierKeys ? getThresholds(targetRow, m.tierKeys, m.targetIsPct) : null;
+    const goodStr = formatGoodTarget(m, targetRow);
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
     else if(m.kind==='min') total = minBSR(weeks);
@@ -1847,8 +1847,10 @@ function buildActualVsTargetTable(weeks, targetRow, colLabels){
 
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
-      html += `<td style="background:#F8FAFC;font-size:10px;white-space:normal;">${targetStr}</td>`;
-      html += `<td>${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
+      const tier = thresholds ? computeTier(v, thresholds, m.lowerIsBetter) : null;
+      const cellStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
+      html += `<td style="background:#F8FAFC;font-size:10px;">${goodStr}</td>`;
+      html += `<td style="${cellStyle}">${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</td>`;
     });
     html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td></tr>`;
   });
