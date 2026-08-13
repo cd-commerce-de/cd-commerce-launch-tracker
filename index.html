@@ -618,8 +618,8 @@ function downloadBlob(content, filename, type){
 function downloadTemplate(kind){
   let csv, filename;
   if(kind==='sellerfox'){
-    csv = 'Week Start Date,Marketplace,Tag,Parent ASIN / SKU,Product Name,Sessions,Impressions,Clicks,Orders,Highest BSR (best/lowest rank in week)\n'
-        + '2025-08-29,DE,launch,PARENT-ASIN-001,Toilet Seat Adults - D shape,380,6800,400,20,58210\n';
+    csv = 'Marketplace,Parent ASIN,Child ASIN,Child SKUs,Sales (Total),Sessions,CVR,CVR 7D (SP),CTR (SP),AOV,CPC (SP),ACoS 7D (SP),TACoS (Ads),ROAS 7D (SP),Sales 7D (SP),Impressions (SP),Clicks (SP),Adspend (SP),Page Views,Buy Box Rate,Units,Units 7D (SP),Units 7D Same (SP),Orders\n'
+        + 'amazon.de,B0GXWS99RF,B0GXL3V73V,WGH25-PB-RO-FBM,2938.06,504,9.72,6.64,0.52,59.96,0.6,16.52,4.32,6.05,767.6,40761,211,126.79,891,92.56,49,14,9,49\n';
     filename = 'sellerfox_template.csv';
   } else if(kind==='products'){
     csv = 'Product Name,Parent ASIN / SKU,Tag,Marketplace,Launch Date\n'
@@ -1723,14 +1723,10 @@ function chartOpts(stacked=false, dualAxis=false){
 
 function renderCharts(weeks, labels){
   destroyCharts();
-  // Charts should only plot real weeks — trailing weeks with no data yet would
-  // otherwise draw a misleading drop to zero, making it look like a decline.
-  let lastDataIndex = -1;
-  weeks.forEach((w,i)=>{ if(w.hasData) lastDataIndex = i; });
-  if(lastDataIndex >= 0){
-    weeks = weeks.slice(0, lastDataIndex+1);
-    labels = labels.slice(0, lastDataIndex+1);
-  }
+  // Weeks with no uploaded data are already null (see finalizeWeek) — Chart.js
+  // naturally won't draw a point/line for null, so the data correctly stops
+  // at the last real week while the full 12-week labels stay on the axis as
+  // placeholders (not truncated), rather than drawing a misleading drop to zero.
   const gold='#D97757', olive='#F59E0B', green='#10B981', red='#EF4444', slate='#94A3B8', dark='#0F172A';
 
   charts.revenue = new Chart(document.getElementById('chartRevenue'), {
