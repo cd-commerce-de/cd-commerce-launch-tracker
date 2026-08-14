@@ -111,6 +111,15 @@
      so it's the only column that absorbs whatever space is left over. */
   table.stretch-table{width:100%;}
   table.stretch-table th:not(:last-child), table.stretch-table td:not(:last-child){width:1%;}
+  /* Glossary table: a plain reference table, not a data grid — left-aligned,
+     wraps its (often long) Notes text instead of forcing nowrap, and uses
+     fixed proportional column widths so it never needs horizontal scroll. */
+  table.glossary-table{width:100%;table-layout:fixed;}
+  table.glossary-table th, table.glossary-table td{text-align:left;white-space:normal;word-wrap:break-word;vertical-align:top;}
+  table.glossary-table th:first-child, table.glossary-table td:first-child{position:static;box-shadow:none;}
+  table.glossary-table th:nth-child(1), table.glossary-table td:nth-child(1){width:20%;}
+  table.glossary-table th:nth-child(2), table.glossary-table td:nth-child(2){width:26%;}
+  table.glossary-table th:nth-child(3), table.glossary-table td:nth-child(3){width:54%;}
   th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;vertical-align:top;}
   th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;z-index:2;box-shadow:2px 0 4px -2px rgba(15,23,42,0.12);}
   thead th{background:#F1F5F9;color:var(--text-dark);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;z-index:3;}
@@ -535,28 +544,28 @@
         <div class="meta">How every calculated metric in this dashboard is derived — direct pass-through fields from Sellerboard/Sellerfox aren't listed here, only the ones this app works out itself.</div>
       </div>
       <div class="panel">
-        <div class="table-wrap">
-          <table class="stretch-table">
-            <thead><tr><th>Metric</th><th>Formula</th><th>Notes</th><th></th></tr></thead>
+        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
+          <table class="glossary-table">
+            <thead><tr><th>Metric</th><th>Formula</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><td>Refund Rate (%)</td><td>refunds ÷ units</td><td>Only used if Sellerboard didn't already report its own Refund %</td><td></td></tr>
-              <tr><td>Margin (%)</td><td>net_profit ÷ sales</td><td>Only used if Sellerboard didn't already report its own Margin %. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td><td></td></tr>
-              <tr><td>TACoS (%)</td><td>ad_spend ÷ sales</td><td>Always calculated, never pulled from either source</td><td></td></tr>
-              <tr><td>Cost Per Order (€)</td><td>ad_spend ÷ units</td><td></td><td></td></tr>
-              <tr><td>Profit Per Order (€)</td><td>net_profit ÷ units</td><td></td><td></td></tr>
-              <tr><td>Conversion Rate (%)</td><td>units ÷ sessions</td><td>Only used if Sellerboard didn't already report its own Unit Session %</td><td></td></tr>
-              <tr><td>Click-Through Rate (%)</td><td>clicks ÷ impressions</td><td>Sellerfox or Sellerboard report upload</td><td></td></tr>
-              <tr><td>Avg. CPC (€)</td><td>ad_spend ÷ clicks</td><td>Ad spend from Sellerboard, clicks from Sellerfox</td><td></td></tr>
-              <tr><td>Organic Sales (%)</td><td>(units − orders) ÷ units, floored at 0</td><td>"orders" = Sellerfox's ad-attributed units. Only calculated if Sellerfox data exists for that week — otherwise shows "–", not 0%. Approximation: assumes 1 ad order ≈ 1 unit.</td><td></td></tr>
-              <tr><td>Organic Revenue (€)</td><td>sales × Organic Sales %</td><td>Inherits the same approximation and "–" behavior as Organic Sales %</td><td></td></tr>
-              <tr><td>Advertised Revenue (€)</td><td>sales × (1 − Organic Sales %)</td><td>Organic + Advertised Revenue always add back up to total Sales</td><td></td></tr>
-              <tr><td>Refund Rate (%) — totals/aggregates</td><td>total refunds ÷ total units</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td><td></td></tr>
-              <tr><td>Margin (%) — totals/aggregates</td><td>total net_profit ÷ total sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td><td></td></tr>
-              <tr><td>TACoS (%) — totals/aggregates</td><td>total ad_spend ÷ total sales</td><td></td><td></td></tr>
-              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>simple average of that product's 12 weekly Margin % values</td><td>Not sales-weighted — can differ slightly from total net_profit ÷ total sales for the same product</td><td></td></tr>
-              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic/Advertised Revenue, Sessions, Impressions, Clicks</td><td></td></tr>
-              <tr><td>12-Wk Avg column</td><td>simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, CTR, Average Sales Price</td><td></td></tr>
-              <tr><td>12-Wk Best BSR column</td><td>minimum</td><td>Lowest rank across the 12 weeks — lower is better</td><td></td></tr>
+              <tr><td>Refund Rate (%)</td><td>refunds ÷ units</td><td>Only used if Sellerboard didn't already report its own Refund %</td></tr>
+              <tr><td>Margin (%)</td><td>net_profit ÷ sales</td><td>Only used if Sellerboard didn't already report its own Margin %. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td></tr>
+              <tr><td>TACoS (%)</td><td>ad_spend ÷ sales</td><td>Always calculated, never pulled from either source</td></tr>
+              <tr><td>Cost Per Order (€)</td><td>ad_spend ÷ units</td><td></td></tr>
+              <tr><td>Profit Per Order (€)</td><td>net_profit ÷ units</td><td></td></tr>
+              <tr><td>Conversion Rate (%)</td><td>units ÷ sessions</td><td>Only used if Sellerboard didn't already report its own Unit Session %</td></tr>
+              <tr><td>Click-Through Rate (%)</td><td>clicks ÷ impressions</td><td>Sellerfox or Sellerboard report upload</td></tr>
+              <tr><td>Avg. CPC (€)</td><td>ad_spend ÷ clicks</td><td>Ad spend from Sellerboard, clicks from Sellerfox</td></tr>
+              <tr><td>Organic Sales (%)</td><td>(units − orders) ÷ units, floored at 0</td><td>"orders" = Sellerfox's ad-attributed units. Only calculated if Sellerfox data exists for that week — otherwise shows "–", not 0%. Approximation: assumes 1 ad order ≈ 1 unit.</td></tr>
+              <tr><td>Organic Revenue (€)</td><td>sales × Organic Sales %</td><td>Inherits the same approximation and "–" behavior as Organic Sales %</td></tr>
+              <tr><td>Advertised Revenue (€)</td><td>sales × (1 − Organic Sales %)</td><td>Organic + Advertised Revenue always add back up to total Sales</td></tr>
+              <tr><td>Refund Rate (%) — totals/aggregates</td><td>total refunds ÷ total units</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td></tr>
+              <tr><td>Margin (%) — totals/aggregates</td><td>total net_profit ÷ total sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td></tr>
+              <tr><td>TACoS (%) — totals/aggregates</td><td>total ad_spend ÷ total sales</td><td></td></tr>
+              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>simple average of that product's 12 weekly Margin % values</td><td>Not sales-weighted — can differ slightly from total net_profit ÷ total sales for the same product</td></tr>
+              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic/Advertised Revenue, Sessions, Impressions, Clicks</td></tr>
+              <tr><td>12-Wk Avg column</td><td>simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, CTR, Average Sales Price</td></tr>
+              <tr><td>12-Wk Best BSR column</td><td>minimum</td><td>Lowest rank across the 12 weeks — lower is better</td></tr>
             </tbody>
           </table>
         </div>
