@@ -207,6 +207,10 @@
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v12"/><polyline points="7,10 12,15 17,10"/><path d="M5 19h14"/></svg></div>
       Upload &amp; Manage
     </div>
+    <div class="nav-item" data-view="glossary" onclick="switchView('glossary')" title="How every calculated metric in this dashboard is derived, with formulas">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+      Metrics Glossary
+    </div>
     </div>
   </nav>
 
@@ -522,6 +526,40 @@
           </table>
         </div>
         <div class="toolbar"><button class="btn btn-primary" onclick="addProductRow()">+ Add product</button></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-glossary">
+      <div class="page-head">
+        <h2>Metrics Glossary</h2>
+        <div class="meta">How every calculated metric in this dashboard is derived — direct pass-through fields from Sellerboard/Sellerfox aren't listed here, only the ones this app works out itself.</div>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="stretch-table">
+            <thead><tr><th>Metric</th><th>Formula</th><th>Notes</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>Refund Rate (%)</td><td>refunds ÷ units</td><td>Only used if Sellerboard didn't already report its own Refund %</td><td></td></tr>
+              <tr><td>Margin (%)</td><td>net_profit ÷ sales</td><td>Only used if Sellerboard didn't already report its own Margin %. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td><td></td></tr>
+              <tr><td>TACoS (%)</td><td>ad_spend ÷ sales</td><td>Always calculated, never pulled from either source</td><td></td></tr>
+              <tr><td>Cost Per Order (€)</td><td>ad_spend ÷ units</td><td></td><td></td></tr>
+              <tr><td>Profit Per Order (€)</td><td>net_profit ÷ units</td><td></td><td></td></tr>
+              <tr><td>Conversion Rate (%)</td><td>units ÷ sessions</td><td>Only used if Sellerboard didn't already report its own Unit Session %</td><td></td></tr>
+              <tr><td>Click-Through Rate (%)</td><td>clicks ÷ impressions</td><td>Sellerfox or Sellerboard report upload</td><td></td></tr>
+              <tr><td>Avg. CPC (€)</td><td>ad_spend ÷ clicks</td><td>Ad spend from Sellerboard, clicks from Sellerfox</td><td></td></tr>
+              <tr><td>Organic Sales (%)</td><td>(units − orders) ÷ units, floored at 0</td><td>"orders" = Sellerfox's ad-attributed units. Only calculated if Sellerfox data exists for that week — otherwise shows "–", not 0%. Approximation: assumes 1 ad order ≈ 1 unit.</td><td></td></tr>
+              <tr><td>Organic Revenue (€)</td><td>sales × Organic Sales %</td><td>Inherits the same approximation and "–" behavior as Organic Sales %</td><td></td></tr>
+              <tr><td>Advertised Revenue (€)</td><td>sales × (1 − Organic Sales %)</td><td>Organic + Advertised Revenue always add back up to total Sales</td><td></td></tr>
+              <tr><td>Refund Rate (%) — totals/aggregates</td><td>total refunds ÷ total units</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td><td></td></tr>
+              <tr><td>Margin (%) — totals/aggregates</td><td>total net_profit ÷ total sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td><td></td></tr>
+              <tr><td>TACoS (%) — totals/aggregates</td><td>total ad_spend ÷ total sales</td><td></td><td></td></tr>
+              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>simple average of that product's 12 weekly Margin % values</td><td>Not sales-weighted — can differ slightly from total net_profit ÷ total sales for the same product</td><td></td></tr>
+              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic/Advertised Revenue, Sessions, Impressions, Clicks</td><td></td></tr>
+              <tr><td>12-Wk Avg column</td><td>simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, CTR, Average Sales Price</td><td></td></tr>
+              <tr><td>12-Wk Best BSR column</td><td>minimum</td><td>Lowest rank across the 12 weeks — lower is better</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
