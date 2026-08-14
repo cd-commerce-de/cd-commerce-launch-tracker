@@ -58,7 +58,7 @@
   .nav-icon svg{width:14px;height:14px;stroke:var(--text-muted);}
   .nav-item.active .nav-icon svg{stroke:#fff;}
 
-  main.content{flex:1;padding:26px 32px 60px;max-width:1400px;}
+  main.content{flex:1;padding:26px 32px 60px;min-width:0;}
   .page-head{margin-bottom:18px;}
   .page-head h2{font-size:24px;margin:0 0 4px;font-weight:700;}
   .page-head .meta{color:var(--text-muted);font-size:13px;}
@@ -1280,7 +1280,7 @@ function onMultiSelectOptionChange(id, value, checked, tag){
   if(!multiSelectState[id]) multiSelectState[id] = new Set();
   if(checked) multiSelectState[id].add(value); else multiSelectState[id].delete(value);
   updateMultiSelectLabel(id);
-  loadTagDashboard(tag);
+  renderTagDashboard(tag);
 }
 function populateMultiSelect(id, values, formatLabel){
   const field = document.getElementById(id);
@@ -1313,7 +1313,7 @@ function selectAllMultiSelect(id){
   multiSelectState[id] = new Set(allValues);
   field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = true; });
   updateMultiSelectLabel(id);
-  loadTagDashboard(tag);
+  renderTagDashboard(tag);
 }
 function clearMultiSelect(id){
   const field = document.getElementById(id);
@@ -1321,7 +1321,7 @@ function clearMultiSelect(id){
   multiSelectState[id] = new Set();
   field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
   updateMultiSelectLabel(id);
-  loadTagDashboard(tag);
+  renderTagDashboard(tag);
 }
 function resetTagFilters(tag){
   ['Marketplace','Brand','Month','Week'].forEach(f=>{
@@ -1331,15 +1331,33 @@ function resetTagFilters(tag){
     if(field) field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
     updateMultiSelectLabel(id);
   });
-  loadTagDashboard(tag);
+  renderTagDashboard(tag);
 }
+let tagDashboardCache = {};
 async function loadTagDashboard(tag){
+  // Fetches broadly (every product with this tag, regardless of the current
+  // marketplace/brand filter selection) so that changing a filter afterward
+  // can be served entirely from this cache — see renderTagDashboard below.
+  const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
+  const allAsins = allTagProducts.map(pr => pr.asin);
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
+    sb.from('sellerboard_rows').select('*').in('asin', allAsins),
+    sb.from('sellerfox_rows').select('*').in('asin', allAsins),
+    sb.from('targets').select('*').in('asin', allAsins),
+    sb.from('week_notes').select('*').in('asin', allAsins),
+  ]);
+  tagDashboardCache[tag] = { allTagProducts, allSbRows, allSfRows, allTargets, allNotes };
+  renderTagDashboard(tag);
+}
+function renderTagDashboard(tag){
+  const cache = tagDashboardCache[tag];
+  if(!cache) return; // not fetched yet — loadTagDashboard() runs first on view switch
+  const { allTagProducts, allSbRows, allSfRows, allTargets, allNotes } = cache;
   const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
 
   // Marketplace and Brand options come from the full tag-scoped product list,
   // so the dropdowns stay populated even if the current selection filters
   // everything else down to zero rows.
-  const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
   populateMultiSelect(p+'FilterMarketplace', [...new Set(allTagProducts.map(pr=>pr.marketplace).filter(Boolean))].sort());
   populateMultiSelect(p+'FilterBrand', [...new Set(allTagProducts.map(pr=>pr.brand).filter(Boolean))].sort());
 
@@ -1358,12 +1376,6 @@ async function loadTagDashboard(tag){
   if(!products.length) return;
 
   const asins = products.map(pr => pr.asin);
-  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
-    sb.from('sellerboard_rows').select('*').in('asin', asins),
-    sb.from('sellerfox_rows').select('*').in('asin', asins),
-    sb.from('targets').select('*').in('asin', asins),
-    sb.from('week_notes').select('*').in('asin', asins),
-  ]);
 
   // Month/Week options are derived from the calendar weeks actually present
   // for the currently marketplace/brand-filtered products, so picking a
