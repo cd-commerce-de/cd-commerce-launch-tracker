@@ -679,14 +679,18 @@ async function uploadFile(functionName, file, statusId, buttonId){
 }
 function extractWeekFromFilename(name){
   // Sellerboard export filenames embed the report range like 13_07_2026-19_07_2026
-  const m = name.match(/(\d{2})_(\d{2})_(\d{4})-\d{2}_\d{2}_\d{4}/);
+  // — accepting underscore or space between day/month/year components, since
+  // the exact same separator inconsistency was confirmed for Sellerfox filenames.
+  const m = name.match(/(\d{2})[\s_](\d{2})[\s_](\d{4})-\d{2}[\s_]\d{2}[\s_]\d{4}/);
   if(!m) return '';
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 function extractWeekFromSellerfoxFilename(name){
   // Sellerfox export filenames embed the report range like 2026-29-06_-_2026-05-07
   // — note the day comes BEFORE the month here, unlike Sellerboard's filenames.
-  const m = name.match(/(\d{4})-(\d{2})-(\d{2})_-_\d{4}-\d{2}-\d{2}/);
+  // The separator between the two dates varies (underscore vs space depending
+  // on how the file was exported/saved), so both are accepted here.
+  const m = name.match(/(\d{4})-(\d{2})-(\d{2})[\s_]*-[\s_]*\d{4}-\d{2}-\d{2}/);
   if(!m) return '';
   return `${m[1]}-${m[3]}-${m[2]}`;
 }
