@@ -102,6 +102,15 @@
   .chart-box{position:relative;height:270px;}
 
   table{width:auto;border-collapse:collapse;font-size:12.5px;}
+  /* "stretch-table" tables fill the full width of their panel while every
+     real column keeps its tight, content-based width. This works by giving
+     every column EXCEPT the last one width:1% (a well-known auto-table-layout
+     trick: since white-space:nowrap already stops them from wrapping, the
+     browser shrinks them to their content's natural width instead of honoring
+     the literal 1%) and leaving one empty trailing column with no width set,
+     so it's the only column that absorbs whatever space is left over. */
+  table.stretch-table{width:100%;}
+  table.stretch-table th:not(:last-child), table.stretch-table td:not(:last-child){width:1%;}
   th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;vertical-align:top;}
   th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;z-index:2;box-shadow:2px 0 4px -2px rgba(15,23,42,0.12);}
   thead th{background:#F1F5F9;color:var(--text-dark);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;z-index:3;}
@@ -242,7 +251,7 @@
       <div class="panel" id="launchDashOverallPanel" style="display:none;">
         <h3>Portfolio Total — Week by Week</h3>
         <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table id="launchDashOverallTable"></table></div>
+        <div class="table-wrap"><table class="stretch-table" id="launchDashOverallTable"></table></div>
       </div>
       <div id="launchDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No launch products yet</div>
@@ -289,7 +298,7 @@
       <div class="panel" id="expansionDashOverallPanel" style="display:none;">
         <h3>Portfolio Total — Week by Week</h3>
         <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table id="expansionDashOverallTable"></table></div>
+        <div class="table-wrap"><table class="stretch-table" id="expansionDashOverallTable"></table></div>
       </div>
       <div id="expansionDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No expansion products yet</div>
@@ -308,7 +317,7 @@
         Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
       </div>
       <div class="panel" id="overviewPanel" style="display:none;">
-        <div class="table-wrap"><table id="overviewTable"></table></div>
+        <div class="table-wrap"><table class="stretch-table" id="overviewTable"></table></div>
       </div>
     </div>
 
@@ -363,7 +372,7 @@
 
         <div class="panel">
           <h3>Full 12-week scorecard</h3>
-          <div class="table-wrap"><table id="scorecardTable"></table></div>
+          <div class="table-wrap"><table class="stretch-table" id="scorecardTable"></table></div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--text-muted);">
             <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
             <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
@@ -375,7 +384,7 @@
           <div class="meta" style="margin:-6px 0 16px;">This product is sold as <span id="childSkuCount"></span> — here's how they compare to each other.</div>
 
           <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Summary</h4>
-          <div class="table-wrap" style="margin-bottom:22px;"><table id="childSkuSummaryTable"></table></div>
+          <div class="table-wrap" style="margin-bottom:22px;"><table class="stretch-table" id="childSkuSummaryTable"></table></div>
 
           <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Compare Over Time</h4>
           <div class="filter-bar" style="margin-bottom:10px;">
@@ -405,7 +414,7 @@
       </div>
       <div id="tseBody" style="display:none;">
         <div class="panel">
-          <div class="table-wrap"><table id="tseTable"></table></div>
+          <div class="table-wrap"><table class="stretch-table" id="tseTable"></table></div>
           <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Target shows the Good threshold for that specific week — Sales Price, Units, Avg. CPC, Avg. CR, and Organic Sales % come straight from your weekly forecast upload; every other row is calculated from those 5, the same way the template does it. Each week's Actual cell is colored by which tier that week hit: <span style="color:#EF4444;font-weight:700;">red</span> below Good, <span style="color:#F59E0B;font-weight:700;">yellow</span> Good to Better, <span style="color:#10B981;font-weight:700;">green</span> Better to Best, <span style="color:#D4AF37;font-weight:700;">gold</span> above Best. Rows show "–" for any week with no forecast uploaded yet. Avg. CPC and Number of clicks need a Sellerfox upload for that week to show an Actual value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split.</p>
         </div>
       </div>
@@ -1208,7 +1217,7 @@ function renderOverviewTable(){
   ];
   let html = '<thead><tr>' + cols.map(c=>
     `<th style="cursor:pointer;user-select:none;" onclick="sortOverviewBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, overviewSort)}</span></th>`
-  ).join('') + '</tr></thead><tbody>';
+  ).join('') + '<th></th></tr></thead><tbody>';
 
   rows.forEach(r=>{
     html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
@@ -1220,6 +1229,7 @@ function renderOverviewTable(){
       <td>${fmtInt(r.sessions)}</td>
       <td>${fmtRank(r.bestBSR)}</td>
       <td>${r.weeksWithData} / 12</td>
+      <td></td>
     </tr>`;
   });
 
@@ -1238,6 +1248,7 @@ function renderOverviewTable(){
     <td>${fmtInt(totalSessions)}</td>
     <td>${bestVals.length?fmtRank(Math.min(...bestVals)):'–'}</td>
     <td>–</td>
+    <td style="background:#F1F5F9;"></td>
   </tr></tfoot>`;
   document.getElementById('overviewTable').innerHTML = html;
 }
@@ -1522,7 +1533,7 @@ function renderTagDashboard(tag){
   ];
   let ohtml = '<thead><tr><th>Metric</th>';
   colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
-  ohtml += '<th>Total/Avg</th></tr></thead><tbody>';
+  ohtml += '<th>Total/Avg</th><th></th></tr></thead><tbody>';
   if(!sortedCalWeeks.length){
     ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks match the current filters.</td></tr>`;
   }
@@ -1544,7 +1555,7 @@ function renderTagDashboard(tag){
     else if(m.key==='tacos') total = grandSales? grandAdSpend/grandSales : 0;
     else if(m.key==='refundPct') total = grandUnits? grandRefunds/grandUnits : 0;
     else total = vals.reduce((a,v)=>a+v,0);
-    ohtml += `<td class="total-col">${m.fmt(total)}</td></tr>`;
+    ohtml += `<td class="total-col">${m.fmt(total)}</td><td></td></tr>`;
   });
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
@@ -1599,7 +1610,7 @@ function renderTagDashboard(tag){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;margin-bottom:14px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);">
         ${metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('')}
       </div>
-      <div class="table-wrap"><table></table></div>
+      <div class="table-wrap"><table class="stretch-table"></table></div>
     `;
     panel.querySelector('table').innerHTML = buildScorecardTable(shownWeeks, targetRow, colLabels, product.asin, shownWeekDates, notesMap);
     blocksContainer.appendChild(panel);
@@ -1933,7 +1944,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l=> html += `<th>${l}</th>`);
-  html += '<th>12-Wk Total/Avg</th><th>Target</th></tr></thead><tbody>';
+  html += '<th>12-Wk Total/Avg</th><th>Target</th><th></th></tr></thead><tbody>';
   metrics.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
@@ -1958,7 +1969,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${m.fmt(thresholds[k])}`);
       targetCell = `<span style="font-size:10.5px;">${parts.join(' · ')}</span>`;
     }
-    html += `<td style="background:#F1F5F9;">${targetCell}</td></tr>`;
+    html += `<td style="background:#F1F5F9;">${targetCell}</td><td></td></tr>`;
   });
   if(asin && weekDates){
     html += `<tr><td style="font-weight:700;">Notes</td>`;
@@ -1971,7 +1982,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
         ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
       </td>`;
     });
-    html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
+    html += `<td colspan="3" style="background:#F1F5F9;"></td></tr>`;
   }
   html += '</tbody>';
   return html;
@@ -2099,7 +2110,7 @@ function renderChildSkuSummary(){
   ];
   let html = '<thead><tr>' + cols.map(c=>
     `<th style="cursor:pointer;user-select:none;" onclick="sortChildrenBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, childSort)}</span></th>`
-  ).join('') + '</tr></thead><tbody>';
+  ).join('') + '<th></th></tr></thead><tbody>';
   rows.forEach(r=>{
     html += `<tr>
       <td style="max-width:260px;white-space:normal;">${escapeHtml(childLabel(r))}</td>
@@ -2107,6 +2118,7 @@ function renderChildSkuSummary(){
       <td>${fmtInt(r.totalUnits)}</td>
       <td>${fmtPct(r.avgMargin)}</td>
       <td>${fmtRank(r.bestBSR)}</td>
+      <td></td>
     </tr>`;
   });
   html += '</tbody>';
@@ -2145,7 +2157,7 @@ function renderChildDetailBlocks(){
     return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       <button class="btn" id="childDetailBtn${i}" style="width:100%;text-align:left;border:none;border-radius:0;background:#F8FAFC;" onclick="toggleChildDetail(${i})">▸ ${escapeHtml(childLabel(c))}</button>
       <div id="childDetail${i}" style="display:none;padding:14px;">
-        <div class="table-wrap"><table>${buildScorecardTable(c.weeks, null, colLabels)}</table></div>
+        <div class="table-wrap"><table class="stretch-table">${buildScorecardTable(c.weeks, null, colLabels)}</table></div>
       </div>
     </div>`;
   }).join('');
@@ -2234,9 +2246,9 @@ async function loadTseForecast(){
 function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l => html += `<th colspan="2">${l}</th>`);
-  html += '<th>12-Wk Total/Avg</th></tr><tr><th></th>';
+  html += '<th>12-Wk Total/Avg</th><th></th></tr><tr><th></th>';
   colLabels.forEach(()=> html += `<th style="font-size:9.5px;">Target</th><th style="font-size:9.5px;">Actual</th>`);
-  html += '<th></th></tr></thead><tbody>';
+  html += '<th></th><th></th></tr></thead><tbody>';
 
   TSE_METRIC_LIST.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
@@ -2256,7 +2268,7 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
       html += `<td style="background:#F8FAFC;font-size:10px;">${goodStr}</td>`;
       html += `<td style="${cellStyle}"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
-    html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td></tr>`;
+    html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td><td></td></tr>`;
   });
   html += '</tbody>';
   return html;
