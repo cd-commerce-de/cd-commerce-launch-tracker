@@ -261,7 +261,7 @@
           </div>
           <button class="btn" onclick="resetTagFilters('launch')">Reset filters</button>
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, and its scorecard drops off this dashboard (still viewable in Product Detail).</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
       </div>
       <div class="panel" id="launchDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
@@ -313,7 +313,7 @@
           </div>
           <button class="btn" onclick="resetTagFilters('expansion')">Reset filters</button>
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, and its scorecard drops off this dashboard (still viewable in Product Detail).</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
       </div>
       <div class="panel" id="expansionDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
@@ -1630,10 +1630,10 @@ function renderTagDashboard(tag){
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
-  // Per-product full scorecards — sorted newest-launched to oldest, and only
-  // for products still inside their own first 12 weeks. Once a product is
-  // past Week 12 its scorecard is dropped from this list entirely (it's done
-  // "launching"); the full history is still available in Product Detail.
+  // Per-product full scorecards — sorted newest-launched to oldest. Every
+  // product with this tag shows here regardless of how far past its own
+  // Week 12 it is; its columns just keep counting past 12 (Product Detail
+  // is still the place to see its full unbounded history in more depth).
   // Each panel's own columns are also narrowed to whichever of its weeks fall
   // inside the selected Month/Week, and a product with zero matching weeks is
   // skipped rather than showing an empty table.
@@ -1650,8 +1650,6 @@ function renderTagDashboard(tag){
       ageWeeks = +(ageDays / 7).toFixed(1);
       ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
     }
-    // Past its own 12-week window as of today — retire it from this dashboard.
-    if(currentWeekNum!==null && currentWeekNum>12) return;
 
     const visibleIdx = weeks.map((_,i)=>i).filter(i=>passesDateFilter(weekDates[i]));
     if((monthFilterFinal.length || weekFilterFinal.length) && !visibleIdx.length) return;
@@ -1697,7 +1695,7 @@ function renderTagDashboard(tag){
     blocksContainer.appendChild(panel);
   });
   if(!blocksContainer.children.length){
-    blocksContainer.innerHTML = `<div class="panel" style="color:var(--text-muted);">No products currently within their first 12 weeks match the current filters. Past-12-week products are still available in Product Detail.</div>`;
+    blocksContainer.innerHTML = `<div class="panel" style="color:var(--text-muted);">No products match the current filters.</div>`;
   }
 }
 
