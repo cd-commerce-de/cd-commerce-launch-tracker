@@ -263,15 +263,6 @@
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
       </div>
-      <div class="panel" id="launchDashKpiPanel" style="display:none;">
-        <h3>Overall</h3>
-        <div class="kpi-grid" id="launchDashKpiGrid"></div>
-      </div>
-      <div class="panel" id="launchDashOverallPanel" style="display:none;">
-        <h3>Portfolio Total — Week by Week</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table class="stretch-table" id="launchDashOverallTable"></table></div>
-      </div>
       <div class="panel" id="launchDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
         <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product shown above (after your Marketplace/Brand/Product filters), each measured on its own first 12 weeks so products launched at different times are compared on equal footing.</p>
@@ -298,6 +289,15 @@
           <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Click a column header to sort. Lets you see exactly which products are driving the patterns above.</p>
           <div class="table-wrap"><table class="stretch-table" id="launchAnalysisTable"></table></div>
         </div>
+      </div>
+      <div class="panel" id="launchDashKpiPanel" style="display:none;">
+        <h3>Overall</h3>
+        <div class="kpi-grid" id="launchDashKpiGrid"></div>
+      </div>
+      <div class="panel" id="launchDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
+        <div class="table-wrap"><table class="stretch-table" id="launchDashOverallTable"></table></div>
       </div>
       <div id="launchDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No launch products yet</div>
@@ -342,15 +342,6 @@
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
       </div>
-      <div class="panel" id="expansionDashKpiPanel" style="display:none;">
-        <h3>Overall</h3>
-        <div class="kpi-grid" id="expansionDashKpiGrid"></div>
-      </div>
-      <div class="panel" id="expansionDashOverallPanel" style="display:none;">
-        <h3>Portfolio Total — Week by Week</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table class="stretch-table" id="expansionDashOverallTable"></table></div>
-      </div>
       <div class="panel" id="expansionDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
         <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product shown above (after your Marketplace/Brand/Product filters), each measured on its own first 12 weeks so products launched at different times are compared on equal footing.</p>
@@ -377,6 +368,15 @@
           <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Click a column header to sort. Lets you see exactly which products are driving the patterns above.</p>
           <div class="table-wrap"><table class="stretch-table" id="expansionAnalysisTable"></table></div>
         </div>
+      </div>
+      <div class="panel" id="expansionDashKpiPanel" style="display:none;">
+        <h3>Overall</h3>
+        <div class="kpi-grid" id="expansionDashKpiGrid"></div>
+      </div>
+      <div class="panel" id="expansionDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
+        <div class="table-wrap"><table class="stretch-table" id="expansionDashOverallTable"></table></div>
       </div>
       <div id="expansionDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No expansion products yet</div>
@@ -1580,13 +1580,22 @@ function renderTagDashboard(tag){
   const totalSales = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
   const totalUnits = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
   const totalNetProfit = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
+  const totalAdSpend = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
+  const totalSessions = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
+  const totalRefunds = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
   const avgMargin = totalSales? totalNetProfit/totalSales : 0;
+  const avgTacos = totalSales? totalAdSpend/totalSales : 0;
+  const avgRefundPct = totalUnits? totalRefunds/totalUnits : 0;
   document.getElementById(p+'DashKpiGrid').innerHTML = [
-    {label:'Total Sales', value:fmtMoney(totalSales)},
-    {label:'Total Units', value:fmtInt(totalUnits)},
-    {label:'Net Margin', value:fmtMoney(totalNetProfit)},
-    {label:'Net Margin %', value:fmtPct(avgMargin)},
-  ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`).join('');
+    {label:'Total Sales', value:fmtMoney(totalSales), desc:'Sum across every product and week shown, after your filters above'},
+    {label:'Total Units', value:fmtInt(totalUnits), desc:'Units sold across every product and week shown'},
+    {label:'Net Profit', value:fmtMoney(totalNetProfit), desc:'Total profit after Amazon fees, ad spend, and COGS'},
+    {label:'Net Margin %', value:fmtPct(avgMargin), desc:'Total Net Profit ÷ Total Sales — sales-weighted, not a simple average'},
+    {label:'Ad Spend', value:fmtMoney(totalAdSpend), desc:'Total spent on ads across every product and week shown'},
+    {label:'TACoS', value:fmtPct(avgTacos), desc:'Total Ad Spend ÷ Total Sales — how much of revenue is going to ads'},
+    {label:'Sessions', value:fmtInt(totalSessions), desc:'Total product page visits across every product and week shown'},
+    {label:'Refund Rate', value:fmtPct(avgRefundPct), desc:'Total Refunds ÷ Total Units — a rising rate can flag a listing or quality issue'},
+  ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="desc">${c.desc}</div></div>`).join('');
 
   // Portfolio total, bucketed by REAL calendar week — not relative week index.
   // Relative-week bucketing would sum "Week 1" across products that actually
