@@ -1578,7 +1578,7 @@ function renderTagDashboard(tag){
   blocksContainer.innerHTML = '';
   if(!products.length) return;
 
-  const asins = products.map(pr => pr.asin);
+  let asins = products.map(pr => pr.asin);
 
   // Month/Week options are derived from the calendar weeks actually present
   // for the currently marketplace/brand-filtered products, so picking a
@@ -1613,6 +1613,29 @@ function renderTagDashboard(tag){
     return { product, weeks, anchor, weekDates, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
+  // Expansion Dashboard only shows products still inside their own first 12
+  // weeks — once a product's current week passes 12 it drops off this
+  // dashboard entirely. Launch Dashboard, by contrast, deliberately shows
+  // every product regardless of age (see the comment further down); Product
+  // Detail always has the full history either way, unaffected by this.
+  let visibleProductData = productData;
+  if(tag === 'expansion'){
+    visibleProductData = productData.filter(pd => {
+      if(!pd.anchor) return true; // no anchor known — can't judge eligibility, so don't hide it
+      const ageDays = Math.floor((new Date() - new Date(pd.anchor)) / 86400000);
+      const currentWeekNum = Math.floor(ageDays / 7) + 1;
+      return currentWeekNum <= 12;
+    });
+    products = visibleProductData.map(pd => pd.product);
+    asins = visibleProductData.map(pd => pd.product.asin);
+    if(!visibleProductData.length){
+      document.getElementById(p+'DashEmpty').style.display = 'block';
+      document.getElementById(p+'DashKpiPanel').style.display = 'none';
+      document.getElementById(p+'DashOverallPanel').style.display = 'none';
+      return;
+    }
+  }
+
   // A week index passes the Month/Week filter if its real calendar date
   // (weekDates[i]) falls in one of the selected months and/or matches one of
   // the selected weeks exactly. With nothing selected in a field, that field
@@ -1627,12 +1650,12 @@ function renderTagDashboard(tag){
     return weeks.reduce((a,w,i)=> passesDateFilter(weekDates[i]) ? a+(+w[key]||0) : a, 0);
   }
 
-  const totalSales = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
-  const totalUnits = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
-  const totalNetProfit = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
-  const totalAdSpend = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
-  const totalSessions = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
-  const totalRefunds = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
+  const totalSales = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
+  const totalUnits = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
+  const totalNetProfit = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
+  const totalAdSpend = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
+  const totalSessions = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
+  const totalRefunds = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
   const avgMargin = totalSales? totalNetProfit/totalSales : 0;
   const avgTacos = totalSales? totalAdSpend/totalSales : 0;
   const avgRefundPct = totalUnits? totalRefunds/totalUnits : 0;
@@ -1659,7 +1682,7 @@ function renderTagDashboard(tag){
   // otherwise a long-running product would keep inflating totals for weeks
   // that are no longer part of its launch window.
   const anchorByAsin = {};
-  productData.forEach(pd=>{ anchorByAsin[pd.product.asin] = pd.anchor; });
+  visibleProductData.forEach(pd=>{ anchorByAsin[pd.product.asin] = pd.anchor; });
 
   const calBuckets = {};
   const includedByWeek = {}, excludedByWeek = {}; // for the hover note per column
@@ -1757,7 +1780,7 @@ function renderTagDashboard(tag){
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
-  renderTagAnalysis(p, productData);
+  renderTagAnalysis(p, visibleProductData);
 
   // Per-product full scorecards — sorted newest-launched to oldest. Every
   // product with this tag shows here regardless of how far past its own
@@ -1766,7 +1789,7 @@ function renderTagDashboard(tag){
   // Each panel's own columns are also narrowed to whichever of its weeks fall
   // inside the selected Month/Week, and a product with zero matching weeks is
   // skipped rather than showing an empty table.
-  const sortedProductData = productData.slice().sort((a,b)=>{
+  const sortedProductData = visibleProductData.slice().sort((a,b)=>{
     const da = a.product.launch || a.anchor || '';
     const db = b.product.launch || b.anchor || '';
     return db.localeCompare(da);
@@ -1820,7 +1843,7 @@ function renderTagDashboard(tag){
       </div>
       <div class="table-wrap"><table class="stretch-table"></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(shownWeeks, targetRow, colLabels, product.asin, shownWeekDates, notesMap);
+    panel.querySelector('table').innerHTML = buildScorecardTable(shownWeeks, targetRow, colLabels, product.asin, shownWeekDates, notesMap, null, true);
     blocksContainer.appendChild(panel);
   });
   if(!blocksContainer.children.length){
@@ -2152,7 +2175,7 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA){
   const metrics = metricList || METRICS;
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
@@ -2165,7 +2188,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
       const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
-      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
+      const formatted = m.fmt(v);
+      const displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
+      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
@@ -2175,7 +2200,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const thresholds = m.tierKeys ? getThresholds(t, m.tierKeys, m.targetIsPct) : null;
     const tier = thresholds ? computeTier(total, thresholds, m.lowerIsBetter) : null;
     const totalStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
-    html += `<td class="total-col" style="${totalStyle}">${m.fmt(total)}</td>`;
+    const formattedTotal = m.fmt(total);
+    const displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
+    html += `<td class="total-col" style="${totalStyle}">${displayTotal}</td>`;
 
     let targetCell = '–';
     if(thresholds){
