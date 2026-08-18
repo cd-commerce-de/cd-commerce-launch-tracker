@@ -348,7 +348,7 @@
     <div class="view" id="view-weekly-pulse">
       <div class="page-head">
         <h2>Product Detail</h2>
-        <div class="meta" id="pulseMeta">Select a product to see its 12-week scorecard</div>
+        <div class="meta" id="pulseMeta">Select a product to see its weekly scorecard</div>
       </div>
 
       <div class="panel">
@@ -395,7 +395,7 @@
         </div>
 
         <div class="panel">
-          <h3>Full 12-week scorecard</h3>
+          <h3>Weekly Scorecard</h3>
           <div class="table-wrap"><table class="stretch-table" id="scorecardTable"></table></div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--text-muted);">
             <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
@@ -556,14 +556,14 @@
               <tr><td>Conversion Rate (%)</td><td>units ÷ sessions</td><td>Only used if Sellerboard didn't already report its own Unit Session %</td></tr>
               <tr><td>Click-Through Rate (%)</td><td>clicks ÷ impressions</td><td>Sellerfox or Sellerboard report upload</td></tr>
               <tr><td>Avg. CPC (€)</td><td>ad_spend ÷ clicks</td><td>Ad spend from Sellerboard, clicks from Sellerfox</td></tr>
-              <tr><td>Organic Sales (%)</td><td>(units − orders) ÷ units, floored at 0</td><td>"orders" = Sellerfox's ad-attributed units. Only calculated if Sellerfox data exists for that week — otherwise shows "–", not 0%. Approximation: assumes 1 ad order ≈ 1 unit.</td></tr>
-              <tr><td>Organic Revenue (€)</td><td>sales × Organic Sales %</td><td>Inherits the same approximation and "–" behavior as Organic Sales %</td></tr>
-              <tr><td>Advertised Revenue (€)</td><td>sales × (1 − Organic Sales %)</td><td>Organic + Advertised Revenue always add back up to total Sales</td></tr>
+              <tr><td>Ad Sales (€)</td><td>Uploaded directly (Sellerfox "Sales 7D (SP)")</td><td>Not calculated — this is Sellerfox's own reported ad-attributed sales. No "Same SKU" variant exists for Sales like it does for Units, so this may include some halo/cross-sell sales attributed to other products bought after clicking this product's ad. Shows "–" if Sellerfox wasn't uploaded for that week, not €0.</td></tr>
+              <tr><td>Organic Revenue (€)</td><td>sales − Ad Sales, floored at 0</td><td>Derived from Ad Sales, not the other way around. Shows "–" if Ad Sales is unavailable.</td></tr>
+              <tr><td>Organic Sales (%)</td><td>Organic Revenue ÷ sales</td><td>Inherits the same "–" behavior as Organic Revenue when Sellerfox wasn't uploaded</td></tr>
               <tr><td>Refund Rate (%) — totals/aggregates</td><td>total refunds ÷ total units</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td></tr>
               <tr><td>Margin (%) — totals/aggregates</td><td>total net_profit ÷ total sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td></tr>
               <tr><td>TACoS (%) — totals/aggregates</td><td>total ad_spend ÷ total sales</td><td></td></tr>
               <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>simple average of that product's 12 weekly Margin % values</td><td>Not sales-weighted — can differ slightly from total net_profit ÷ total sales for the same product</td></tr>
-              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic/Advertised Revenue, Sessions, Impressions, Clicks</td></tr>
+              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic Revenue/Ad Sales, Sessions, Impressions, Clicks</td></tr>
               <tr><td>12-Wk Avg column</td><td>simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, CTR, Average Sales Price</td></tr>
               <tr><td>12-Wk Best BSR column</td><td>minimum</td><td>Lowest rank across the 12 weeks — lower is better</td></tr>
             </tbody>
@@ -1115,28 +1115,38 @@ function weekNumber(launchDate, rowDate){
   return Math.floor(diffDays / 7) + 1;
 }
 
-function computeWeeksFromRows(product, sbRows, sfRows){
-  const emptyWeeks = () => Array.from({ length: 12 }, () => ({
+function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
+  const makeEmptyWeek = () => ({
     hasData:false,
     sales:0, units:0, refunds:0, refundPctSum:0, refundPctN:0,
     adSpend:0, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0,
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
     bsr:null, sessions:0, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
-    impressions:0, clicks:0, adsOrders:0,
-  }));
-  if(!product) return { weeks: emptyWeeks().map(finalizeWeek), anchor: null, autoAnchor: false };
+    impressions:0, clicks:0, adsOrders:0, adSales:0,
+  });
+  if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false };
 
   const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
   const autoAnchor = !product.launch;
   let anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
   if(anchor) anchor = mondayOf(anchor);
 
-  const weeks = emptyWeeks();
+  // Product Detail's own scorecard extends past Week 12 when real data exists
+  // out there (a product doesn't stop having weeks just because the "launch
+  // window" convention ends) — everywhere else (dashboards, child SKUs,
+  // Actual vs. Target) stays capped at the standard 12-week view.
+  let totalWeeks = 12;
+  if(anchor && extendBeyond12 && allDates.length){
+    const maxWeekFound = Math.max(...allDates.map(d => weekNumber(anchor, d)));
+    totalWeeks = Math.max(12, maxWeekFound);
+  }
+
+  const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
   if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor };
 
   (sbRows||[]).forEach(r=>{
     const wk = weekNumber(anchor, r.week);
-    if(wk<1||wk>12) return;
+    if(wk<1||wk>totalWeeks) return;
     const w = weeks[wk-1];
     w.hasData = true;
     w.sales+=+r.sales||0; w.units+=+r.units||0; w.refunds+=+r.refunds||0;
@@ -1156,24 +1166,25 @@ function computeWeeksFromRows(product, sbRows, sfRows){
   // Sellerfox only adds Impressions/Clicks (for Click-Through Rate) if it's uploaded too.
   (sfRows||[]).forEach(r=>{
     const wk = weekNumber(anchor, r.week);
-    if(wk<1||wk>12) return;
+    if(wk<1||wk>totalWeeks) return;
     const w = weeks[wk-1];
     w.hasData = true;
     w.impressions+=+r.impressions||0; w.clicks+=+r.clicks||0; w.adsOrders+=+r.orders||0;
+    w.adSales+=+r.ad_sales||0;
     if(!w.sessions && r.sessions) w.sessions+=+r.sessions;
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
   return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor };
 }
-async function computeWeeks(product, marketplaceFilter){
+async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   if(!product) return computeWeeksFromRows(null, [], []);
   let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
   if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
   let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
   if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
   const [{ data: sbRows }, { data: sfRows }] = await Promise.all([sbQuery, sfQuery]);
-  return computeWeeksFromRows(product, sbRows, sfRows);
+  return computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12);
 }
 function finalizeWeek(w){
   if(!w.hasData){
@@ -1187,10 +1198,13 @@ function finalizeWeek(w){
       hasData:false,
     };
   }
-  // Approximation only — assumes 1 ad order ≈ 1 unit, and that Sellerboard's
-  // Units and Sellerfox's Ad Orders line up cleanly for the same week. Null
-  // (not 0) when Sellerfox wasn't uploaded, so it's visibly "unknown" not "0%".
-  const organicPct = (w.clicks || w.adsOrders) ? (w.units? Math.max(0, (w.units - w.adsOrders) / w.units) : null) : null;
+  // Ad Sales is now directly uploaded from Sellerfox's "Sales 7D (SP)" column
+  // (previously approximated from ad-attributed units) — null when Sellerfox
+  // wasn't uploaded for this week, not 0, so it's visibly "unknown" not "€0".
+  // Organic Revenue/% are now derived FROM Ad Sales, the reverse of before.
+  const advertisedRevenue = (w.clicks || w.adsOrders || w.adSales) ? w.adSales : null;
+  const organicRevenue = (advertisedRevenue!=null && w.sales) ? Math.max(0, w.sales - advertisedRevenue) : null;
+  const organicPct = (organicRevenue!=null && w.sales) ? organicRevenue/w.sales : null;
   return {
     sales:w.sales, units:w.units, refunds:w.refunds,
     refundPct: w.refundPctN? (w.refundPctSum/w.refundPctN)/100 : (w.units? w.refunds/w.units : 0),
@@ -1209,8 +1223,8 @@ function finalizeWeek(w){
     ctr: w.impressions? w.clicks/w.impressions : 0,
     cpc: w.clicks? w.adSpend/w.clicks : null,
     organicPct,
-    organicRevenue: organicPct!=null ? w.sales*organicPct : null,
-    advertisedRevenue: organicPct!=null ? w.sales*(1-organicPct) : null,
+    organicRevenue,
+    advertisedRevenue,
     hasData:true,
   };
 }
@@ -1722,13 +1736,13 @@ async function loadDashboard(){
   document.getElementById('dashboardBody').style.display = hasAnyData ? 'block' : 'none';
   document.getElementById('pulseMeta').innerHTML = product
     ? `${thumb(product.image_url, 44)}<strong>${escapeHtml(productDisplayName(product))}</strong>`
-    : 'Select a product to see its 12-week scorecard';
+    : 'Select a product to see its weekly scorecard';
   if(!hasAnyData){ destroyCharts(); return; }
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
-  const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt);
+  const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt, true);
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
     banner.textContent = `No launch date set — using the earliest uploaded week (${anchor}) as Week 1. Set a launch date in Upload & Manage if you'd rather anchor by the real launch date.`;
@@ -1798,19 +1812,20 @@ function targetLine(actual, thresholds, fmt, lowerIsBetter=false){
 }
 function renderKPIs(weeks, targets){
   const t = targets || {};
+  const n = weeks.length;
   const mSales = METRICS.find(m=>m.key==='sales'), mProfit = METRICS.find(m=>m.key==='netProfit'),
         mMargin = METRICS.find(m=>m.key==='margin'), mUnits = METRICS.find(m=>m.key==='units'),
         mSessions = METRICS.find(m=>m.key==='sessions'), mBSR = METRICS.find(m=>m.key==='bsr');
   const cards = [
-    {label:'12-Wk Total Sales', value: fmtMoney(sum(weeks,'sales')), desc:'Sum of Total Sales across all 12 weeks',
+    {label:`${n}-Wk Total Sales`, value: fmtMoney(sum(weeks,'sales')), desc:`Sum of Total Sales across all ${n} weeks`,
       target: targetLine(sum(weeks,'sales'), getThresholds(t, mSales.tierKeys), fmtMoney)},
-    {label:'12-Wk Net Profit', value: fmtMoney(sum(weeks,'netProfit')), desc:'Sum of Net Profit across all 12 weeks',
+    {label:`${n}-Wk Net Profit`, value: fmtMoney(sum(weeks,'netProfit')), desc:`Sum of Net Profit across all ${n} weeks`,
       target: targetLine(sum(weeks,'netProfit'), getThresholds(t, mProfit.tierKeys), fmtMoney)},
-    {label:'Avg. Margin', value: fmtPct(avg(weeks,'margin')), desc:'Sellerboard margin %, averaged over 12 weeks',
+    {label:'Avg. Margin', value: fmtPct(avg(weeks,'margin')), desc:`Sellerboard margin %, averaged over ${n} weeks`,
       target: targetLine(avg(weeks,'margin'), getThresholds(t, mMargin.tierKeys, mMargin.targetIsPct), fmtPct)},
-    {label:'12-Wk Units Sold', value: fmtInt(sum(weeks,'units')), desc:'Sum of Units Sold across all 12 weeks',
+    {label:`${n}-Wk Units Sold`, value: fmtInt(sum(weeks,'units')), desc:`Sum of Units Sold across all ${n} weeks`,
       target: targetLine(sum(weeks,'units'), getThresholds(t, mUnits.tierKeys), fmtInt)},
-    {label:'12-Wk Sessions', value: fmtInt(sum(weeks,'sessions')), desc:'Sum of Sessions across all 12 weeks',
+    {label:`${n}-Wk Sessions`, value: fmtInt(sum(weeks,'sessions')), desc:`Sum of Sessions across all ${n} weeks`,
       target: targetLine(sum(weeks,'sessions'), getThresholds(t, mSessions.tierKeys), fmtInt)},
     {label:'Best BSR reached', value: fmtRank(minBSR(weeks)), desc:'Lowest (best) BSR seen in any week',
       target: targetLine(minBSR(weeks), getThresholds(t, mBSR.tierKeys), fmtRank, true)},
@@ -1974,7 +1989,7 @@ const METRICS = [
   {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
   {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc'},
   {key:'organicRevenue', label:'Organic Revenue (€)', fmt:fmtMoney, kind:'sum'},
-  {key:'advertisedRevenue', label:'Advertised Revenue (€)', fmt:fmtMoney, kind:'sum'},
+  {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoney, kind:'sum'},
   {key:'sessions', label:'Sessions', fmt:fmtInt, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
   {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc'},
   {key:'impressions', label:'Impressions', fmt:fmtInt, kind:'sum'},
@@ -2026,7 +2041,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l=> html += `<th>${l}</th>`);
-  html += '<th>12-Wk Total/Avg</th><th>Target</th><th></th></tr></thead><tbody>';
+  html += `<th>${weeks.length}-Wk Total/Avg</th><th>Target</th><th></th></tr></thead><tbody>`;
   metrics.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
