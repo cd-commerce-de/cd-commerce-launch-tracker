@@ -50,6 +50,7 @@
   .sidebar-sticky-inner{position:sticky;top:0;padding:18px 12px;max-height:100vh;overflow-y:auto;}
   .nav-burger{padding:6px 8px 14px;color:var(--text-muted);font-size:18px;}
   .nav-section-label{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;padding:14px 10px 6px;}
+  tr.table-section-row td, tr.table-section-row td:first-child{background:var(--header-bg) !important;color:#fff;font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;text-align:left !important;padding:8px 10px;position:static;}
   .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--text-dark);margin-bottom:2px;}
   .nav-item:hover{background:#F1F5F9;}
   .nav-item.active{background:var(--gold-light);font-weight:700;}
@@ -704,6 +705,40 @@ function productDisplayName(product){
   if(product.product_line) segments.push(product.product_line);
   if(segments.length === 1) segments.push(shortenName(product.name) || '');
   return segments.join(' - ');
+}
+// Same as productDisplayName but without the ASIN — for tables (like All
+// Products) that show ASIN in its own separate column.
+function productLineOnly(product){
+  if(!product) return '';
+  const segments = [];
+  if(product.product_line_code) segments.push(product.product_line_code);
+  if(product.product_line) segments.push(product.product_line);
+  if(!segments.length) return shortenName(product.name) || '';
+  return segments.join(' - ');
+}
+// Lightweight dependency-free sparkline (plain SVG string, no Chart.js
+// instance) — appropriate for a table with many rows, where instantiating a
+// full chart per row would be needless overhead.
+function sparklineSVG(values, width=90, height=26, color='#D97757'){
+  const points = values.map((v,i)=>({v,i})).filter(d=>d.v!=null);
+  if(points.length < 2) return '<span style="color:var(--text-muted);font-size:10px;">Not enough data</span>';
+  const vals = points.map(d=>d.v);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max - min) || 1;
+  const pad = 2;
+  const coords = points.map(d => {
+    const x = points.length>1 ? pad + (d.i/(values.length-1)) * (width-pad*2) : width/2;
+    const y = pad + (height-pad*2) - ((d.v-min)/range) * (height-pad*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  let zeroLine = '';
+  if(min < 0 && max > 0){
+    const zeroY = pad + (height-pad*2) - ((0-min)/range) * (height-pad*2);
+    zeroLine = `<line x1="0" y1="${zeroY.toFixed(1)}" x2="${width}" y2="${zeroY.toFixed(1)}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="2,2"/>`;
+  }
+  const lastColor = vals[vals.length-1] >= 0 ? '#10B981' : '#EF4444';
+  const lastCoord = coords.split(' ').pop().split(',');
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;">${zeroLine}<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.5"/><circle cx="${lastCoord[0]}" cy="${lastCoord[1]}" r="2.2" fill="${lastColor}"/></svg>`;
 }
 function sortArrow(key, sortState){
   if(sortState.key !== key) return '<span style="opacity:.25;">↕</span>';
@@ -1371,64 +1406,118 @@ async function loadOverview(){
 
   overviewRowsData = filtered.map(product => {
     const { weeks } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
-    const sum = key => weeks.reduce((a,w)=>a+w[key],0);
-    const avg = key => weeks.reduce((a,w)=>a+w[key],0)/weeks.length;
     const bsrVals = weeks.map(w=>w.bsr).filter(x=>x!==null&&x>0);
+    let weeksToProfit = null;
+    for(let i=0;i<weeks.length;i++){
+      if(weeks[i].margin!=null && weeks[i].margin>0){ weeksToProfit = i+1; break; }
+    }
     return {
-      product, totalSales: sum('sales'), netProfit: sum('netProfit'), avgMargin: avg('margin'),
-      units: sum('units'), sessions: sum('sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
-      weeksWithData: weeks.filter(w=>w.sales>0||w.sessions>0).length,
+      product, weeks, totalSales: sum(weeks,'sales'), netProfit: sum(weeks,'netProfit'), avgMargin: avg(weeks,'margin'),
+      units: sum(weeks,'units'), sessions: sum(weeks,'sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
+      weeksWithData: weeks.filter(w=>w.hasData).length, weeksToProfit,
     };
   });
   renderOverviewTable();
 }
 function renderOverviewTable(){
-  const rows = sortRows(overviewRowsData, overviewSort.key, overviewSort.dir, r=>productDisplayName(r.product));
+  document.getElementById('overviewEmpty').style.display = overviewRowsData.length ? 'none' : 'block';
+  document.getElementById('overviewPanel').style.display = overviewRowsData.length ? 'block' : 'none';
+  if(!overviewRowsData.length) return;
 
-  document.getElementById('overviewEmpty').style.display = rows.length ? 'none' : 'block';
-  document.getElementById('overviewPanel').style.display = rows.length ? 'block' : 'none';
-  if(!rows.length) return;
+  const enriched = overviewRowsData.map(r => ({ ...r, asin: r.product.asin, launchDate: r.product.launch || '' }));
 
   const cols = [
-    {key:'__name__', label:'Product'}, {key:'totalSales', label:'Total Sales'}, {key:'netProfit', label:'Net Profit'},
-    {key:'avgMargin', label:'Avg. Margin'}, {key:'units', label:'Units Sold'}, {key:'sessions', label:'Sessions'},
-    {key:'bestBSR', label:'Best BSR'}, {key:'weeksWithData', label:'Weeks w/ Data'},
+    {key:'__name__', label:'Product'},
+    {key:'asin', label:'ASIN'},
+    {key:'totalSales', label:'Total Sales'},
+    {key:'netProfit', label:'Net Profit'},
+    {key:'avgMargin', label:'Avg. Margin'},
+    {key:null, label:'Margin Trend (weekly)'},
+    {key:'weeksToProfit', label:'Weeks to Positive Margin'},
+    {key:'units', label:'Units Sold'},
+    {key:'sessions', label:'Sessions'},
+    {key:'bestBSR', label:'Best BSR'},
+    {key:'weeksWithData', label:'Weeks w/ Data'},
+    {key:'launchDate', label:'Launch Date'},
   ];
-  let html = '<thead><tr>' + cols.map(c=>
-    `<th style="cursor:pointer;user-select:none;" onclick="sortOverviewBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, overviewSort)}</span></th>`
-  ).join('') + '<th></th></tr></thead><tbody>';
+  let html = '<thead><tr>' + cols.map(c=>{
+    if(c.key===null) return `<th>${c.label}</th>`;
+    return `<th style="cursor:pointer;user-select:none;" onclick="sortOverviewBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, overviewSort)}</span></th>`;
+  }).join('') + '<th></th></tr></thead><tbody>';
 
-  rows.forEach(r=>{
-    html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-      <td style="max-width:260px;white-space:normal;">${thumb(r.product.image_url)}${escapeHtml(productDisplayName(r.product))}</td>
-      <td>${fmtMoney(r.totalSales)}</td>
-      <td>${fmtMoney(r.netProfit)}</td>
-      <td>${fmtPct(r.avgMargin)}</td>
-      <td>${fmtInt(r.units)}</td>
-      <td>${fmtInt(r.sessions)}</td>
-      <td>${fmtRank(r.bestBSR)}</td>
-      <td>${r.weeksWithData} / 12</td>
+  // Segregated by tag rather than one flat list — Launch and Expansion
+  // products are tracked differently elsewhere in this app (Expansion drops
+  // products after their own Week 12; Launch doesn't), so grouping them here
+  // keeps this table's totals meaningful rather than blending two different
+  // populations together.
+  const groupDefs = [
+    { tag:'launch', label:'Launch Products' },
+    { tag:'expansion', label:'Expansion Products' },
+  ];
+  const knownTags = groupDefs.map(g=>g.tag);
+  const otherRows = enriched.filter(r=>!knownTags.includes(r.product.tag));
+  const groups = otherRows.length ? [...groupDefs, { tag:null, label:'Other' }] : groupDefs;
+
+  const colCount = cols.length + 1;
+  let grandSales=0, grandProfit=0, grandUnits=0, grandSessions=0, anyGroupRendered=false;
+
+  groups.forEach(g=>{
+    const groupRows = g.tag===null ? otherRows : enriched.filter(r=>r.product.tag===g.tag);
+    if(!groupRows.length) return;
+    anyGroupRendered = true;
+    html += `<tr class="table-section-row"><td colspan="${colCount}">${g.label} (${groupRows.length})</td></tr>`;
+
+    const sorted = sortRows(groupRows, overviewSort.key, overviewSort.dir, r=>productLineOnly(r.product));
+    let groupSales=0, groupProfit=0, groupUnits=0, groupSessions=0;
+    sorted.forEach(r=>{
+      groupSales+=r.totalSales; groupProfit+=r.netProfit; groupUnits+=r.units; groupSessions+=r.sessions;
+      html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
+        <td style="text-align:left;white-space:nowrap;min-width:220px;">${thumb(r.product.image_url)}${escapeHtml(productLineOnly(r.product))}</td>
+        <td>${escapeHtml(r.asin)}</td>
+        <td>${fmtMoney(r.totalSales)}</td>
+        <td>${fmtMoney(r.netProfit)}</td>
+        <td>${fmtPct(r.avgMargin)}</td>
+        <td>${sparklineSVG(r.weeks.map(w=>w.margin))}</td>
+        <td>${r.weeksToProfit!=null ? 'Wk '+r.weeksToProfit : 'Not yet'}</td>
+        <td>${fmtInt(r.units)}</td>
+        <td>${fmtInt(r.sessions)}</td>
+        <td>${fmtRank(r.bestBSR)}</td>
+        <td>${r.weeksWithData} / ${r.weeks.length}</td>
+        <td>${r.launchDate ? new Date(r.launchDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '–'}</td>
+        <td></td>
+      </tr>`;
+    });
+    grandSales+=groupSales; grandProfit+=groupProfit; grandUnits+=groupUnits; grandSessions+=groupSessions;
+    const groupMargin = groupSales? groupProfit/groupSales : 0;
+    html += `<tr style="font-weight:700;background:#F8FAFC;">
+      <td style="background:#F8FAFC;text-align:left;">${g.label} Total</td>
       <td></td>
+      <td>${fmtMoney(groupSales)}</td>
+      <td>${fmtMoney(groupProfit)}</td>
+      <td>${fmtPct(groupMargin)}</td>
+      <td></td><td></td>
+      <td>${fmtInt(groupUnits)}</td>
+      <td>${fmtInt(groupSessions)}</td>
+      <td></td><td></td><td></td><td></td>
     </tr>`;
   });
 
-  const totalSales = rows.reduce((a,r)=>a+r.totalSales,0);
-  const totalNetProfit = rows.reduce((a,r)=>a+r.netProfit,0);
-  const totalUnits = rows.reduce((a,r)=>a+r.units,0);
-  const totalSessions = rows.reduce((a,r)=>a+r.sessions,0);
-  const weightedMargin = totalSales? totalNetProfit/totalSales : 0;
-  const bestVals = rows.map(r=>r.bestBSR).filter(x=>x!=null&&x>0);
-  html += `</tbody><tfoot><tr style="font-weight:700;background:#F1F5F9;">
-    <td style="background:#F1F5F9;">Total</td>
-    <td>${fmtMoney(totalSales)}</td>
-    <td>${fmtMoney(totalNetProfit)}</td>
-    <td>${fmtPct(weightedMargin)}</td>
-    <td>${fmtInt(totalUnits)}</td>
-    <td>${fmtInt(totalSessions)}</td>
-    <td>${bestVals.length?fmtRank(Math.min(...bestVals)):'–'}</td>
-    <td>–</td>
-    <td style="background:#F1F5F9;"></td>
-  </tr></tfoot>`;
+  if(groups.length > 1 && anyGroupRendered){
+    const grandMargin = grandSales? grandProfit/grandSales : 0;
+    html += `<tr style="font-weight:700;background:#F1F5F9;">
+      <td style="background:#F1F5F9;text-align:left;">Grand Total</td>
+      <td></td>
+      <td>${fmtMoney(grandSales)}</td>
+      <td>${fmtMoney(grandProfit)}</td>
+      <td>${fmtPct(grandMargin)}</td>
+      <td></td><td></td>
+      <td>${fmtInt(grandUnits)}</td>
+      <td>${fmtInt(grandSessions)}</td>
+      <td></td><td></td><td></td><td></td>
+    </tr>`;
+  }
+
+  html += '</tbody>';
   document.getElementById('overviewTable').innerHTML = html;
 }
 function openProductFromOverview(asin){
