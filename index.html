@@ -595,31 +595,55 @@
     <div class="view" id="view-glossary">
       <div class="page-head">
         <h2>Metrics Glossary</h2>
-        <div class="meta">How every calculated metric in this dashboard is derived — direct pass-through fields from Sellerboard/Sellerfox aren't listed here, only the ones this app works out itself.</div>
+        <div class="meta">Every metric in this dashboard, split into two groups: taken directly from your Sellerboard/Sellerfox uploads (never calculated, shows "N/A" if the source file doesn't report it for that week), and calculated from those direct values.</div>
       </div>
       <div class="panel">
+        <h3>Taken directly from the export</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">These never get computed, approximated, or defaulted to zero. If the underlying export doesn't report a value for a given week, the cell shows "N/A" rather than guessing.</p>
+        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
+          <table class="glossary-table">
+            <thead><tr><th>Metric</th><th>Source</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Total Sales (€)</td><td>Sellerboard — "Sales" column</td><td>N/A if that week's row doesn't report Sales</td></tr>
+              <tr><td>Units Sold</td><td>Sellerboard — "Units" column</td><td>N/A if that week's row doesn't report Units</td></tr>
+              <tr><td>Refund Units</td><td>Sellerboard — "Refunds" column</td><td>N/A if that week's row doesn't report Refunds</td></tr>
+              <tr><td>Ad Spend (€)</td><td>Sellerboard — "Ads" column</td><td>Stored as a positive number regardless of sign in the export. N/A if not reported.</td></tr>
+              <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>N/A if that week's row doesn't report Net profit</td></tr>
+              <tr><td>Sessions</td><td>Sellerboard — "Sessions" column (Sellerfox "Sessions" used only if Sellerboard didn't report it that week)</td><td>N/A if neither source reports it</td></tr>
+              <tr><td>Impressions</td><td>Sellerfox — "Impressions (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
+              <tr><td>Ad Clicks</td><td>Sellerfox — "Clicks (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
+              <tr><td>Ad Orders</td><td>Sellerfox — "Units 7D Same (SP)" column</td><td>Sellerfox's own export doesn't have a literal "Ad Orders" column — this is the closest real field (same-SKU, ad-attributed units over a 7-day window). "Units 7D (SP)" without "Same" was deliberately not used, since it includes halo/cross-sell units for other products bought after this product's ad was clicked. N/A if Sellerfox wasn't uploaded.</td></tr>
+              <tr><td>Ad Sales (€)</td><td>Sellerfox — "Sales 7D (SP)" column</td><td>No "Same SKU" variant exists for Sales the way it does for Units, so this may include some halo/cross-sell sales attributed to other products. N/A if Sellerfox wasn't uploaded.</td></tr>
+              <tr><td>Organic Sales (€) / Organic Sales (%)</td><td>Not available from either export</td><td>Always shows N/A. Total Sales − Ad Sales was considered and deliberately rejected — even though both pieces are real numbers, subtracting them is still a calculation, and this metric is meant to be a direct figure or nothing.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Calculated from the values above</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Metric names below match exactly what's shown on the dashboard. Any calculation involving a metric from the table above inherits its N/A behavior — e.g. if Ad Spend is N/A for a week, TACoS is N/A for that week too, not silently treated as based on €0.</p>
         <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
           <table class="glossary-table">
             <thead><tr><th>Metric</th><th>Formula</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><td>Refund Rate (%)</td><td>refunds ÷ units</td><td>Only used if Sellerboard didn't already report its own Refund %</td></tr>
-              <tr><td>Margin (%)</td><td>net_profit ÷ sales</td><td>Only used if Sellerboard didn't already report its own Margin %. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td></tr>
-              <tr><td>TACoS (%)</td><td>ad_spend ÷ sales</td><td>Always calculated, never pulled from either source</td></tr>
-              <tr><td>Cost Per Order (€)</td><td>ad_spend ÷ units</td><td></td></tr>
-              <tr><td>Profit Per Order (€)</td><td>net_profit ÷ units</td><td></td></tr>
-              <tr><td>Conversion Rate (%)</td><td>units ÷ sessions</td><td>Only used if Sellerboard didn't already report its own Unit Session %</td></tr>
-              <tr><td>Click-Through Rate (%)</td><td>clicks ÷ impressions</td><td>Sellerfox or Sellerboard report upload</td></tr>
-              <tr><td>Avg. CPC (€)</td><td>ad_spend ÷ clicks</td><td>Ad spend from Sellerboard, clicks from Sellerfox</td></tr>
-              <tr><td>Ad Sales (€)</td><td>Uploaded directly (Sellerfox "Sales 7D (SP)")</td><td>Not calculated — this is Sellerfox's own reported ad-attributed sales. No "Same SKU" variant exists for Sales like it does for Units, so this may include some halo/cross-sell sales attributed to other products bought after clicking this product's ad. Shows "–" if Sellerfox wasn't uploaded for that week, not €0.</td></tr>
-              <tr><td>Organic Revenue (€)</td><td>sales − Ad Sales, floored at 0</td><td>Derived from Ad Sales, not the other way around. Shows "–" if Ad Sales is unavailable.</td></tr>
-              <tr><td>Organic Sales (%)</td><td>Organic Revenue ÷ sales</td><td>Inherits the same "–" behavior as Organic Revenue when Sellerfox wasn't uploaded</td></tr>
-              <tr><td>Refund Rate (%) — totals/aggregates</td><td>total refunds ÷ total units</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td></tr>
-              <tr><td>Margin (%) — totals/aggregates</td><td>total net_profit ÷ total sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td></tr>
-              <tr><td>TACoS (%) — totals/aggregates</td><td>total ad_spend ÷ total sales</td><td></td></tr>
-              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>simple average of that product's 12 weekly Margin % values</td><td>Not sales-weighted — can differ slightly from total net_profit ÷ total sales for the same product</td></tr>
-              <tr><td>12-Wk Total column</td><td>sum</td><td>Sales, Units, Refunds, Ad Spend, Amazon Fees, COGS, Net Profit, Organic Revenue/Ad Sales, Sessions, Impressions, Clicks</td></tr>
-              <tr><td>12-Wk Avg column</td><td>simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, CTR, Average Sales Price</td></tr>
-              <tr><td>12-Wk Best BSR column</td><td>minimum</td><td>Lowest rank across the 12 weeks — lower is better</td></tr>
+              <tr><td>Refund Rate (%)</td><td>Refund Units ÷ Units Sold</td><td>Uses Sellerboard's own reported Refund % first if available; this formula is only the fallback</td></tr>
+              <tr><td>Margin (%)</td><td>Net Profit ÷ Total Sales</td><td>Uses Sellerboard's own reported Margin % first if available; this formula is only the fallback. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td></tr>
+              <tr><td>ROI (%)</td><td>Sellerboard's own reported ROI %, averaged across weeks</td><td>Not independently recalculated — no fallback formula, N/A if Sellerboard doesn't report it</td></tr>
+              <tr><td>Real ACOS (%)</td><td>Sellerboard's own reported Real ACOS %, averaged across weeks</td><td>Not independently recalculated — no fallback formula, N/A if Sellerboard doesn't report it</td></tr>
+              <tr><td>TACoS (%)</td><td>Ad Spend ÷ Total Sales</td><td>Always calculated, never pulled from either source directly</td></tr>
+              <tr><td>Cost Per Order (€)</td><td>Ad Spend ÷ Units Sold</td><td></td></tr>
+              <tr><td>Profit Per Order (€)</td><td>Net Profit ÷ Units Sold</td><td></td></tr>
+              <tr><td>Conversion Rate (%)</td><td>Units Sold ÷ Sessions</td><td>Uses Sellerboard's own reported Unit Session % first if available; this formula is only the fallback</td></tr>
+              <tr><td>Click-Through Rate (%)</td><td>Ad Clicks ÷ Impressions</td><td></td></tr>
+              <tr><td>Avg. CPC (€)</td><td>Ad Spend ÷ Ad Clicks</td><td>Ad Spend from Sellerboard, Ad Clicks from Sellerfox</td></tr>
+              <tr><td>Average Sales Price (€)</td><td>Sellerboard's own reported Average Sales Price, averaged across weeks</td><td>Not independently recalculated from Sales ÷ Units</td></tr>
+              <tr><td>Refund Rate (%) — totals/aggregates</td><td>Total Refund Units ÷ Total Units Sold</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td></tr>
+              <tr><td>Margin (%) — totals/aggregates</td><td>Total Net Profit ÷ Total Sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td></tr>
+              <tr><td>TACoS (%) — totals/aggregates</td><td>Total Ad Spend ÷ Total Sales</td><td></td></tr>
+              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>Simple average of that product's weekly Margin % values</td><td>Not sales-weighted — can differ slightly from Total Net Profit ÷ Total Sales for the same product</td></tr>
+              <tr><td>12-Wk Total column</td><td>Sum</td><td>Total Sales, Units Sold, Refund Units, Ad Spend, Amazon Fees, Cost of Goods, Net Profit, Organic Sales, Ad Sales, Sessions, Impressions, Ad Clicks, Ad Orders</td></tr>
+              <tr><td>12-Wk Avg column</td><td>Simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, Click-Through Rate, Average Sales Price</td></tr>
+              <tr><td>12-Wk Best BSR column</td><td>Minimum</td><td>Lowest rank across the weeks shown — lower is better</td></tr>
             </tbody>
           </table>
         </div>
@@ -648,10 +672,12 @@ const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANO
 const EDGE_BASE = window.SUPABASE_URL + '/functions/v1';
 const BRAND_OPTIONS = ['Heimfleiss','Nasswerk','Tarpofix','PD','Planenfux','Mattenheld'];
 
-function fmtMoney(n){ if(n==null||isNaN(n)) return '–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
-function fmtInt(n){ if(n==null||isNaN(n)) return '–'; return Math.round(n).toLocaleString('en-US'); }
-function fmtPct(n){ if(n==null||isNaN(n)) return '–'; return (n*100).toFixed(1)+'%'; }
+function fmtMoney(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtInt(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return Math.round(n).toLocaleString('en-US'); }
+function fmtPct(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n*100).toFixed(1)+'%'; }
 function fmtRank(n){ return n?fmtInt(n):'–'; }
+function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
+function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
 
 function thumb(imageUrl, size=28){
   return imageUrl
@@ -1172,11 +1198,11 @@ function weekNumber(launchDate, rowDate){
 function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
   const makeEmptyWeek = () => ({
     hasData:false,
-    sales:0, units:0, refunds:0, refundPctSum:0, refundPctN:0,
-    adSpend:0, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0,
+    sales:0, salesSeen:false, units:0, unitsSeen:false, refunds:0, refundsSeen:false, refundPctSum:0, refundPctN:0,
+    adSpend:0, adSpendSeen:false, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0, netProfitSeen:false,
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
-    bsr:null, sessions:0, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
-    impressions:0, clicks:0, adsOrders:0, adSales:0,
+    bsr:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
+    impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false };
 
@@ -1198,15 +1224,23 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
   const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
   if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor };
 
+  // Sales, Units, Net Profit, Ad Spend, and Refunds must come directly from
+  // Sellerboard's own export — genuinely null (shown as N/A, not €0/0) for
+  // any week where Sellerboard didn't report that specific field, never
+  // silently defaulted or approximated.
   (sbRows||[]).forEach(r=>{
     const wk = weekNumber(anchor, r.week);
     if(wk<1||wk>totalWeeks) return;
     const w = weeks[wk-1];
     w.hasData = true;
-    w.sales+=+r.sales||0; w.units+=+r.units||0; w.refunds+=+r.refunds||0;
-    w.adSpend+=Math.abs(+r.ad_spend||0); w.amazonFees+=Math.abs(+r.amazon_fees||0); w.cogs+=Math.abs(+r.cogs||0);
-    w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0; w.netProfit+=+r.net_profit||0;
-    w.sessions+=+r.sessions||0;
+    if(r.sales!=null){ w.sales+=+r.sales; w.salesSeen=true; }
+    if(r.units!=null){ w.units+=+r.units; w.unitsSeen=true; }
+    if(r.refunds!=null){ w.refunds+=+r.refunds; w.refundsSeen=true; }
+    if(r.ad_spend!=null){ w.adSpend+=Math.abs(+r.ad_spend); w.adSpendSeen=true; }
+    w.amazonFees+=Math.abs(+r.amazon_fees||0); w.cogs+=Math.abs(+r.cogs||0);
+    w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0;
+    if(r.net_profit!=null){ w.netProfit+=+r.net_profit; w.netProfitSeen=true; }
+    if(r.sessions!=null){ w.sessions+=+r.sessions; w.sessionsSeen=true; }
     w.bsr = (w.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(w.bsr, r.bsr) : w.bsr);
     if(r.refund_pct!=null){ w.refundPctSum+=+r.refund_pct; w.refundPctN++; }
     if(r.margin_pct!=null){ w.marginSum+=+r.margin_pct; w.marginN++; }
@@ -1216,16 +1250,19 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.avg_sales_price!=null){ w.avgPriceSum+=+r.avg_sales_price; w.avgPriceN++; }
   });
 
-  // Sellerfox is optional here — Sellerboard already supplies Sessions/BSR/Conversion;
-  // Sellerfox only adds Impressions/Clicks (for Click-Through Rate) if it's uploaded too.
+  // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
+  // Sellerfox's own export — same "genuinely null if not reported" rule.
+  // Sessions falls back here only if Sellerboard didn't already report it.
   (sfRows||[]).forEach(r=>{
     const wk = weekNumber(anchor, r.week);
     if(wk<1||wk>totalWeeks) return;
     const w = weeks[wk-1];
     w.hasData = true;
-    w.impressions+=+r.impressions||0; w.clicks+=+r.clicks||0; w.adsOrders+=+r.orders||0;
-    w.adSales+=+r.ad_sales||0;
-    if(!w.sessions && r.sessions) w.sessions+=+r.sessions;
+    if(r.impressions!=null){ w.impressions+=+r.impressions; w.impressionsSeen=true; }
+    if(r.clicks!=null){ w.clicks+=+r.clicks; w.clicksSeen=true; }
+    if(r.orders!=null){ w.adsOrders+=+r.orders; w.adsOrdersSeen=true; }
+    if(r.ad_sales!=null){ w.adSales+=+r.ad_sales; w.adSalesSeen=true; }
+    if(!w.sessionsSeen && r.sessions!=null){ w.sessions+=+r.sessions; w.sessionsSeen=true; }
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
@@ -1252,30 +1289,43 @@ function finalizeWeek(w){
       hasData:false,
     };
   }
-  // Ad Sales is now directly uploaded from Sellerfox's "Sales 7D (SP)" column
-  // (previously approximated from ad-attributed units) — null when Sellerfox
-  // wasn't uploaded for this week, not 0, so it's visibly "unknown" not "€0".
-  // Organic Revenue/% are now derived FROM Ad Sales, the reverse of before.
-  const advertisedRevenue = (w.clicks || w.adsOrders || w.adSales) ? w.adSales : null;
-  const organicRevenue = (advertisedRevenue!=null && w.sales) ? Math.max(0, w.sales - advertisedRevenue) : null;
-  const organicPct = (organicRevenue!=null && w.sales) ? organicRevenue/w.sales : null;
+  // These fields must come directly from the export — null (N/A) if the
+  // source row genuinely didn't report them, never approximated or defaulted.
+  const sales = w.salesSeen ? w.sales : null;
+  const units = w.unitsSeen ? w.units : null;
+  const netProfit = w.netProfitSeen ? w.netProfit : null;
+  const refunds = w.refundsSeen ? w.refunds : null;
+  const adSpend = w.adSpendSeen ? w.adSpend : null;
+  const sessions = w.sessionsSeen ? w.sessions : null;
+  const impressions = w.impressionsSeen ? w.impressions : null;
+  const clicks = w.clicksSeen ? w.clicks : null;
+  const adsOrders = w.adsOrdersSeen ? w.adsOrders : null;
+  // Ad Sales is directly uploaded from Sellerfox's "Sales 7D (SP)" column.
+  const advertisedRevenue = w.adSalesSeen ? w.adSales : null;
+  // Organic Sales has no literal column in either export — Total Sales minus
+  // Ad Sales was considered and deliberately rejected as "still a
+  // computation" even though both pieces are real numbers, so this always
+  // shows N/A rather than being derived.
+  const organicRevenue = null;
+  const organicPct = null;
+
   return {
-    sales:w.sales, units:w.units, refunds:w.refunds,
-    refundPct: w.refundPctN? (w.refundPctSum/w.refundPctN)/100 : (w.units? w.refunds/w.units : 0),
-    adSpend:w.adSpend, amazonFees:w.amazonFees, cogs:w.cogs, vat:w.vat, shipping:w.shipping,
-    grossProfit:w.grossProfit, netProfit:w.netProfit,
-    margin: w.marginN? (w.marginSum/w.marginN)/100 : (w.sales? w.netProfit/w.sales : 0),
+    sales, units, refunds,
+    refundPct: w.refundPctN? (w.refundPctSum/w.refundPctN)/100 : ((units!=null && refunds!=null && units)? refunds/units : null),
+    adSpend, amazonFees:w.amazonFees, cogs:w.cogs, vat:w.vat, shipping:w.shipping,
+    grossProfit:w.grossProfit, netProfit,
+    margin: w.marginN? (w.marginSum/w.marginN)/100 : ((sales!=null && netProfit!=null && sales)? netProfit/sales : null),
     roi: w.roiN? (w.roiSum/w.roiN)/100 : null,
     realAcos: w.acosN? (w.acosSum/w.acosN)/100 : null,
-    tacos: w.sales? w.adSpend/w.sales : null,
-    cpo: w.units? w.adSpend/w.units : null,
-    profitPerOrder: w.units? w.netProfit/w.units : null,
-    bsr:w.bsr, sessions:w.sessions,
-    cvr: w.cvrN? (w.cvrSum/w.cvrN)/100 : (w.sessions? w.units/w.sessions : 0),
+    tacos: (adSpend!=null && sales) ? adSpend/sales : null,
+    cpo: (adSpend!=null && units) ? adSpend/units : null,
+    profitPerOrder: (netProfit!=null && units) ? netProfit/units : null,
+    bsr:w.bsr, sessions,
+    cvr: w.cvrN? (w.cvrSum/w.cvrN)/100 : ((sessions!=null && units!=null && sessions)? units/sessions : null),
     avgSalesPrice: w.avgPriceN? w.avgPriceSum/w.avgPriceN : null,
-    impressions:w.impressions, clicks:w.clicks, adsOrders:w.adsOrders,
-    ctr: w.impressions? w.clicks/w.impressions : 0,
-    cpc: w.clicks? w.adSpend/w.clicks : null,
+    impressions, clicks, adsOrders,
+    ctr: (impressions!=null && clicks!=null && impressions) ? clicks/impressions : null,
+    cpc: (clicks!=null && adSpend!=null && clicks) ? adSpend/clicks : null,
     organicPct,
     organicRevenue,
     advertisedRevenue,
@@ -2025,7 +2075,7 @@ function renderWowChart(){
         legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, boxWidth:10, color:'#64748B'}},
         tooltip:{callbacks:{ label: ctx => ctx.dataset.yAxisID==='y1'
           ? (ctx.raw==null ? 'No prior week to compare' : 'WoW change: '+ctx.raw+'%')
-          : m.label+': '+(ctx.raw==null?'–':m.fmt(ctx.raw)) }},
+          : m.label+': '+m.fmt(ctx.raw) }},
       },
       scales:{
         x:{grid:{display:false}, ticks:{color:'#64748B'}},
@@ -2037,14 +2087,14 @@ function renderWowChart(){
 }
 
 const METRICS = [
-  {key:'sales', label:'Total Sales (€)', fmt:fmtMoney, kind:'sum', tierKeys:{good:'target_sales_good',better:'target_sales_better',best:'target_sales_best'}},
-  {key:'units', label:'Units Sold', fmt:fmtInt, kind:'sum', tierKeys:{good:'target_units_good',better:'target_units_better',best:'target_units_best'}},
-  {key:'refunds', label:'Refund Units', fmt:fmtInt, kind:'sum', lowerIsBetter:true},
+  {key:'sales', label:'Total Sales (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_sales_good',better:'target_sales_better',best:'target_sales_best'}},
+  {key:'units', label:'Units Sold', fmt:fmtIntNA, kind:'sum', tierKeys:{good:'target_units_good',better:'target_units_better',best:'target_units_best'}},
+  {key:'refunds', label:'Refund Units', fmt:fmtIntNA, kind:'sum', lowerIsBetter:true},
   {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
-  {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
+  {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoneyNA, kind:'sum', lowerIsBetter:true},
   {key:'amazonFees', label:'Amazon Fees (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
   {key:'cogs', label:'Cost of Goods (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
-  {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoney, kind:'sum', tierKeys:{good:'target_net_profit_good',better:'target_net_profit_better',best:'target_net_profit_best'}},
+  {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_net_profit_good',better:'target_net_profit_better',best:'target_net_profit_best'}},
   {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', tierKeys:{good:'target_margin_pct_good',better:'target_margin_pct_better',best:'target_margin_pct_best'}, targetIsPct:true},
   {key:'roi', label:'ROI (%)', fmt:fmtPct, kind:'calc'},
   {key:'realAcos', label:'Real ACOS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
@@ -2053,12 +2103,13 @@ const METRICS = [
   {key:'profitPerOrder', label:'Profit Per Order (€)', fmt:fmtMoney, kind:'calc'},
   {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
   {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc'},
-  {key:'organicRevenue', label:'Organic Revenue (€)', fmt:fmtMoney, kind:'sum'},
-  {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoney, kind:'sum'},
-  {key:'sessions', label:'Sessions', fmt:fmtInt, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
+  {key:'organicRevenue', label:'Organic Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
+  {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
+  {key:'sessions', label:'Sessions', fmt:fmtIntNA, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
   {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc'},
-  {key:'impressions', label:'Impressions', fmt:fmtInt, kind:'sum'},
-  {key:'clicks', label:'Clicks', fmt:fmtInt, kind:'sum'},
+  {key:'impressions', label:'Impressions', fmt:fmtIntNA, kind:'sum'},
+  {key:'clicks', label:'Ad Clicks', fmt:fmtIntNA, kind:'sum'},
+  {key:'adsOrders', label:'Ad Orders', fmt:fmtIntNA, kind:'sum'},
   {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc'},
   {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc'},
   {key:'bsr', label:'Best BSR (lowest = best)', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}},
@@ -2114,7 +2165,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
       const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
-      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v===null?'–':m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
+      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
@@ -2124,7 +2175,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const thresholds = m.tierKeys ? getThresholds(t, m.tierKeys, m.targetIsPct) : null;
     const tier = thresholds ? computeTier(total, thresholds, m.lowerIsBetter) : null;
     const totalStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
-    html += `<td class="total-col" style="${totalStyle}">${total===null?'–':m.fmt(total)}</td>`;
+    html += `<td class="total-col" style="${totalStyle}">${m.fmt(total)}</td>`;
 
     let targetCell = '–';
     if(thresholds){
@@ -2430,16 +2481,16 @@ function renderChildSkuSummary(){
     {key:'__name__', label:'Child SKU'}, {key:'totalSales', label:'12-Wk Sales'},
     {key:'totalUnits', label:'12-Wk Units'}, {key:'avgMargin', label:'Avg. Margin'}, {key:'bestBSR', label:'Best BSR'},
   ];
-  let html = '<thead><tr>' + cols.map(c=>
-    `<th style="cursor:pointer;user-select:none;" onclick="sortChildrenBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, childSort)}</span></th>`
+  let html = '<thead><tr>' + cols.map((c,i)=>
+    `<th style="cursor:pointer;user-select:none;text-align:${i===0?'left':'center'};" onclick="sortChildrenBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, childSort)}</span></th>`
   ).join('') + '<th></th></tr></thead><tbody>';
   rows.forEach(r=>{
     html += `<tr>
-      <td style="max-width:260px;white-space:normal;">${escapeHtml(childLabel(r))}</td>
-      <td>${fmtMoney(r.totalSales)}</td>
-      <td>${fmtInt(r.totalUnits)}</td>
-      <td>${fmtPct(r.avgMargin)}</td>
-      <td>${fmtRank(r.bestBSR)}</td>
+      <td style="text-align:left;white-space:nowrap;min-width:200px;">${escapeHtml(childLabel(r))}</td>
+      <td style="text-align:center;">${fmtMoney(r.totalSales)}</td>
+      <td style="text-align:center;">${fmtInt(r.totalUnits)}</td>
+      <td style="text-align:center;">${fmtPct(r.avgMargin)}</td>
+      <td style="text-align:center;">${fmtRank(r.bestBSR)}</td>
       <td></td>
     </tr>`;
   });
@@ -2466,7 +2517,7 @@ function renderChildCompareChart(){
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{position:'bottom', labels:{font:{family:'Inter',size:11}, boxWidth:10, color:'#64748B'}},
-        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw==null?'–':m.fmt(ctx.raw)}`}} },
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${m.fmt(ctx.raw)}`}} },
       scales:{ x:{grid:{display:false}, ticks:{color:'#64748B'}}, y:{grid:{color:'#E2E8F0'}, ticks:{color:'#64748B', callback:v=>m.fmt(v)}} },
     }
   });
@@ -2588,9 +2639,9 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
       const tier = thresholds ? computeTier(v, thresholds, m.lowerIsBetter) : null;
       const cellStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
       html += `<td style="background:#F8FAFC;font-size:10px;">${goodStr}</td>`;
-      html += `<td style="${cellStyle}"><div style="display:inline-block;max-width:75px;overflow:hidden;">${v==null?'–':m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
+      html += `<td style="${cellStyle}"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
-    html += `<td class="total-col">${total==null?'–':m.fmt(total)}</td><td></td></tr>`;
+    html += `<td class="total-col">${m.fmt(total)}</td><td></td></tr>`;
   });
   html += '</tbody>';
   return html;
