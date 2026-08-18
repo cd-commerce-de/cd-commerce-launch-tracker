@@ -211,6 +211,10 @@
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19V5"/><path d="M4 15l5-5 4 4 7-7"/></svg></div>
       Actual vs. Target
     </div>
+    <div class="nav-item" data-view="analysis" onclick="switchView('analysis')" title="Cross-product patterns: how long it typically takes to become profitable, which products are ahead or behind the curve, and where ad spend is or isn't paying back">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></div>
+      Analysis
+    </div>
     <div class="nav-section-label">Data</div>
     <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')" title="Upload weekly exports and manage your product list">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v12"/><polyline points="7,10 12,15 17,10"/><path d="M5 19h14"/></svg></div>
@@ -444,6 +448,47 @@
       </div>
     </div>
 
+    <div class="view" id="view-analysis">
+      <div class="page-head">
+        <h2>Analysis</h2>
+        <div class="meta">Cross-product patterns from your historical data — how long profitability typically takes, which products are ahead or behind that curve, and where ad spend is or isn't paying back. Based on each product's own first 12 weeks, so products are compared on equal footing regardless of how long ago they launched.</div>
+      </div>
+      <div class="panel">
+        <div class="filter-bar">
+          <div class="filter-field"><label>Tag</label><select id="analysisTagFilter" onchange="loadAnalysis()"><option value="">All (Launch + Expansion)</option><option value="launch">Launch only</option><option value="expansion">Expansion only</option></select></div>
+        </div>
+      </div>
+      <div id="analysisEmpty" class="panel empty-state" style="display:none;">
+        <div class="big">Not enough data yet</div>
+        Analysis needs at least a few products with uploaded weekly data to find meaningful patterns.
+      </div>
+      <div id="analysisBody" style="display:none;">
+        <div class="panel">
+          <h3>Headline numbers</h3>
+          <div class="kpi-grid" id="analysisKpiGrid"></div>
+        </div>
+        <div class="panel">
+          <h3>Typical margin trajectory</h3>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 12px;">Average Margin % at each week number, across every product that has data for that week. This is the "shape" your launches tend to follow — useful for judging whether a new launch is on track or falling behind.</p>
+          <div style="height:280px;"><canvas id="chartMarginTrajectory"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>How many weeks to turn profitable</h3>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 12px;">Number of products, grouped by which week they first crossed into a positive Margin %. "Not yet" means the product hasn't reached positive margin within its first 12 weeks (or doesn't have 12 weeks of data yet).</p>
+          <div style="height:260px;"><canvas id="chartWeeksToProfitHist"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Ad spend vs. profit (12-week totals)</h3>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 12px;">Each dot is one product. Dots to the right spent more on ads; dots higher up made more profit. Products in the bottom-right (high ad spend, low/negative profit) are worth a closer look.</p>
+          <div style="height:320px;"><canvas id="chartAdSpendVsProfit"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Per-product breakdown</h3>
+          <div class="table-wrap"><table class="stretch-table" id="analysisTable"></table></div>
+        </div>
+      </div>
+    </div>
+
     <div class="view" id="view-data-manage">
       <div class="page-head"><h2>Upload &amp; Manage</h2><div class="meta">Weekly exports are parsed and stored on the backend — nothing is processed in this browser.</div></div>
 
@@ -653,6 +698,7 @@ function switchView(view){
   if(view==='launch-dash') loadTagDashboard('launch');
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
+  if(view==='analysis') loadAnalysis();
 }
 
 /* ---------------- Server / Supabase reachability check ---------------- */
@@ -1066,6 +1112,7 @@ async function refreshAllViews(){
   await loadTagDashboard('launch');
   await loadTagDashboard('expansion');
   await loadTseForecast();
+  await loadAnalysis();
 }
 async function populateSelectors(){
   const products = await fetchProducts();
@@ -2369,6 +2416,180 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   });
   html += '</tbody>';
   return html;
+}
+
+/* ---------------- Analysis ---------------- */
+let analysisCharts = {};
+function destroyAnalysisCharts(){ Object.values(analysisCharts).forEach(c=>c && c.destroy()); analysisCharts = {}; }
+let currentAnalysisData = [];
+let analysisSort = { key: 'weeksToProfit', dir: 'asc' };
+
+async function loadAnalysis(){
+  const tagFilter = document.getElementById('analysisTagFilter').value;
+  let products = await fetchProducts();
+  if(tagFilter) products = products.filter(p => p.tag === tagFilter);
+
+  document.getElementById('analysisEmpty').style.display = 'none';
+  document.getElementById('analysisBody').style.display = 'none';
+  if(!products.length){ document.getElementById('analysisEmpty').style.display = 'block'; return; }
+
+  const asins = products.map(p => p.asin);
+  const [{ data: allSbRows }, { data: allSfRows }] = await Promise.all([
+    sb.from('sellerboard_rows').select('*').in('asin', asins),
+    sb.from('sellerfox_rows').select('*').in('asin', asins),
+  ]);
+  const sbByAsin = {}, sfByAsin = {};
+  (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin]=[]; sbByAsin[r.asin].push(r); });
+  (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin]=[]; sfByAsin[r.asin].push(r); });
+
+  // Deliberately NOT extended past week 12 here — comparing products on a
+  // consistent, equal-length window is what makes "average weeks to X"
+  // meaningful across products launched at very different times.
+  const perProduct = products.map(product => {
+    const { weeks } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
+
+    let weeksToProfit = null;
+    for(let i=0;i<weeks.length;i++){
+      if(weeks[i].margin!=null && weeks[i].margin>0){ weeksToProfit = i+1; break; }
+    }
+
+    // First week where cumulative profit catches up to cumulative ad spend —
+    // a simple payback-period read on how long ad investment takes to pay for itself.
+    let cumProfit=0, cumAdSpend=0, paybackWeek=null;
+    weeks.forEach((w,i)=>{
+      cumProfit += w.netProfit||0;
+      cumAdSpend += w.adSpend||0;
+      if(paybackWeek===null && cumAdSpend>0 && cumProfit>=cumAdSpend) paybackWeek = i+1;
+    });
+
+    const dataWeeks = weeks.filter(w=>w.hasData);
+    const lastDataWeek = dataWeeks.length ? dataWeeks[dataWeeks.length-1] : null;
+    const currentlyProfitable = (lastDataWeek && lastDataWeek.margin!=null) ? lastDataWeek.margin>0 : null;
+
+    return {
+      product, weeks, weeksToProfit, paybackWeek,
+      currentMargin: lastDataWeek ? lastDataWeek.margin : null,
+      totalAdSpend: sum(weeks,'adSpend'), totalNetProfit: sum(weeks,'netProfit'),
+      currentlyProfitable, hasEnoughData: dataWeeks.length>0,
+    };
+  }).filter(pd=>pd.hasEnoughData);
+
+  if(!perProduct.length){ document.getElementById('analysisEmpty').style.display = 'block'; return; }
+  document.getElementById('analysisBody').style.display = 'block';
+
+  renderAnalysisKPIs(perProduct);
+  renderMarginTrajectoryChart(perProduct);
+  renderWeeksToProfitHistogram(perProduct);
+  renderAdSpendVsProfitScatter(perProduct);
+  renderAnalysisTable(perProduct);
+}
+
+function renderAnalysisKPIs(perProduct){
+  const withProfit = perProduct.filter(pd=>pd.weeksToProfit!=null);
+  const avgWeeksToProfit = withProfit.length ? withProfit.reduce((a,pd)=>a+pd.weeksToProfit,0)/withProfit.length : null;
+  const neverProfitable = perProduct.length - withProfit.length;
+
+  const withPayback = perProduct.filter(pd=>pd.paybackWeek!=null);
+  const avgPayback = withPayback.length ? withPayback.reduce((a,pd)=>a+pd.paybackWeek,0)/withPayback.length : null;
+
+  const known = perProduct.filter(pd=>pd.currentlyProfitable!=null);
+  const pctProfitableNow = known.length ? (known.filter(pd=>pd.currentlyProfitable).length/known.length)*100 : null;
+
+  const cards = [
+    {label:'Avg. Weeks to Positive Margin', value: avgWeeksToProfit!=null ? avgWeeksToProfit.toFixed(1)+' wks' : '–',
+      desc: `Across ${withProfit.length} of ${perProduct.length} products that have reached it${neverProfitable?` — ${neverProfitable} haven't yet within their first 12 weeks`:''}`},
+    {label:'Currently Profitable', value: pctProfitableNow!=null ? pctProfitableNow.toFixed(0)+'%' : '–',
+      desc: known.length? `${known.filter(pd=>pd.currentlyProfitable).length} of ${known.length} products, as of their most recent uploaded week` : 'No margin data yet'},
+    {label:'Avg. Ad Spend Payback', value: avgPayback!=null ? avgPayback.toFixed(1)+' wks' : '–',
+      desc: withPayback.length ? `Weeks for cumulative profit to recoup cumulative ad spend, across ${withPayback.length} products` : 'No product has recouped ad spend yet'},
+    {label:'Products Analyzed', value: String(perProduct.length), desc:'Products with at least one week of uploaded data'},
+  ];
+  document.getElementById('analysisKpiGrid').innerHTML = cards.map(c=>
+    `<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="desc">${c.desc}</div></div>`
+  ).join('');
+}
+
+function renderMarginTrajectoryChart(perProduct){
+  const avgByWeek = [];
+  for(let i=0;i<12;i++){
+    const vals = perProduct.map(pd=>pd.weeks[i]).filter(w=>w && w.margin!=null).map(w=>w.margin);
+    avgByWeek.push(vals.length ? vals.reduce((a,v)=>a+v,0)/vals.length : null);
+  }
+  const labels = avgByWeek.map((_,i)=>'Wk '+(i+1));
+  if(analysisCharts.marginTrajectory) analysisCharts.marginTrajectory.destroy();
+  analysisCharts.marginTrajectory = new Chart(document.getElementById('chartMarginTrajectory'), {
+    type:'line',
+    data:{labels, datasets:[{
+      label:'Average Margin %', data: avgByWeek.map(v=>v!=null?+(v*100).toFixed(1):null),
+      borderColor:'#D97757', backgroundColor:'#D9775720', fill:true, tension:.3, borderWidth:3, spanGaps:true, pointRadius:4,
+    }]},
+    options: { ...chartOpts(), scales:{ ...chartOpts().scales, y:{ ...chartOpts().scales.y, ticks:{ callback:v=>v+'%' } } }, plugins:{legend:{display:false}} },
+  });
+}
+
+function renderWeeksToProfitHistogram(perProduct){
+  const buckets = Array.from({length:12}, ()=>0);
+  let neverCount = 0;
+  perProduct.forEach(pd=>{
+    if(pd.weeksToProfit!=null) buckets[pd.weeksToProfit-1]++;
+    else neverCount++;
+  });
+  const labels = [...Array.from({length:12},(_,i)=>'Wk '+(i+1)), 'Not yet'];
+  const data = [...buckets, neverCount];
+  if(analysisCharts.weeksToProfitHist) analysisCharts.weeksToProfitHist.destroy();
+  analysisCharts.weeksToProfitHist = new Chart(document.getElementById('chartWeeksToProfitHist'), {
+    type:'bar',
+    data:{labels, datasets:[{ label:'Products', data, backgroundColor: labels.map((l,i)=> i===labels.length-1 ? '#94A3B8' : '#D97757') }]},
+    options: { ...chartOpts(), plugins:{legend:{display:false}}, scales:{ ...chartOpts().scales, y:{ ...chartOpts().scales.y, ticks:{ stepSize:1, precision:0 } } } },
+  });
+}
+
+function renderAdSpendVsProfitScatter(perProduct){
+  const points = perProduct.map(pd=>({x: Math.round(pd.totalAdSpend), y: Math.round(pd.totalNetProfit), label: productDisplayName(pd.product)}));
+  if(analysisCharts.adSpendVsProfit) analysisCharts.adSpendVsProfit.destroy();
+  analysisCharts.adSpendVsProfit = new Chart(document.getElementById('chartAdSpendVsProfit'), {
+    type:'scatter',
+    data:{ datasets:[{ label:'Products', data: points, backgroundColor:'#D97757', pointRadius:6, pointHoverRadius:8 }] },
+    options: { ...chartOpts(),
+      scales:{ x:{ ...chartOpts().scales.x, title:{display:true,text:'12-Wk Total Ad Spend (€)',color:'#64748B'} }, y:{ ...chartOpts().scales.y, title:{display:true,text:'12-Wk Total Net Profit (€)',color:'#64748B'} } },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => `${ctx.raw.label}: €${ctx.raw.x.toLocaleString()} spend, €${ctx.raw.y.toLocaleString()} profit` } } },
+    },
+  });
+}
+
+function sortAnalysisBy(key){
+  if(analysisSort.key===key) analysisSort.dir = analysisSort.dir==='asc'?'desc':'asc';
+  else { analysisSort.key = key; analysisSort.dir = 'asc'; }
+  renderAnalysisTable(currentAnalysisData);
+}
+function renderAnalysisTable(perProduct){
+  currentAnalysisData = perProduct;
+  const rows = perProduct.map(pd=>({ ...pd, name: productDisplayName(pd.product) }));
+  const cols = [
+    {key:'name', label:'Product'},
+    {key:'weeksToProfit', label:'Weeks to Positive Margin'},
+    {key:'paybackWeek', label:'Ad Spend Payback'},
+    {key:'currentMargin', label:'Current Margin %'},
+    {key:'totalNetProfit', label:'12-Wk Total Profit'},
+    {key:'totalAdSpend', label:'12-Wk Total Ad Spend'},
+  ];
+  const sorted = sortRows(rows, analysisSort.key, analysisSort.dir, r=>r.name);
+  let html = '<thead><tr>' + cols.map(c=>
+    `<th style="cursor:pointer;user-select:none;" onclick="sortAnalysisBy('${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, analysisSort)}</span></th>`
+  ).join('') + '<th></th></tr></thead><tbody>';
+  sorted.forEach(r=>{
+    html += `<tr>
+      <td style="text-align:left;white-space:normal;max-width:240px;">${escapeHtml(r.name)}</td>
+      <td>${r.weeksToProfit!=null ? 'Wk '+r.weeksToProfit : 'Not yet'}</td>
+      <td>${r.paybackWeek!=null ? 'Wk '+r.paybackWeek : '–'}</td>
+      <td>${r.currentMargin!=null ? fmtPct(r.currentMargin) : '–'}</td>
+      <td>${fmtMoney(r.totalNetProfit)}</td>
+      <td>${fmtMoney(r.totalAdSpend)}</td>
+      <td></td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('analysisTable').innerHTML = html;
 }
 
 (async function init(){
