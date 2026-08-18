@@ -2317,7 +2317,7 @@ function renderTagAnalysis(p, productData){
     const currentlyProfitable = (lastDataWeek && lastDataWeek.margin!=null) ? lastDataWeek.margin>0 : null;
     return {
       product, weeks, weeksToProfit, paybackWeek,
-      currentMargin: lastDataWeek ? lastDataWeek.margin : null,
+      avgMargin: avg(weeks.slice(0,12), 'margin'),
       totalAdSpend: sum(weeks.slice(0,12),'adSpend'), totalNetProfit: sum(weeks.slice(0,12),'netProfit'),
       currentlyProfitable, hasEnoughData: dataWeeks.length>0,
     };
@@ -2425,7 +2425,7 @@ function renderTagAnalysisTable(p, perProduct){
     {key:'name', label:'Product'},
     {key:'weeksToProfit', label:'Weeks to Positive Margin'},
     {key:'paybackWeek', label:'Ad Spend Payback'},
-    {key:'currentMargin', label:'Current Margin %'},
+    {key:'avgMargin', label:'Average Margin %'},
     {key:'totalNetProfit', label:'12-Wk Total Profit'},
     {key:'totalAdSpend', label:'12-Wk Total Ad Spend'},
   ];
@@ -2439,7 +2439,7 @@ function renderTagAnalysisTable(p, perProduct){
       <td style="text-align:left;white-space:nowrap;min-width:280px;">${thumb(r.product.image_url, 32)}${escapeHtml(r.name)}</td>
       <td style="text-align:center;">${r.weeksToProfit!=null ? 'Wk '+r.weeksToProfit : 'Not yet'}</td>
       <td style="text-align:center;">${r.paybackWeek!=null ? 'Wk '+r.paybackWeek : '–'}</td>
-      <td style="text-align:center;">${r.currentMargin!=null ? fmtPct(r.currentMargin) : '–'}</td>
+      <td style="text-align:center;">${r.avgMargin!=null ? fmtPct(r.avgMargin) : '–'}</td>
       <td style="text-align:center;">${fmtMoney(r.totalNetProfit)}</td>
       <td style="text-align:center;">${fmtMoney(r.totalAdSpend)}</td>
       <td></td>
