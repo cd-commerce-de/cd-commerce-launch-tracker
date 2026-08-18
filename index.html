@@ -261,7 +261,7 @@
           </div>
           <button class="btn" onclick="resetTagFilters('launch')">Reset filters</button>
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks. Once a product is past its own Week 12, it drops off this dashboard entirely — its full history is still available in Product Detail.</p>
       </div>
       <div class="panel" id="launchDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
@@ -340,7 +340,7 @@
           </div>
           <button class="btn" onclick="resetTagFilters('expansion')">Reset filters</button>
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks — a product past its Week 12 stops contributing to later weeks, though its scorecard still shows below with its own full history.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks. Once a product is past its own Week 12, it drops off this dashboard entirely — its full history is still available in Product Detail.</p>
       </div>
       <div class="panel" id="expansionDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
@@ -1613,27 +1613,23 @@ function renderTagDashboard(tag){
     return { product, weeks, anchor, weekDates, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
-  // Expansion Dashboard only shows products still inside their own first 12
+  // Both dashboards only show products still inside their own first 12
   // weeks — once a product's current week passes 12 it drops off this
-  // dashboard entirely. Launch Dashboard, by contrast, deliberately shows
-  // every product regardless of age (see the comment further down); Product
-  // Detail always has the full history either way, unaffected by this.
-  let visibleProductData = productData;
-  if(tag === 'expansion'){
-    visibleProductData = productData.filter(pd => {
-      if(!pd.anchor) return true; // no anchor known — can't judge eligibility, so don't hide it
-      const ageDays = Math.floor((new Date() - new Date(pd.anchor)) / 86400000);
-      const currentWeekNum = Math.floor(ageDays / 7) + 1;
-      return currentWeekNum <= 12;
-    });
-    products = visibleProductData.map(pd => pd.product);
-    asins = visibleProductData.map(pd => pd.product.asin);
-    if(!visibleProductData.length){
-      document.getElementById(p+'DashEmpty').style.display = 'block';
-      document.getElementById(p+'DashKpiPanel').style.display = 'none';
-      document.getElementById(p+'DashOverallPanel').style.display = 'none';
-      return;
-    }
+  // dashboard entirely. Product Detail always has the full history either
+  // way, unaffected by this — this filter is specific to the two dashboards.
+  let visibleProductData = productData.filter(pd => {
+    if(!pd.anchor) return true; // no anchor known — can't judge eligibility, so don't hide it
+    const ageDays = Math.floor((new Date() - new Date(pd.anchor)) / 86400000);
+    const currentWeekNum = Math.floor(ageDays / 7) + 1;
+    return currentWeekNum <= 12;
+  });
+  products = visibleProductData.map(pd => pd.product);
+  asins = visibleProductData.map(pd => pd.product.asin);
+  if(!visibleProductData.length){
+    document.getElementById(p+'DashEmpty').style.display = 'block';
+    document.getElementById(p+'DashKpiPanel').style.display = 'none';
+    document.getElementById(p+'DashOverallPanel').style.display = 'none';
+    return;
   }
 
   // A week index passes the Month/Week filter if its real calendar date
@@ -1782,10 +1778,10 @@ function renderTagDashboard(tag){
 
   renderTagAnalysis(p, visibleProductData);
 
-  // Per-product full scorecards — sorted newest-launched to oldest. Every
-  // product with this tag shows here regardless of how far past its own
-  // Week 12 it is; its columns just keep counting past 12 (Product Detail
-  // is still the place to see its full unbounded history in more depth).
+  // Per-product full scorecards — sorted newest-launched to oldest, for
+  // whichever products passed the "still within Week 12" filter above
+  // (Product Detail is the place to see a product's full unbounded history,
+  // including past Week 12, in more depth).
   // Each panel's own columns are also narrowed to whichever of its weeks fall
   // inside the selected Month/Week, and a product with zero matching weeks is
   // skipped rather than showing an empty table.
