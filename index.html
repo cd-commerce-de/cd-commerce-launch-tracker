@@ -2357,17 +2357,17 @@ function renderTagAnalysisTable(p, perProduct){
   ];
   const s = tagAnalysisSort[p];
   const sorted = sortRows(rows, s.key, s.dir, r=>r.name);
-  let html = '<thead><tr>' + cols.map(c=>
-    `<th style="cursor:pointer;user-select:none;" onclick="sortTagAnalysisBy('${p}','${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, s)}</span></th>`
+  let html = '<thead><tr>' + cols.map((c,i)=>
+    `<th style="cursor:pointer;user-select:none;text-align:${i===0?'left':'center'};" onclick="sortTagAnalysisBy('${p}','${c.key}')">${c.label} <span style="font-size:9px;">${sortArrow(c.key, s)}</span></th>`
   ).join('') + '<th></th></tr></thead><tbody>';
   sorted.forEach(r=>{
     html += `<tr>
-      <td style="text-align:left;white-space:normal;max-width:240px;">${escapeHtml(r.name)}</td>
-      <td>${r.weeksToProfit!=null ? 'Wk '+r.weeksToProfit : 'Not yet'}</td>
-      <td>${r.paybackWeek!=null ? 'Wk '+r.paybackWeek : '–'}</td>
-      <td>${r.currentMargin!=null ? fmtPct(r.currentMargin) : '–'}</td>
-      <td>${fmtMoney(r.totalNetProfit)}</td>
-      <td>${fmtMoney(r.totalAdSpend)}</td>
+      <td style="text-align:left;white-space:nowrap;min-width:280px;">${thumb(r.product.image_url, 32)}${escapeHtml(r.name)}</td>
+      <td style="text-align:center;">${r.weeksToProfit!=null ? 'Wk '+r.weeksToProfit : 'Not yet'}</td>
+      <td style="text-align:center;">${r.paybackWeek!=null ? 'Wk '+r.paybackWeek : '–'}</td>
+      <td style="text-align:center;">${r.currentMargin!=null ? fmtPct(r.currentMargin) : '–'}</td>
+      <td style="text-align:center;">${fmtMoney(r.totalNetProfit)}</td>
+      <td style="text-align:center;">${fmtMoney(r.totalAdSpend)}</td>
       <td></td>
     </tr>`;
   });
