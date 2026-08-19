@@ -585,7 +585,7 @@
         <h3>Products &amp; launch dates</h3>
         <div class="table-wrap" style="max-height:280px;">
           <table class="products-table" id="productsTable">
-            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Brand</th><th>Marketplace</th><th>Launch Date</th><th>Product Line Code</th><th>Product Line</th><th>Stage</th><th>Sell Through</th><th>Sell Through Rate %</th><th></th></tr></thead>
+            <thead><tr><th>Image</th><th>Product Name</th><th>Parent ASIN / SKU</th><th>Tag</th><th>Brand</th><th>Marketplace</th><th>Launch Date</th><th>Product Line Code</th><th>Product Line</th><th>Stage</th><th></th></tr></thead>
             <tbody id="productsBody"></tbody>
           </table>
         </div>
@@ -610,7 +610,7 @@
               <tr><td>Refund Units</td><td>Sellerboard — "Refunds" column</td><td>N/A if that week's row doesn't report Refunds</td></tr>
               <tr><td>Ad Spend (€)</td><td>Sellerboard — "Ads" column</td><td>Stored as a positive number regardless of sign in the export. N/A if not reported.</td></tr>
               <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>N/A if that week's row doesn't report Net profit</td></tr>
-              <tr><td>Sessions</td><td>Sellerboard — "Sessions" column (Sellerfox "Sessions" used only if Sellerboard didn't report it that week)</td><td>N/A if neither source reports it</td></tr>
+              <tr><td>Sessions</td><td>Sellerfox — "Sessions" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it. Sellerboard's own Sessions column is not used, even when present, since it measures/aggregates this differently.</td></tr>
               <tr><td>Impressions</td><td>Sellerfox — "Impressions (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
               <tr><td>Ad Clicks</td><td>Sellerfox — "Clicks (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
               <tr><td>Ad Orders</td><td>Sellerfox — "Units 7D Same (SP)" column</td><td>Sellerfox's own export doesn't have a literal "Ad Orders" column — this is the closest real field (same-SKU, ad-attributed units over a 7-day window). "Units 7D (SP)" without "Same" was deliberately not used, since it includes halo/cross-sell units for other products bought after this product's ad was clicked. N/A if Sellerfox wasn't uploaded.</td></tr>
@@ -1138,8 +1138,6 @@ async function renderProductsTable(){
       <td><input value="${p.product_line_code||''}" onchange="updateProduct('${p.asin}','product_line_code',this.value)" style="width:90px;"></td>
       <td><input value="${p.product_line||''}" onchange="updateProduct('${p.asin}','product_line',this.value)" style="width:120px;"></td>
       <td><input value="${p.stage||''}" onchange="updateProduct('${p.asin}','stage',this.value)" style="width:70px;"></td>
-      <td><input value="${p.sell_through||''}" onchange="updateProduct('${p.asin}','sell_through',this.value)" style="width:100px;"></td>
-      <td><input value="${p.sell_through_rate_pct??''}" onchange="updateProduct('${p.asin}','sell_through_rate_pct', this.value===''?null:parseFloat(this.value))" style="width:80px;" placeholder="e.g. 10.66"></td>
       <td><button class="btn btn-danger" onclick="removeProduct('${p.asin}')">✕</button></td>`;
     body.appendChild(tr);
   });
@@ -1275,7 +1273,6 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     w.amazonFees+=Math.abs(+r.amazon_fees||0); w.cogs+=Math.abs(+r.cogs||0);
     w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0;
     if(r.net_profit!=null){ w.netProfit+=+r.net_profit; w.netProfitSeen=true; }
-    if(r.sessions!=null){ w.sessions+=+r.sessions; w.sessionsSeen=true; }
     w.bsr = (w.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(w.bsr, r.bsr) : w.bsr);
     if(r.refund_pct!=null){ w.refundPctSum+=+r.refund_pct; w.refundPctN++; }
     if(r.margin_pct!=null){ w.marginSum+=+r.margin_pct; w.marginN++; }
@@ -1286,8 +1283,9 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
-  // Sellerfox's own export — same "genuinely null if not reported" rule.
-  // Sessions falls back here only if Sellerboard didn't already report it.
+  // Sellerfox's own export — genuinely null (N/A) if Sellerfox wasn't
+  // uploaded for that week, never substituted with Sellerboard's own
+  // Sessions figure (which measures/aggregates it differently).
   (sfRows||[]).forEach(r=>{
     const wk = weekNumber(anchor, r.week);
     if(wk<1||wk>totalWeeks) return;
@@ -1297,7 +1295,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.clicks!=null){ w.clicks+=+r.clicks; w.clicksSeen=true; }
     if(r.orders!=null){ w.adsOrders+=+r.orders; w.adsOrdersSeen=true; }
     if(r.ad_sales!=null){ w.adSales+=+r.ad_sales; w.adSalesSeen=true; }
-    if(!w.sessionsSeen && r.sessions!=null){ w.sessions+=+r.sessions; w.sessionsSeen=true; }
+    if(r.sessions!=null){ w.sessions+=+r.sessions; w.sessionsSeen=true; }
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
@@ -1909,8 +1907,6 @@ function renderTagDashboard(tag){
       {label:'Stage', value: product.stage || '–'},
       {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
       {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
-      {label:'Sell Through', value: product.sell_through || '–'},
-      {label:'Sell Through Rate %', value: product.sell_through_rate_pct!=null ? product.sell_through_rate_pct+'%' : '–'},
     ];
     const panel = document.createElement('div');
     panel.className = 'panel';
