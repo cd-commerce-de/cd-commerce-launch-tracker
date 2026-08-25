@@ -1108,7 +1108,7 @@ async function confirmUploadSBO(){
   const btn = document.getElementById('btnUploadSBO');
   btn.disabled = true;
   document.getElementById('sboDownloadLink').innerHTML = '';
-  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalMatchedChildRows = 0, totalSkippedUnknown = 0, totalSkippedUntracked = 0, totalSkippedBadDate = 0;
+  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalMatchedChildRows = 0, totalMatchedSelfParentRows = 0, totalSkippedUnknown = 0, totalSkippedUntracked = 0, totalSkippedBadDate = 0;
   const failMessages = [];
   const allSummaryRows = [];
 
@@ -1134,6 +1134,7 @@ async function confirmUploadSBO(){
         totalRows += data.rowsLoaded || 0;
         totalChildRows += data.childRowsLoaded || 0;
         totalMatchedChildRows += data.matchedChildRows || 0;
+        totalMatchedSelfParentRows += data.matchedSelfParentRows || 0;
         totalSkippedUnknown += data.skippedUnknownChildAsins || 0;
         totalSkippedUntracked += data.skippedUntrackedParentChildRows || 0;
         totalSkippedBadDate += data.skippedBadDateRows || 0;
@@ -1150,7 +1151,7 @@ async function confirmUploadSBO(){
     const skippedUnknown = totalSkippedUnknown ? `, ${totalSkippedUnknown} child ASIN(s) not recognized` : '';
     const skippedUntracked = totalSkippedUntracked ? `, ${totalSkippedUntracked} child row(s) skipped (parent not tracked)` : '';
     const skippedDates = totalSkippedBadDate ? `, ${totalSkippedBadDate} row(s) skipped (bad date)` : '';
-    setStatus('statusSBO', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent/week rows updated, ${totalChildRows} child rows updated, from ${totalMatchedChildRows} matched child rows${skippedUnknown}${skippedUntracked}${skippedDates}`);
+    setStatus('statusSBO', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent/week rows updated, ${totalChildRows} child rows updated, from ${totalMatchedChildRows} matched child rows and ${totalMatchedSelfParentRows} single-SKU product row(s)${skippedUnknown}${skippedUntracked}${skippedDates}`);
     sboSelectedFiles = [];
     document.getElementById('fileSBO').value = '';
     renderSboFileList();
