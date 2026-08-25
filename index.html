@@ -1801,7 +1801,15 @@ function renderTagDashboard(tag){
       includedByWeek[calWeek].add(`${skuLabel} (Wk ${wk})`);
       return true;
     }
-    excludedByWeek[calWeek].add(`${skuLabel} (${wk<1?'not launched yet':'past 12-wk window, Wk '+wk})`);
+    // Only flag this in the "Excluded" list if the product was still inside
+    // its window the PRIOR calendar week — i.e. call out the week it
+    // actually drops out, not every week afterward that it stays excluded.
+    const priorDate = new Date(calWeek);
+    priorDate.setDate(priorDate.getDate() - 7);
+    const priorWk = relativeWeekOf(asin, priorDate.toISOString().slice(0,10));
+    if(priorWk!==null && priorWk>=1 && priorWk<=12){
+      excludedByWeek[calWeek].add(`${skuLabel} (${wk<1?'not launched yet':'past 12-wk window, Wk '+wk})`);
+    }
     return false;
   }
   (allSbRows||[]).forEach(r=>{
