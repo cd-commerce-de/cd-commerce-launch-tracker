@@ -1716,24 +1716,20 @@ function renderTagDashboard(tag){
     return { product, weeks, anchor, weekDates, hasWeekZero, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
-  // Both dashboards only show products still inside their own first 12
-  // weeks — once a product's current week passes 12 it drops off this
-  // dashboard entirely. Product Detail always has the full history either
-  // way, unaffected by this — this filter is specific to the two dashboards.
+  // Which products get a *scorecard panel* is narrower than which products
+  // count toward the Portfolio Total / KPI totals below: panels only show
+  // for products still inside their own first 12 weeks (Product Detail has
+  // the full history), but a product that's since passed Week 12 should
+  // still have its historical weeks 1-12 counted in the totals and still be
+  // listed (as "counted" or "excluded") in each week's hover tooltip. So
+  // `products`/`asins` stay as the full filtered set here — only the panel
+  // render loop further down narrows to `visibleProductData`.
   let visibleProductData = productData.filter(pd => {
     if(!pd.anchor) return true; // no anchor known — can't judge eligibility, so don't hide it
     const ageDays = Math.floor((new Date() - new Date(pd.anchor)) / 86400000);
     const currentWeekNum = Math.floor(ageDays / 7) + 1;
     return currentWeekNum <= 12;
   });
-  products = visibleProductData.map(pd => pd.product);
-  asins = visibleProductData.map(pd => pd.product.asin);
-  if(!visibleProductData.length){
-    document.getElementById(p+'DashEmpty').style.display = 'block';
-    document.getElementById(p+'DashKpiPanel').style.display = 'none';
-    document.getElementById(p+'DashOverallPanel').style.display = 'none';
-    return;
-  }
 
   // A week index passes the Month/Week filter if its real calendar date
   // (weekDates[i]) falls in one of the selected months and/or matches one of
@@ -1749,12 +1745,12 @@ function renderTagDashboard(tag){
     return weeks.reduce((a,w,i)=> passesDateFilter(weekDates[i]) ? a+(+w[key]||0) : a, 0);
   }
 
-  const totalSales = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
-  const totalUnits = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
-  const totalNetProfit = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
-  const totalAdSpend = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
-  const totalSessions = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
-  const totalRefunds = visibleProductData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
+  const totalSales = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
+  const totalUnits = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
+  const totalNetProfit = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
+  const totalAdSpend = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
+  const totalSessions = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
+  const totalRefunds = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
   const avgMargin = totalSales? totalNetProfit/totalSales : 0;
   const avgTacos = totalSales? totalAdSpend/totalSales : 0;
   const avgRefundPct = totalUnits? totalRefunds/totalUnits : 0;
@@ -1781,7 +1777,7 @@ function renderTagDashboard(tag){
   // otherwise a long-running product would keep inflating totals for weeks
   // that are no longer part of its launch window.
   const anchorByAsin = {};
-  visibleProductData.forEach(pd=>{ anchorByAsin[pd.product.asin] = pd.anchor; });
+  productData.forEach(pd=>{ anchorByAsin[pd.product.asin] = pd.anchor; });
 
   const calBuckets = {};
   const includedByWeek = {}, excludedByWeek = {}; // for the hover note per column
@@ -2297,7 +2293,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   const t = targets || {};
   let html = '<thead><tr><th>Metric</th>';
   colLabels.forEach(l=> html += `<th>${l}</th>`);
-  html += `<th>${weeks.length}-Wk Total/Avg</th><th>Target</th><th></th></tr></thead><tbody>`;
+  html += `<th>${weeks.length}-Wk Total/Avg</th><th></th></tr></thead><tbody>`;
   metrics.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
@@ -2324,13 +2320,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const formattedTotal = m.fmt(total);
     const displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
     html += `<td class="total-col" style="${totalStyle}">${displayTotal}</td>`;
-
-    let targetCell = '–';
-    if(thresholds){
-      const parts = ['good','better','best'].filter(k=>thresholds[k]!=null).map(k=>`${TIER_ABBREV[k]}:${m.fmt(thresholds[k])}`);
-      targetCell = `<span style="font-size:10.5px;">${parts.join(' · ')}</span>`;
-    }
-    html += `<td style="background:#F1F5F9;">${targetCell}</td><td></td></tr>`;
+    html += `<td></td></tr>`;
   });
   if(asin && weekDates){
     html += `<tr><td style="font-weight:700;">Notes</td>`;
@@ -2343,7 +2333,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
         ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
       </td>`;
     });
-    html += `<td colspan="3" style="background:#F1F5F9;"></td></tr>`;
+    html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
   }
   html += '</tbody>';
   return html;
