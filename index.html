@@ -533,6 +533,16 @@
             </div>
           </div>
           <div class="col">
+            <div class="upload-box" id="dropSBO">
+              <label for="fileSBO">Choose Sellerboard "By Child" CSV</label>
+              <input type="file" id="fileSBO" accept=".csv">
+              <div class="hint">Sales Organic, Sales PPC, Units Organic — daily, per child ASIN, no parent rows. Upload this AFTER the main Sellerboard file for the same week(s) — it maps each child ASIN to its parent using the mapping your main upload already created, and never creates new SKUs or products.</div>
+              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadSBO" style="display:none;" onclick="confirmUploadSBO()">Upload</button></div>
+              <div class="status-line" id="statusSBO"></div>
+              <div id="sboDownloadLink" style="margin-top:8px;"></div>
+            </div>
+          </div>
+          <div class="col">
             <div class="upload-box" id="dropPR">
               <label for="filePR">Choose Products CSV</label>
               <input type="file" id="filePR" accept=".csv">
@@ -1065,6 +1075,38 @@ async function confirmUploadSF(){
 }
 document.getElementById('filePR').addEventListener('change', ()=> stageFile('filePR','statusPR','btnUploadPR'));
 document.getElementById('fileTG').addEventListener('change', ()=> stageFile('fileTG','statusTG','btnUploadTG'));
+document.getElementById('fileSBO').addEventListener('change', ()=> stageFile('fileSBO','statusSBO','btnUploadSBO'));
+async function confirmUploadSBO(){
+  const fileInput = document.getElementById('fileSBO');
+  const file = fileInput.files[0];
+  if(!file){ setStatus('statusSBO', 'err', 'Choose a file first.'); return; }
+  document.getElementById('sboDownloadLink').innerHTML = '';
+  setStatus('statusSBO', 'busy', 'Uploading…');
+  const fd = new FormData(); fd.append('file', file);
+  try{
+    const res = await fetch(`${EDGE_BASE}/upload-sellerboard-organic`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+      body: fd,
+    });
+    const data = await res.json();
+    if(!res.ok){ setStatus('statusSBO', 'err', data.error || 'Upload failed'); return; }
+    const skippedUnknown = data.skippedUnknownChildAsins ? `, ${data.skippedUnknownChildAsins} child ASIN(s) not recognized` : '';
+    const skippedUntracked = data.skippedUntrackedParentChildRows ? `, ${data.skippedUntrackedParentChildRows} child row(s) skipped (parent not tracked)` : '';
+    const skippedDates = data.skippedBadDateRows ? `, ${data.skippedBadDateRows} row(s) skipped (bad date)` : '';
+    setStatus('statusSBO', 'ok', `${data.rowsLoaded} parent/week rows updated, ${data.childRowsLoaded} child rows updated, from ${data.matchedChildRows} matched child rows${skippedUnknown}${skippedUntracked}${skippedDates}`);
+    document.getElementById('btnUploadSBO').style.display = 'none';
+    fileInput.value = '';
+    if(data.summary && data.summary.length){
+      const csvRows = ['Parent ASIN,Week,Sales Organic (€),Sales PPC (€),Units Organic'];
+      data.summary.forEach(r=> csvRows.push(`${r.asin},${r.week},${r.sales_organic},${r.sales_ppc},${r.units_organic}`));
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      document.getElementById('sboDownloadLink').innerHTML = `<a href="${url}" download="organic_ppc_split_summary.csv" class="btn btn-sm">Download summary (${data.summary.length} rows)</a>`;
+    }
+    await refreshAllViews();
+  }catch(e){ setStatus('statusSBO', 'err', 'Could not reach Supabase Edge Function'); }
+}
 document.getElementById('fileWT').addEventListener('change', ()=> stageFile('fileWT','statusWT','btnUploadWT'));
 document.getElementById('filePA').addEventListener('change', ()=> stageFile('filePA','statusPA','btnUploadPA'));
 
