@@ -679,6 +679,7 @@ function fmtPct(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return
 function fmtRank(n){ return n?fmtInt(n):'–'; }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
+function fmtMoney2dp(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 function thumb(imageUrl, size=28){
   return imageUrl
@@ -1234,28 +1235,38 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     sales:0, salesSeen:false, units:0, unitsSeen:false, refunds:0, refundsSeen:false, refundPctSum:0, refundPctN:0,
     adSpend:0, adSpendSeen:false, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0, netProfitSeen:false,
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
-    bsr:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
+    bsr:null, subcatBsr:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
     impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
   });
-  if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false };
+  if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
   const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
   const autoAnchor = !product.launch;
-  let anchor = product.launch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
+  const rawLaunch = product.launch || null;
+  let anchor = rawLaunch || (allDates.length ? allDates.reduce((a,b)=> a<b?a:b) : null);
   if(anchor) anchor = mondayOf(anchor);
+
+  // Week 0: when the actual launch date isn't itself a Monday, the partial
+  // period between launch and the following Monday gets its own leading
+  // column instead of being folded into what would otherwise be Week 1 —
+  // e.g. a Thursday launch shows as "Week 0" with the following Monday
+  // starting the first full "Week 1". Only applies to a manually-set launch
+  // date; an auto-detected anchor has no independent "real launch date" to
+  // compare against, so there's nothing to call Week 0 relative to.
+  const hasWeekZero = !autoAnchor && !!rawLaunch && anchor !== rawLaunch;
 
   // Product Detail's own scorecard extends past Week 12 when real data exists
   // out there (a product doesn't stop having weeks just because the "launch
   // window" convention ends) — everywhere else (dashboards, child SKUs,
   // Actual vs. Target) stays capped at the standard 12-week view.
-  let totalWeeks = 12;
+  let totalWeeks = 12 + (hasWeekZero ? 1 : 0);
   if(anchor && extendBeyond12 && allDates.length){
     const maxWeekFound = Math.max(...allDates.map(d => weekNumber(anchor, d)));
-    totalWeeks = Math.max(12, maxWeekFound);
+    totalWeeks = Math.max(totalWeeks, maxWeekFound);
   }
 
   const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
-  if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor };
+  if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor, hasWeekZero: false };
 
   // Sales, Units, Net Profit, Ad Spend, and Refunds must come directly from
   // Sellerboard's own export — genuinely null (shown as N/A, not €0/0) for
@@ -1274,6 +1285,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0;
     if(r.net_profit!=null){ w.netProfit+=+r.net_profit; w.netProfitSeen=true; }
     w.bsr = (w.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(w.bsr, r.bsr) : w.bsr);
+    w.subcatBsr = (w.subcatBsr===null) ? (r.subcat_bsr||null) : (r.subcat_bsr ? Math.min(w.subcatBsr, r.subcat_bsr) : w.subcatBsr);
     if(r.refund_pct!=null){ w.refundPctSum+=+r.refund_pct; w.refundPctN++; }
     if(r.margin_pct!=null){ w.marginSum+=+r.margin_pct; w.marginN++; }
     if(r.roi_pct!=null){ w.roiSum+=+r.roi_pct; w.roiN++; }
@@ -1299,7 +1311,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
-  return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor };
+  return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor, hasWeekZero };
 }
 async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   if(!product) return computeWeeksFromRows(null, [], []);
@@ -1316,7 +1328,7 @@ function finalizeWeek(w){
       sales:null, units:null, refunds:null, refundPct:null,
       adSpend:null, amazonFees:null, cogs:null, vat:null, shipping:null,
       grossProfit:null, netProfit:null, margin:null, roi:null, realAcos:null,
-      tacos:null, cpo:null, profitPerOrder:null, bsr:null, sessions:null,
+      tacos:null, cpo:null, profitPerOrder:null, bsr:null, subcatBsr:null, sessions:null,
       cvr:null, avgSalesPrice:null, impressions:null, clicks:null, adsOrders:null,
       ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
       hasData:false,
@@ -1353,7 +1365,7 @@ function finalizeWeek(w){
     tacos: (adSpend!=null && sales) ? adSpend/sales : null,
     cpo: (adSpend!=null && units) ? adSpend/units : null,
     profitPerOrder: (netProfit!=null && units) ? netProfit/units : null,
-    bsr:w.bsr, sessions,
+    bsr:w.bsr, subcatBsr:w.subcatBsr, sessions,
     cvr: w.cvrN? (w.cvrSum/w.cvrN)/100 : ((sessions!=null && units!=null && sessions)? units/sessions : null),
     avgSalesPrice: w.avgPriceN? w.avgPriceSum/w.avgPriceN : null,
     impressions, clicks, adsOrders,
@@ -1410,7 +1422,8 @@ async function loadOverview(){
       if(weeks[i].margin!=null && weeks[i].margin>0){ weeksToProfit = i+1; break; }
     }
     return {
-      product, weeks, totalSales: sum(weeks,'sales'), netProfit: sum(weeks,'netProfit'), avgMargin: avg(weeks,'margin'),
+      product, weeks, totalSales: sum(weeks,'sales'), netProfit: sum(weeks,'netProfit'),
+      avgMargin: sum(weeks,'sales') ? sum(weeks,'netProfit')/sum(weeks,'sales') : null,
       units: sum(weeks,'units'), sessions: sum(weeks,'sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
       weeksWithData: weeks.filter(w=>w.hasData).length, weeksToProfit,
     };
@@ -1621,20 +1634,23 @@ async function loadTagDashboard(tag){
   // can be served entirely from this cache — see renderTagDashboard below.
   const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
   const allAsins = allTagProducts.map(pr => pr.asin);
-  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }] = await Promise.all([
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allTargets }, { data: allNotes }, { data: allPortfolioNotes }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').in('asin', allAsins),
     sb.from('sellerfox_rows').select('*').in('asin', allAsins),
     sb.from('targets').select('*').in('asin', allAsins),
     sb.from('week_notes').select('*').in('asin', allAsins),
+    sb.from('portfolio_notes').select('*').eq('tag', tag),
   ]);
-  tagDashboardCache[tag] = { allTagProducts, allSbRows, allSfRows, allTargets, allNotes };
+  tagDashboardCache[tag] = { allTagProducts, allSbRows, allSfRows, allTargets, allNotes, allPortfolioNotes };
   renderTagDashboard(tag);
 }
 function renderTagDashboard(tag){
   const cache = tagDashboardCache[tag];
   if(!cache) return; // not fetched yet — loadTagDashboard() runs first on view switch
-  const { allTagProducts, allSbRows, allSfRows, allTargets, allNotes } = cache;
+  const { allTagProducts, allSbRows, allSfRows, allTargets, allNotes, allPortfolioNotes } = cache;
   const p = tag; // 'launch' or 'expansion' — used as the DOM id prefix
+  const portfolioNotesMap = {};
+  (allPortfolioNotes||[]).forEach(r=>{ portfolioNotesMap[r.week] = r.note; });
 
   // Marketplace and Brand options come from the full tag-scoped product list,
   // so the dropdowns stay populated even if the current selection filters
@@ -1690,14 +1706,14 @@ function renderTagDashboard(tag){
   (allNotes||[]).forEach(r=>{ if(!notesByAsin[r.asin]) notesByAsin[r.asin] = {}; notesByAsin[r.asin][r.week] = r.note; });
 
   const productData = products.map(product => {
-    const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
+    const { weeks, anchor, hasWeekZero } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
     const weekDates = weeks.map((_,i)=>{
       if(!anchor) return null;
       const d = new Date(anchor);
       d.setDate(d.getDate() + i*7);
       return d.toISOString().slice(0,10);
     });
-    return { product, weeks, anchor, weekDates, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
+    return { product, weeks, anchor, weekDates, hasWeekZero, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
   // Both dashboards only show products still inside their own first 12
@@ -1780,12 +1796,16 @@ function renderTagDashboard(tag){
     if(!includedByWeek[calWeek]) includedByWeek[calWeek] = new Set();
     if(!excludedByWeek[calWeek]) excludedByWeek[calWeek] = new Set();
     const product = products.find(pr=>pr.asin===asin);
-    const label = productDisplayName(product) || asin;
+    // SKU-Country instead of the ASIN-based productDisplayName — the ASIN
+    // alone doesn't reveal which marketplace/country a row belongs to, and
+    // that's the whole point of this list (Pan-EU products can appear under
+    // several countries in the same week).
+    const skuLabel = product ? `${product.product_line_code || shortenName(product.name) || product.asin}-${product.marketplace || '?'}` : asin;
     if(wk>=1 && wk<=12){
-      includedByWeek[calWeek].add(`${label} (Wk ${wk})`);
+      includedByWeek[calWeek].add(`${skuLabel} (Wk ${wk})`);
       return true;
     }
-    excludedByWeek[calWeek].add(`${label} (${wk<1?'not launched yet':'past 12-wk window, Wk '+wk})`);
+    excludedByWeek[calWeek].add(`${skuLabel} (${wk<1?'not launched yet':'past 12-wk window, Wk '+wk})`);
     return false;
   }
   (allSbRows||[]).forEach(r=>{
@@ -1817,8 +1837,9 @@ function renderTagDashboard(tag){
     let noteHtml = '';
     if(included.length || excluded.length){
       const parts = [];
-      if(included.length) parts.push(`<div><strong>Counted in total:</strong><br>${included.map(escapeHtml).join('<br>')}</div>`);
-      if(excluded.length) parts.push(`<div style="margin-top:6px;"><strong>Excluded:</strong><br>${excluded.map(escapeHtml).join('<br>')}</div>`);
+      const li = arr => `<ul style="margin:2px 0 0;padding-left:14px;font-size:10.5px;line-height:1.6;">${arr.map(t=>`<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
+      if(included.length) parts.push(`<div><strong style="font-size:11px;">Counted in total:</strong>${li(included)}</div>`);
+      if(excluded.length) parts.push(`<div style="margin-top:6px;"><strong style="font-size:11px;">Excluded:</strong>${li(excluded)}</div>`);
       noteHtml = `<div class="note-hover-tooltip" style="text-align:left;">${parts.join('')}</div>`;
     }
     const underline = excluded.length ? 'border-bottom:1px dotted var(--text-muted);' : '';
@@ -1860,6 +1881,18 @@ function renderTagDashboard(tag){
     else total = vals.reduce((a,v)=>a+v,0);
     ohtml += `<td class="total-col">${m.fmt(total)}</td><td></td></tr>`;
   });
+  if(sortedCalWeeks.length){
+    ohtml += `<tr><td style="font-weight:700;">Notes</td>`;
+    sortedCalWeeks.forEach(wk=>{
+      const existing = portfolioNotesMap[wk] || '';
+      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
+      ohtml += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openPortfolioNoteModal('${p}','${wk}',this)">
+        <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
+        ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
+      </td>`;
+    });
+    ohtml += `<td style="background:#F1F5F9;"></td><td></td></tr>`;
+  }
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
@@ -1877,7 +1910,7 @@ function renderTagDashboard(tag){
     const db = b.product.launch || b.anchor || '';
     return db.localeCompare(da);
   });
-  sortedProductData.forEach(({product, weeks, anchor, weekDates, targetRow, notesMap})=>{
+  sortedProductData.forEach(({product, weeks, anchor, weekDates, hasWeekZero, targetRow, notesMap})=>{
     let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
     if(anchor){
       ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
@@ -1891,7 +1924,7 @@ function renderTagDashboard(tag){
     const shownWeeks = visibleIdx.map(i=>weeks[i]);
     const shownWeekDates = visibleIdx.map(i=>weekDates[i]);
     const colLabels = visibleIdx.map(i=>{
-      const wkLabel = 'Wk '+(i+1);
+      const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
       if(!anchor) return wkLabel;
       const dateStr = new Date(weekDates[i]).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
@@ -1961,7 +1994,7 @@ async function loadDashboard(){
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
-  const { weeks, anchor, autoAnchor } = await computeWeeks(product, mkt, true);
+  const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(product, mkt, true);
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
     banner.textContent = `No launch date set — using the earliest uploaded week (${anchor}) as Week 1. Set a launch date in Upload & Manage if you'd rather anchor by the real launch date.`;
@@ -1975,10 +2008,10 @@ async function loadDashboard(){
   const [{ data: targetRow }, { data: noteRows }, { data: childRows }] = await Promise.all([targetsPromise, notesPromise, childrenPromise]);
   const notesMap = {};
   (noteRows||[]).forEach(r=>{ notesMap[r.week] = r.note; });
-  const labels = weeks.map((_,i)=>'Wk '+(i+1));
+  const labels = weeks.map((_,i)=> hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1));
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
-  renderTable(weeks, targetRow, anchor, product.asin, notesMap);
+  renderTable(weeks, targetRow, anchor, product.asin, notesMap, hasWeekZero);
   renderChildSkus(childRows, anchor);
 }
 
@@ -1987,7 +2020,7 @@ function avg(arr, key){
   const vals = arr.map(w=>w[key]).filter(v=>v!=null && !isNaN(v));
   return vals.length ? vals.reduce((a,v)=>a+v,0)/vals.length : null;
 }
-function minBSR(arr){ const v = arr.map(w=>w.bsr).filter(x=>x!==null&&x>0); return v.length?Math.min(...v):null; }
+function minBSR(arr, key){ const k = key||'bsr'; const v = arr.map(w=>w[k]).filter(x=>x!==null&&x>0); return v.length?Math.min(...v):null; }
 
 const TIER_COLORS = { best:'#D4AF37', better:'#10B981', good:'#F59E0B', below:'#EF4444' };
 const TIER_ABBREV = { good:'G', better:'Bt', best:'Bs' };
@@ -2139,6 +2172,7 @@ function renderCharts(weeks, labels){
   });
 
   currentWeeksData = weeks;
+  currentWeekLabels = labels;
   const wowSel = document.getElementById('wowMetric');
   if(!wowSel.options.length){
     METRICS.forEach(m=>{ const o=document.createElement('option'); o.value=m.key; o.textContent=m.label; wowSel.appendChild(o); });
@@ -2148,6 +2182,7 @@ function renderCharts(weeks, labels){
 }
 
 let currentWeeksData = [];
+let currentWeekLabels = [];
 let currentChildrenData = [];
 let childSort = { key: 'sales', dir: 'desc' };
 function renderWowChart(){
@@ -2155,7 +2190,7 @@ function renderWowChart(){
   const key = document.getElementById('wowMetric').value || 'sales';
   const m = METRICS.find(x=>x.key===key) || METRICS[0];
   const vals = currentWeeksData.map(w=>w[m.key]);
-  const labels = vals.map((_,i)=>'Wk '+(i+1));
+  const labels = currentWeekLabels.length===vals.length ? currentWeekLabels : vals.map((_,i)=>'Wk '+(i+1));
   const changes = vals.map((v,i)=>{
     if(i===0) return null;
     const prev = vals[i-1];
@@ -2194,29 +2229,30 @@ const METRICS = [
   {key:'sales', label:'Total Sales (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_sales_good',better:'target_sales_better',best:'target_sales_best'}},
   {key:'units', label:'Units Sold', fmt:fmtIntNA, kind:'sum', tierKeys:{good:'target_units_good',better:'target_units_better',best:'target_units_best'}},
   {key:'refunds', label:'Refund Units', fmt:fmtIntNA, kind:'sum', lowerIsBetter:true},
-  {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
+  {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true, ratioOf:{num:'refunds',den:'units'}},
   {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoneyNA, kind:'sum', lowerIsBetter:true},
   {key:'amazonFees', label:'Amazon Fees (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
   {key:'cogs', label:'Cost of Goods (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
   {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_net_profit_good',better:'target_net_profit_better',best:'target_net_profit_best'}},
-  {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', tierKeys:{good:'target_margin_pct_good',better:'target_margin_pct_better',best:'target_margin_pct_best'}, targetIsPct:true},
-  {key:'roi', label:'ROI (%)', fmt:fmtPct, kind:'calc'},
+  {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', tierKeys:{good:'target_margin_pct_good',better:'target_margin_pct_better',best:'target_margin_pct_best'}, targetIsPct:true, ratioOf:{num:'netProfit',den:'sales'}},
+  {key:'roi', label:'ROI (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'netProfit',den:'cogs'}},
   {key:'realAcos', label:'Real ACOS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
-  {key:'tacos', label:'TACoS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true},
-  {key:'cpo', label:'Cost Per Order (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
-  {key:'profitPerOrder', label:'Profit Per Order (€)', fmt:fmtMoney, kind:'calc'},
-  {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true},
+  {key:'tacos', label:'TACoS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'sales'}},
+  {key:'cpo', label:'Cost Per Order (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'units'}},
+  {key:'profitPerOrder', label:'Profit Per Order (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'netProfit',den:'units'}},
+  {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney2dp, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'clicks'}},
   {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc'},
   {key:'organicRevenue', label:'Organic Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
   {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
   {key:'sessions', label:'Sessions', fmt:fmtIntNA, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
-  {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc'},
+  {key:'cvr', label:'Conversion Rate (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'units',den:'sessions'}},
   {key:'impressions', label:'Impressions', fmt:fmtIntNA, kind:'sum'},
   {key:'clicks', label:'Ad Clicks', fmt:fmtIntNA, kind:'sum'},
   {key:'adsOrders', label:'Ad Orders', fmt:fmtIntNA, kind:'sum'},
-  {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc'},
-  {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc'},
-  {key:'bsr', label:'Best BSR (lowest = best)', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}},
+  {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'clicks',den:'impressions'}},
+  {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'sales',den:'units'}},
+  {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}},
+  {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true},
 ];
 
 // Matches the Annahmen & Prognosen template's own row order, in English.
@@ -2275,7 +2311,11 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     });
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
-    else if(m.kind==='min') total = minBSR(weeks);
+    else if(m.kind==='min') total = minBSR(weeks, m.key);
+    else if(m.ratioOf){
+      const denTotal = sum(weeks, m.ratioOf.den);
+      total = denTotal ? sum(weeks, m.ratioOf.num) / denTotal : null;
+    }
     else total = avg(weeks, m.key);
 
     const thresholds = m.tierKeys ? getThresholds(t, m.tierKeys, m.targetIsPct) : null;
@@ -2318,10 +2358,22 @@ async function saveWeekNote(asin, week, note){
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-let noteModalCell = null, noteModalAsin = null, noteModalWeek = null;
+let noteModalCell = null, noteModalAsin = null, noteModalWeek = null, noteModalMode = 'product', noteModalTag = null;
 function openNoteModal(asin, week, cellEl){
+  noteModalMode = 'product';
   noteModalCell = cellEl; noteModalAsin = asin; noteModalWeek = week;
   document.getElementById('noteModalWeekLabel').textContent = new Date(week).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('noteModalTextarea').value = cellEl.dataset.note || '';
+  document.getElementById('noteModalOverlay').style.display = 'flex';
+  setTimeout(()=>document.getElementById('noteModalTextarea').focus(), 50);
+}
+// Same modal, different target — a note on the Portfolio Total's weekly
+// summary (keyed by tag + calendar week) rather than one product's own week.
+function openPortfolioNoteModal(tag, week, cellEl){
+  noteModalMode = 'portfolio';
+  noteModalTag = tag;
+  noteModalCell = cellEl; noteModalWeek = week;
+  document.getElementById('noteModalWeekLabel').textContent = 'Portfolio Total — ' + new Date(week).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('noteModalTextarea').value = cellEl.dataset.note || '';
   document.getElementById('noteModalOverlay').style.display = 'flex';
   setTimeout(()=>document.getElementById('noteModalTextarea').focus(), 50);
@@ -2336,7 +2388,8 @@ async function saveNoteModal(){
   const text = document.getElementById('noteModalTextarea').value;
   const btn = document.getElementById('noteModalSaveBtn');
   btn.disabled = true;
-  await saveWeekNote(noteModalAsin, noteModalWeek, text);
+  if(noteModalMode === 'portfolio') await savePortfolioWeekNote(noteModalTag, noteModalWeek, text);
+  else await saveWeekNote(noteModalAsin, noteModalWeek, text);
   btn.disabled = false;
   const trimmed = text.trim();
   noteModalCell.dataset.note = trimmed;
@@ -2356,9 +2409,16 @@ async function saveNoteModal(){
   }
   closeNoteModal();
 }
-function renderTable(weeks, targets, anchor, asin, notesMap){
+async function savePortfolioWeekNote(tag, week, note){
+  if(note && note.trim()){
+    await sb.from('portfolio_notes').upsert({ tag, week, note: note.trim() }, { onConflict: 'tag,week' });
+  } else {
+    await sb.from('portfolio_notes').delete().eq('tag', tag).eq('week', week);
+  }
+}
+function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero){
   const colLabels = weeks.map((_,i)=>{
-    const wkLabel = 'Wk '+(i+1);
+    const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
     if(!anchor) return wkLabel;
     const d = new Date(anchor);
     d.setDate(d.getDate() + i*7);
@@ -2402,7 +2462,7 @@ function renderTagAnalysis(p, productData){
     const currentlyProfitable = (lastDataWeek && lastDataWeek.margin!=null) ? lastDataWeek.margin>0 : null;
     return {
       product, weeks, weeksToProfit, paybackWeek,
-      avgMargin: avg(weeks.slice(0,12), 'margin'),
+      avgMargin: sum(weeks.slice(0,12),'sales') ? sum(weeks.slice(0,12),'netProfit')/sum(weeks.slice(0,12),'sales') : null,
       totalAdSpend: sum(weeks.slice(0,12),'adSpend'), totalNetProfit: sum(weeks.slice(0,12),'netProfit'),
       currentlyProfitable, hasEnoughData: dataWeeks.length>0,
     };
@@ -2735,7 +2795,11 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
     const vals = weeks.map(w=>w[m.key]);
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
-    else if(m.kind==='min') total = minBSR(weeks);
+    else if(m.kind==='min') total = minBSR(weeks, m.key);
+    else if(m.ratioOf){
+      const denTotal = sum(weeks, m.ratioOf.den);
+      total = denTotal ? sum(weeks, m.ratioOf.num) / denTotal : null;
+    }
     else total = avg(weeks, m.key);
 
     html += `<tr><td>${m.label}</td>`;
