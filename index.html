@@ -1279,6 +1279,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
     bsr:null, subcatBsr:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
     impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
+    salesOrganic:0, salesOrganicSeen:false, salesPpc:0, salesPpcSeen:false,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
@@ -1334,6 +1335,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.real_acos_pct!=null){ w.acosSum+=+r.real_acos_pct; w.acosN++; }
     if(r.unit_session_pct!=null){ w.cvrSum+=+r.unit_session_pct; w.cvrN++; }
     if(r.avg_sales_price!=null){ w.avgPriceSum+=+r.avg_sales_price; w.avgPriceN++; }
+    if(r.sales_organic!=null){ w.salesOrganic+=+r.sales_organic; w.salesOrganicSeen=true; }
+    if(r.sales_ppc!=null){ w.salesPpc+=+r.sales_ppc; w.salesPpcSeen=true; }
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
@@ -1387,14 +1390,20 @@ function finalizeWeek(w){
   const impressions = w.impressionsSeen ? w.impressions : null;
   const clicks = w.clicksSeen ? w.clicks : null;
   const adsOrders = w.adsOrdersSeen ? w.adsOrders : null;
-  // Ad Sales is directly uploaded from Sellerfox's "Sales 7D (SP)" column.
-  const advertisedRevenue = w.adSalesSeen ? w.adSales : null;
-  // Organic Sales has no literal column in either export — Total Sales minus
-  // Ad Sales was considered and deliberately rejected as "still a
-  // computation" even though both pieces are real numbers, so this always
-  // shows N/A rather than being derived.
-  const organicRevenue = null;
-  const organicPct = null;
+  // Ad Sales prefers Sellerboard's own "Sales PPC" (from the Organic/PPC
+  // upload) when present — same source file as Organic Sales below, so the
+  // two always add up to the same Total Sales consistently. Falls back to
+  // Sellerfox's "Sales 7D (SP)" column if that upload hasn't been done for
+  // this week yet.
+  const advertisedRevenue = w.salesPpcSeen ? w.salesPpc : (w.adSalesSeen ? w.adSales : null);
+  // Organic Sales has no literal column in the main Sellerboard/Sellerfox
+  // exports — Total Sales minus Ad Sales was considered and deliberately
+  // rejected as "still a computation" even though both pieces are real
+  // numbers. It only ever shows a value when Sellerboard's own "Sales
+  // Organic" column has actually been uploaded (via the Organic/PPC-only
+  // upload) — otherwise it stays N/A rather than being derived.
+  const organicRevenue = w.salesOrganicSeen ? w.salesOrganic : null;
+  const organicPct = (organicRevenue!=null && sales) ? organicRevenue/sales : null;
 
   return {
     sales, units, refunds,
@@ -2292,7 +2301,7 @@ const METRICS = [
   {key:'cpo', label:'Cost Per Order (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'units'}},
   {key:'profitPerOrder', label:'Profit Per Order (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'netProfit',den:'units'}},
   {key:'cpc', label:'Avg. CPC (€)', fmt:fmtMoney2dp, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'clicks'}},
-  {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc'},
+  {key:'organicPct', label:'Organic Sales (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'organicRevenue',den:'sales'}},
   {key:'organicRevenue', label:'Organic Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
   {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
   {key:'sessions', label:'Sessions', fmt:fmtIntNA, kind:'sum', tierKeys:{good:'target_sessions_good',better:'target_sessions_better',best:'target_sessions_best'}},
