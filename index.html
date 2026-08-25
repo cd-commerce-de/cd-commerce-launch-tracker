@@ -1861,10 +1861,15 @@ function renderTagDashboard(tag){
   ];
   let ohtml = '<thead><tr><th>Metric</th>';
   colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
-  ohtml += '<th>Total/Avg</th><th></th></tr></thead><tbody>';
+  ohtml += '<th>12-Week Total</th><th></th></tr></thead><tbody>';
   if(!sortedCalWeeks.length){
     ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks match the current filters.</td></tr>`;
   }
+  // The Total column is always exactly a 12-week total — capped to the
+  // LAST 12 calendar-week columns shown (most recent) — even though the
+  // table itself can display more than 12 columns when products launched
+  // at staggered times span a longer real-calendar range.
+  const last12WeekTotals = weekTotals.slice(-12);
   overallMetrics.forEach(m=>{
     const vals = weekTotals.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
@@ -1874,15 +1879,15 @@ function renderTagDashboard(tag){
       const bg = heatColor(v,min,max);
       ohtml += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
-    const grandSales = weekTotals.reduce((a,w)=>a+w.sales,0);
-    const grandUnits = weekTotals.reduce((a,w)=>a+w.units,0);
-    const grandAdSpend = weekTotals.reduce((a,w)=>a+w.adSpend,0);
-    const grandRefunds = weekTotals.reduce((a,w)=>a+w.refunds,0);
+    const grandSales = last12WeekTotals.reduce((a,w)=>a+w.sales,0);
+    const grandUnits = last12WeekTotals.reduce((a,w)=>a+w.units,0);
+    const grandAdSpend = last12WeekTotals.reduce((a,w)=>a+w.adSpend,0);
+    const grandRefunds = last12WeekTotals.reduce((a,w)=>a+w.refunds,0);
     let total;
-    if(m.key==='margin') total = grandSales? weekTotals.reduce((a,w)=>a+w.netProfit,0)/grandSales : 0;
+    if(m.key==='margin') total = grandSales? last12WeekTotals.reduce((a,w)=>a+w.netProfit,0)/grandSales : 0;
     else if(m.key==='tacos') total = grandSales? grandAdSpend/grandSales : 0;
     else if(m.key==='refundPct') total = grandUnits? grandRefunds/grandUnits : 0;
-    else total = vals.reduce((a,v)=>a+v,0);
+    else total = vals.slice(-12).reduce((a,v)=>a+v,0);
     ohtml += `<td class="total-col">${m.fmt(total)}</td><td></td></tr>`;
   });
   if(sortedCalWeeks.length){
