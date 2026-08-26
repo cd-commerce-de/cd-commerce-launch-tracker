@@ -2755,9 +2755,9 @@ const METRICS = [
   {key:'adsOrders', label:'Ad Orders', fmt:fmtIntNA, kind:'sum'},
   {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'clicks',den:'impressions'}},
   {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'sales',den:'units'}},
-  {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}, categoryKey:'bsrCategory'},
-  {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName'},
-  {key:'visibility', label:'Visibility (%)', fmt:fmtPct, kind:'calc',
+  {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}, categoryKey:'bsrCategory', noTotal:true},
+  {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName', noTotal:true},
+  {key:'visibility', label:'Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
 
@@ -2826,7 +2826,8 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       html += `<td style="background:${bg};"><div style="${cellStyle}">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
-    if(m.kind==='sum') total = sum(weeks, m.key);
+    if(m.noTotal) total = null;
+    else if(m.kind==='sum') total = sum(weeks, m.key);
     else if(m.kind==='min') total = minBSR(weeks, m.key);
     else if(m.ratioOf){
       const denTotal = sum(weeks, m.ratioOf.den);
@@ -2837,12 +2838,17 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const thresholds = m.tierKeys ? getThresholds(t, m.tierKeys, m.targetIsPct) : null;
     const tier = thresholds ? computeTier(total, thresholds, m.lowerIsBetter) : null;
     const totalStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
-    const formattedTotal = m.fmt(total);
-    let displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
-    if(m.categoryKey && total!=null){
-      displayTotal = `#${displayTotal}`;
-      const bestWeek = weeks.find(w=>w[m.key]===total);
-      if(bestWeek && bestWeek[m.categoryKey]) displayTotal += ` in ${escapeHtml(bestWeek[m.categoryKey])}`;
+    let displayTotal;
+    if(m.noTotal){
+      displayTotal = '';
+    } else {
+      const formattedTotal = m.fmt(total);
+      displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
+      if(m.categoryKey && total!=null){
+        displayTotal = `#${displayTotal}`;
+        const bestWeek = weeks.find(w=>w[m.key]===total);
+        if(bestWeek && bestWeek[m.categoryKey]) displayTotal += ` in ${escapeHtml(bestWeek[m.categoryKey])}`;
+      }
     }
     html += `<td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>`;
     html += `<td></td></tr>`;
