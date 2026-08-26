@@ -1656,7 +1656,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     sales:0, salesSeen:false, units:0, unitsSeen:false, refunds:0, refundsSeen:false, refundPctSum:0, refundPctN:0,
     adSpend:0, adSpendSeen:false, amazonFees:0, cogs:0, vat:0, shipping:0, grossProfit:0, netProfit:0, netProfitSeen:false,
     marginSum:0, marginN:0, roiSum:0, roiN:0, acosSum:0, acosN:0,
-    bsr:null, subcatBsr:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
+    bsr:null, subcatBsr:null, subcatBsrName:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
     impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
     salesOrganic:0, salesOrganicSeen:false, salesPpc:0, salesPpcSeen:false,
     kwTop10:null,
@@ -1709,7 +1709,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     w.vat+=Math.abs(+r.vat||0); w.shipping+=Math.abs(+r.shipping||0); w.grossProfit+=+r.gross_profit||0;
     if(r.net_profit!=null){ w.netProfit+=+r.net_profit; w.netProfitSeen=true; }
     w.bsr = (w.bsr===null) ? (r.bsr||null) : (r.bsr ? Math.min(w.bsr, r.bsr) : w.bsr);
-    w.subcatBsr = (w.subcatBsr===null) ? (r.subcat_bsr||null) : (r.subcat_bsr ? Math.min(w.subcatBsr, r.subcat_bsr) : w.subcatBsr);
+    if(r.subcat_bsr && (w.subcatBsr===null || r.subcat_bsr<w.subcatBsr)){ w.subcatBsr = r.subcat_bsr; w.subcatBsrName = r.subcat_bsr_name || null; }
     if(r.refund_pct!=null){ w.refundPctSum+=+r.refund_pct; w.refundPctN++; }
     if(r.margin_pct!=null){ w.marginSum+=+r.margin_pct; w.marginN++; }
     if(r.roi_pct!=null){ w.roiSum+=+r.roi_pct; w.roiN++; }
@@ -1757,7 +1757,7 @@ function finalizeWeek(w){
       sales:null, units:null, refunds:null, refundPct:null,
       adSpend:null, amazonFees:null, cogs:null, vat:null, shipping:null,
       grossProfit:null, netProfit:null, margin:null, roi:null, realAcos:null,
-      tacos:null, cpo:null, profitPerOrder:null, bsr:null, subcatBsr:null, sessions:null,
+      tacos:null, cpo:null, profitPerOrder:null, bsr:null, subcatBsr:null, subcatBsrName:null, sessions:null,
       cvr:null, avgSalesPrice:null, impressions:null, clicks:null, adsOrders:null,
       ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
       kwTop10:null,
@@ -1802,7 +1802,7 @@ function finalizeWeek(w){
     tacos: (adSpend!=null && sales) ? adSpend/sales : null,
     cpo: (adSpend!=null && units) ? adSpend/units : null,
     profitPerOrder: (netProfit!=null && units) ? netProfit/units : null,
-    bsr:w.bsr, subcatBsr:w.subcatBsr, sessions,
+    bsr:w.bsr, subcatBsr:w.subcatBsr, subcatBsrName:w.subcatBsrName, sessions,
     cvr: w.cvrN? (w.cvrSum/w.cvrN)/100 : ((sessions!=null && units!=null && sessions)? units/sessions : null),
     avgSalesPrice: w.avgPriceN? w.avgPriceSum/w.avgPriceN : null,
     impressions, clicks, adsOrders,
@@ -2756,7 +2756,7 @@ const METRICS = [
   {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'clicks',den:'impressions'}},
   {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'sales',den:'units'}},
   {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}, categoryKey:'bsrCategory'},
-  {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true},
+  {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName'},
   {key:'visibility', label:'Visibility (%)', fmt:fmtPct, kind:'calc',
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -2816,7 +2816,10 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       const formatted = m.fmt(v);
       let displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
-      if(m.categoryKey && v!=null && weeks[i][m.categoryKey]) displayValue += ` in ${escapeHtml(weeks[i][m.categoryKey])}`;
+      if(m.categoryKey && v!=null){
+        displayValue = `#${displayValue}`;
+        if(weeks[i][m.categoryKey]) displayValue += ` in ${escapeHtml(weeks[i][m.categoryKey])}`;
+      }
       const cellStyle = m.categoryKey
         ? 'display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;'
         : 'display:inline-block;max-width:75px;overflow:hidden;';
@@ -2837,6 +2840,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const formattedTotal = m.fmt(total);
     let displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
     if(m.categoryKey && total!=null){
+      displayTotal = `#${displayTotal}`;
       const bestWeek = weeks.find(w=>w[m.key]===total);
       if(bestWeek && bestWeek[m.categoryKey]) displayTotal += ` in ${escapeHtml(bestWeek[m.categoryKey])}`;
     }
