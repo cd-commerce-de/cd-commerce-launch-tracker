@@ -881,6 +881,25 @@ function setStatus(id, kind, msg){
   const el = document.getElementById(id); el.textContent = msg;
   el.className = 'status-line ' + (kind==='ok'?'status-ok':kind==='err'?'status-err':'status-busy');
 }
+// Builds a richer error string from the diagnostic fields the
+// child-ASIN-matching importers (Sellerboard Organic, Data Rova Ranks,
+// Data Rova Visibility) return, instead of just the top-line error message —
+// otherwise the exact ASIN/marketplace causing a failure is invisible.
+function describeMatchError(data){
+  let detail = data.error || 'upload failed';
+  if(data.unknownChildAsinsSample && data.unknownChildAsinsSample.length){
+    detail += ` — ${data.unknownChildAsins} ASIN(s) not found in your child\u2192parent mapping, e.g.: ${data.unknownChildAsinsSample.slice(0,5).join(', ')}`;
+  }
+  if(data.skippedMarketplaceMismatchDetails && data.skippedMarketplaceMismatchDetails.length){
+    const d0 = data.skippedMarketplaceMismatchDetails[0];
+    detail += ` — e.g. child ${d0.childAsin} is known, but only under marketplace(s) ${d0.knownMarketplaces.join('/')}, not "${d0.fileMarketplace}" as this file has it`;
+  }
+  if(data.skippedUntrackedParentDetails && data.skippedUntrackedParentDetails.length){
+    const d0 = data.skippedUntrackedParentDetails[0];
+    detail += ` — e.g. child ${d0.childAsin} (${d0.marketplace}) resolved to parent ${d0.parentAsin}, which isn't a tracked product`;
+  }
+  return detail;
+}
 
 /* ---------------- Uploads: sent to Supabase Edge Functions ---------------- */
 async function uploadFile(functionName, file, statusId, buttonId){
@@ -1159,7 +1178,7 @@ async function confirmUploadSBO(){
       const data = await res.json();
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+        failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
@@ -1257,7 +1276,7 @@ async function confirmUploadDR(){
       const data = await res.json();
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+        failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
@@ -1351,16 +1370,7 @@ async function confirmUploadDV(){
       const data = await res.json();
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++;
-        let detail = data.error || 'upload failed';
-        if(data.unknownChildAsinsSample && data.unknownChildAsinsSample.length){
-          detail += ` — ${data.unknownChildAsins} ASIN(s) not found in your child\u2192parent mapping, e.g.: ${data.unknownChildAsinsSample.slice(0,5).join(', ')}`;
-        }
-        if(data.skippedUntrackedParentDetails && data.skippedUntrackedParentDetails.length){
-          const d0 = data.skippedUntrackedParentDetails[0];
-          detail += ` — e.g. child ${d0.childAsin} (${d0.marketplace}) resolved to parent ${d0.parentAsin}, which isn't a tracked product`;
-        }
-        failMessages.push(`${file.name}: ${detail}`);
+        failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
