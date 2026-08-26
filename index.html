@@ -546,7 +546,7 @@
           <div class="col">
             <div class="upload-box" id="dropDR">
               <label for="fileDR">Choose Data Rova "Ranks by ASIN — Daily" CSV(s)</label>
-              <input type="file" id="fileDR" accept=".csv" multiple>
+              <input type="file" id="fileDR" accept=".csv,.xlsx,.xls" multiple>
               <div class="hint">Set the date for each file below — usually the last day of the week you're tracking. Only keywords ranking organically in the top 10 on that exact date are kept, mapped from child ASIN to parent using your existing Sellerboard child mapping, and stored as that week's "KW in Top 10."</div>
               <div id="drFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadDR" style="display:none;" onclick="confirmUploadDR()">Upload</button></div>
@@ -557,7 +557,7 @@
           <div class="col">
             <div class="upload-box" id="dropDV">
               <label for="fileDV">Choose Data Rova "Project - ASINs" CSV(s)</label>
-              <input type="file" id="fileDV" accept=".csv" multiple>
+              <input type="file" id="fileDV" accept=".csv,.xlsx,.xls" multiple>
               <div class="hint">A current snapshot, not a weekly history — set the date each file should be filed under below. Most rows are competitor ASINs and are automatically skipped; only rows matching your own tracked ASINs are kept, mapped from child to parent, and stored as "Visibility."</div>
               <div id="dvFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadDV" style="display:none;" onclick="confirmUploadDV()">Upload</button></div>
@@ -568,7 +568,7 @@
           <div class="col">
             <div class="upload-box" id="dropKP">
               <label for="fileKP">Choose Keepa/SellerSprite XLSX(s)</label>
-              <input type="file" id="fileKP" accept=".xlsx" multiple>
+              <input type="file" id="fileKP" accept=".xlsx,.xls,.csv" multiple>
               <div class="hint">Set the week for each file below (its Monday). The child ASIN is read from the sheet name / filename, not a column. Finds the day in that week with the best subcategory BSR rank, and uses that same day's main BSR to replace "Highest BSR."</div>
               <div id="kpFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadKP" style="display:none;" onclick="confirmUploadKP()">Upload</button></div>
