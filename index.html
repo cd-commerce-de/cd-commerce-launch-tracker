@@ -2817,7 +2817,10 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const formatted = m.fmt(v);
       let displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
       if(m.categoryKey && v!=null && weeks[i][m.categoryKey]) displayValue += ` in ${escapeHtml(weeks[i][m.categoryKey])}`;
-      html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
+      const cellStyle = m.categoryKey
+        ? 'display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;'
+        : 'display:inline-block;max-width:75px;overflow:hidden;';
+      html += `<td style="background:${bg};"><div style="${cellStyle}">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
     if(m.kind==='sum') total = sum(weeks, m.key);
@@ -2837,17 +2840,15 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const bestWeek = weeks.find(w=>w[m.key]===total);
       if(bestWeek && bestWeek[m.categoryKey]) displayTotal += ` in ${escapeHtml(bestWeek[m.categoryKey])}`;
     }
-    html += `<td class="total-col" style="${totalStyle}">${displayTotal}</td>`;
+    html += `<td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>`;
     html += `<td></td></tr>`;
   });
   html += `<tr><td style="font-weight:700;">KW in Top 10</td>`;
   weeks.forEach(w=>{
     const kw = w.kwTop10;
     if(!kw){ html += `<td style="background:#fff;">–</td>`; return; }
-    const preview = kw.length>13 ? kw.slice(0,13)+'…' : kw;
-    html += `<td style="background:#fff;position:relative;" class="note-cell">
-      <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;">${escapeHtml(preview)}</div>
-      <div class="note-hover-tooltip">${escapeHtml(kw)}</div>
+    html += `<td style="background:#fff;">
+      <div style="display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;">${escapeHtml(kw)}</div>
     </td>`;
   });
   html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
