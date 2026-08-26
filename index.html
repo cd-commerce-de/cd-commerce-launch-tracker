@@ -1614,6 +1614,7 @@ async function getMarketplaces(){
 /* ---------------- Overview (All Products) ---------------- */
 let overviewRowsData = [];
 let overviewSort = { key: 'totalSales', dir: 'desc' };
+let expandedOverviewAsins = new Set();
 function sortOverviewBy(key){
   if(overviewSort.key === key){ overviewSort.dir = overviewSort.dir === 'asc' ? 'desc' : 'asc'; }
   else { overviewSort = { key, dir: key==='__name__' ? 'asc' : 'desc' }; }
@@ -1626,26 +1627,44 @@ async function loadOverview(){
 
   if(!filtered.length){ overviewRowsData = []; renderOverviewTable(); return; }
   const asins = filtered.map(p => p.asin);
-  const [{ data: allSbRows }, { data: allSfRows }] = await Promise.all([
+  const [{ data: allSbRows }, { data: allSfRows }, { data: allChildRows }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').in('asin', asins),
     sb.from('sellerfox_rows').select('*').in('asin', asins),
+    sb.from('sellerboard_child_rows').select('*').in('parent_asin', asins),
   ]);
-  const sbByAsin = {}, sfByAsin = {};
+  const sbByAsin = {}, sfByAsin = {}, childRowsByParent = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
   (allSfRows||[]).forEach(r=>{ if(!sfByAsin[r.asin]) sfByAsin[r.asin] = []; sfByAsin[r.asin].push(r); });
+  (allChildRows||[]).forEach(r=>{ if(!childRowsByParent[r.parent_asin]) childRowsByParent[r.parent_asin] = []; childRowsByParent[r.parent_asin].push(r); });
 
   overviewRowsData = filtered.map(product => {
-    const { weeks } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
+    const { weeks, anchor } = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[]);
     const bsrVals = weeks.map(w=>w.bsr).filter(x=>x!==null&&x>0);
     let weeksToProfit = null;
     for(let i=0;i<weeks.length;i++){
       if(weeks[i].margin!=null && weeks[i].margin>0){ weeksToProfit = i+1; break; }
     }
+    // Every child is aligned to the PARENT's own anchor (not its own
+    // auto-detected one), same convention as the Product Detail child
+    // breakdown, so they all share the same Week 1-12 grid.
+    const childRowsForParent = childRowsByParent[product.asin] || [];
+    const byChild = {};
+    childRowsForParent.forEach(r=>{ if(!byChild[r.child_asin]) byChild[r.child_asin] = []; byChild[r.child_asin].push(r); });
+    const childSummaries = Object.keys(byChild).map(childAsin=>{
+      const rows = byChild[childAsin];
+      const { weeks: childWeeks } = computeWeeksFromRows({ asin: childAsin, launch: anchor }, rows, []);
+      const childBsrVals = childWeeks.map(w=>w.bsr).filter(x=>x!=null&&x>0);
+      return {
+        childAsin, sku: rows[0]?.sku || '', name: rows[0]?.name || childAsin,
+        totalSales: sum(childWeeks,'sales'), totalUnits: sum(childWeeks,'units'),
+        avgMargin: avg(childWeeks,'margin'), bestBSR: childBsrVals.length?Math.min(...childBsrVals):null,
+      };
+    });
     return {
       product, weeks, totalSales: sum(weeks,'sales'), netProfit: sum(weeks,'netProfit'),
       avgMargin: sum(weeks,'sales') ? sum(weeks,'netProfit')/sum(weeks,'sales') : null,
       units: sum(weeks,'units'), sessions: sum(weeks,'sessions'), bestBSR: bsrVals.length?Math.min(...bsrVals):null,
-      weeksWithData: weeks.filter(w=>w.hasData).length, weeksToProfit,
+      weeksWithData: weeks.filter(w=>w.hasData).length, weeksToProfit, childSummaries,
     };
   });
   renderOverviewTable();
@@ -1702,8 +1721,13 @@ function renderOverviewTable(){
     let groupSales=0, groupProfit=0, groupUnits=0, groupSessions=0;
     sorted.forEach(r=>{
       groupSales+=r.totalSales; groupProfit+=r.netProfit; groupUnits+=r.units; groupSessions+=r.sessions;
-      html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.product.asin}')">
-        <td style="text-align:left;white-space:nowrap;min-width:220px;">${thumb(r.product.image_url)}${escapeHtml(productLineOnly(r.product))}</td>
+      const hasChildren = r.childSummaries && r.childSummaries.length;
+      const isExpanded = expandedOverviewAsins.has(r.asin);
+      const toggleHtml = hasChildren
+        ? `<span onclick="event.stopPropagation(); toggleOverviewChildren('${r.asin}');" style="display:inline-block;width:16px;cursor:pointer;color:var(--text-muted);transform:rotate(${isExpanded?90:0}deg);transition:transform .1s;">▶</span>`
+        : `<span style="display:inline-block;width:16px;"></span>`;
+      html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.asin}')">
+        <td style="text-align:left;white-space:nowrap;min-width:220px;">${toggleHtml}${thumb(r.product.image_url)}${escapeHtml(productLineOnly(r.product))}</td>
         <td>${escapeHtml(r.asin)}</td>
         <td>${fmtMoney(r.totalSales)}</td>
         <td>${fmtMoney(r.netProfit)}</td>
@@ -1717,6 +1741,9 @@ function renderOverviewTable(){
         <td>${r.launchDate ? new Date(r.launchDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '–'}</td>
         <td></td>
       </tr>`;
+      if(isExpanded && hasChildren){
+        html += `<tr><td colspan="${colCount}" style="background:#F8FAFC;padding:0;">${renderOverviewChildBreakdown(r.childSummaries)}</td></tr>`;
+      }
     });
     grandSales+=groupSales; grandProfit+=groupProfit; grandUnits+=groupUnits; grandSessions+=groupSessions;
     const groupMargin = groupSales? groupProfit/groupSales : 0;
@@ -1750,6 +1777,34 @@ function renderOverviewTable(){
 
   html += '</tbody>';
   document.getElementById('overviewTable').innerHTML = html;
+}
+function toggleOverviewChildren(asin){
+  if(expandedOverviewAsins.has(asin)) expandedOverviewAsins.delete(asin);
+  else expandedOverviewAsins.add(asin);
+  renderOverviewTable();
+}
+function renderOverviewChildBreakdown(childSummaries){
+  const sorted = childSummaries.slice().sort((a,b)=>b.totalSales-a.totalSales);
+  const rows = sorted.map(c=>`
+    <tr>
+      <td style="text-align:left;white-space:nowrap;min-width:200px;padding-left:32px;">${escapeHtml(c.sku ? `${c.sku} · ${c.childAsin}` : c.childAsin)}</td>
+      <td style="text-align:center;">${fmtMoney(c.totalSales)}</td>
+      <td style="text-align:center;">${fmtInt(c.totalUnits)}</td>
+      <td style="text-align:center;">${fmtPct(c.avgMargin)}</td>
+      <td style="text-align:center;">${fmtRank(c.bestBSR)}</td>
+      <td></td>
+    </tr>`).join('');
+  return `<table class="stretch-table" style="margin:0;">
+    <thead><tr>
+      <th style="text-align:left;padding-left:32px;font-size:10.5px;color:var(--text-muted);">Child SKU</th>
+      <th style="font-size:10.5px;color:var(--text-muted);">12-Wk Sales</th>
+      <th style="font-size:10.5px;color:var(--text-muted);">12-Wk Units</th>
+      <th style="font-size:10.5px;color:var(--text-muted);">Avg. Margin</th>
+      <th style="font-size:10.5px;color:var(--text-muted);">Best BSR</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 function openProductFromOverview(asin){
   document.getElementById('productSelect').value = asin;
