@@ -555,6 +555,27 @@
             </div>
           </div>
           <div class="col">
+            <div class="upload-box" id="dropDV">
+              <label for="fileDV">Choose Data Rova "Project - ASINs" CSV(s)</label>
+              <input type="file" id="fileDV" accept=".csv" multiple>
+              <div class="hint">A current snapshot, not a weekly history — set the date each file should be filed under below. Most rows are competitor ASINs and are automatically skipped; only rows matching your own tracked ASINs are kept, mapped from child to parent, and stored as "Visibility."</div>
+              <div id="dvFileList" style="margin-top:8px;"></div>
+              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadDV" style="display:none;" onclick="confirmUploadDV()">Upload</button></div>
+              <div class="status-line" id="statusDV"></div>
+              <div id="dvDownloadLink" style="margin-top:8px;"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="upload-box" id="dropKP">
+              <label for="fileKP">Choose Keepa/SellerSprite XLSX(s)</label>
+              <input type="file" id="fileKP" accept=".xlsx" multiple>
+              <div class="hint">Set the week for each file below (its Monday). The child ASIN is read from the sheet name / filename, not a column. Finds the day in that week with the best subcategory BSR rank, and uses that same day's main BSR to replace "Highest BSR."</div>
+              <div id="kpFileList" style="margin-top:8px;"></div>
+              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadKP" style="display:none;" onclick="confirmUploadKP()">Upload</button></div>
+              <div class="status-line" id="statusKP"></div>
+            </div>
+          </div>
+          <div class="col">
             <div class="upload-box" id="dropPR">
               <label for="filePR">Choose Products CSV</label>
               <input type="file" id="filePR" accept=".csv">
@@ -1273,6 +1294,180 @@ async function confirmUploadDR(){
   }
   await refreshAllViews();
 }
+
+/* Data Rova "Project - ASINs" (Visibility) upload — same date-per-file
+   pattern as the Ranks upload, since this report also has no built-in week. */
+let dvSelectedFiles = [];
+document.getElementById('fileDV').addEventListener('change', e=>{
+  dvSelectedFiles = Array.from(e.target.files);
+  renderDvFileList();
+});
+function renderDvFileList(){
+  const container = document.getElementById('dvFileList');
+  const btn = document.getElementById('btnUploadDV');
+  if(!dvSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
+  container.innerHTML = dvSelectedFiles.map((file,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <input type="date" id="dvFileDate${i}" style="min-width:130px;font-size:11px;padding:2px 4px;">
+      <button class="btn btn-sm" onclick="removeDvFile(${i})" style="padding:1px 7px;">✕</button>
+      <span id="dvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+    </div>`).join('');
+  btn.style.display = 'inline-block';
+  btn.textContent = `Upload ${dvSelectedFiles.length} file${dvSelectedFiles.length>1?'s':''}`;
+}
+function removeDvFile(i){
+  dvSelectedFiles.splice(i,1);
+  renderDvFileList();
+}
+async function confirmUploadDV(){
+  if(!dvSelectedFiles.length){ setStatus('statusDV', 'err', 'Choose at least one file first.'); return; }
+  const btn = document.getElementById('btnUploadDV');
+  btn.disabled = true;
+  document.getElementById('dvDownloadLink').innerHTML = '';
+  let successCount = 0, failCount = 0, totalRows = 0, totalChildRows = 0, totalCategoriesUpdated = 0, totalSkippedUnknown = 0, totalSkippedUntracked = 0;
+  const failMessages = [];
+  const allSummaryRows = [];
+
+  for(let i=0;i<dvSelectedFiles.length;i++){
+    const file = dvSelectedFiles[i];
+    const date = document.getElementById('dvFileDate'+i).value;
+    const statusEl = document.getElementById('dvFileStatus'+i);
+    if(!date){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: set a date first`);
+      continue;
+    }
+    setStatus('statusDV', 'busy', `Uploading ${i+1} of ${dvSelectedFiles.length}: ${file.name}…`);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('date', date);
+    try{
+      const res = await fetch(`${EDGE_BASE}/upload-datarova-visibility`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if(!res.ok){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+      } else {
+        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+        successCount++;
+        totalRows += data.rowsLoaded || 0;
+        totalChildRows += data.childRowsLoaded || 0;
+        totalCategoriesUpdated += data.categoriesUpdated || 0;
+        totalSkippedUnknown += data.skippedUnknownChildAsins || 0;
+        totalSkippedUntracked += data.skippedUntrackedParentChildRows || 0;
+        if(data.summary) allSummaryRows.push(...data.summary);
+      }
+    }catch(err){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+    }
+  }
+
+  btn.disabled = false;
+  if(failCount === 0){
+    const skippedUnknown = totalSkippedUnknown ? `, ${totalSkippedUnknown} ASIN(s) not recognized (likely competitors)` : '';
+    const skippedUntracked = totalSkippedUntracked ? `, ${totalSkippedUntracked} row(s) skipped (parent not tracked)` : '';
+    setStatus('statusDV', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows, ${totalChildRows} child rows, ${totalCategoriesUpdated} categor${totalCategoriesUpdated===1?'y':'ies'} updated${skippedUnknown}${skippedUntracked}`);
+    dvSelectedFiles = [];
+    document.getElementById('fileDV').value = '';
+    renderDvFileList();
+  } else {
+    setStatus('statusDV', 'err', `${successCount} of ${dvSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
+  }
+  if(allSummaryRows.length){
+    const csvRows = ['Parent ASIN,Week,Visibility (%)'];
+    allSummaryRows.forEach(r=> csvRows.push(`${r.asin},${r.week},${r.visibility}`));
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    document.getElementById('dvDownloadLink').innerHTML = `<a href="${url}" download="visibility_summary.csv" class="btn btn-sm">Download summary (${allSummaryRows.length} rows)</a>`;
+  }
+  await refreshAllViews();
+}
+
+/* Keepa/SellerSprite BSR upload — each file needs its own target WEEK
+   (Monday). No date-guessing from the filename, since the filename's date is
+   the export date, not necessarily aligned to a Monday. */
+let kpSelectedFiles = [];
+document.getElementById('fileKP').addEventListener('change', e=>{
+  kpSelectedFiles = Array.from(e.target.files);
+  renderKpFileList();
+});
+function renderKpFileList(){
+  const container = document.getElementById('kpFileList');
+  const btn = document.getElementById('btnUploadKP');
+  if(!kpSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
+  container.innerHTML = kpSelectedFiles.map((file,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <input type="date" id="kpFileWeek${i}" style="min-width:130px;font-size:11px;padding:2px 4px;" title="Monday of the target week">
+      <button class="btn btn-sm" onclick="removeKpFile(${i})" style="padding:1px 7px;">✕</button>
+      <span id="kpFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+    </div>`).join('');
+  btn.style.display = 'inline-block';
+  btn.textContent = `Upload ${kpSelectedFiles.length} file${kpSelectedFiles.length>1?'s':''}`;
+}
+function removeKpFile(i){
+  kpSelectedFiles.splice(i,1);
+  renderKpFileList();
+}
+async function confirmUploadKP(){
+  if(!kpSelectedFiles.length){ setStatus('statusKP', 'err', 'Choose at least one file first.'); return; }
+  const btn = document.getElementById('btnUploadKP');
+  btn.disabled = true;
+  let successCount = 0, failCount = 0;
+  const failMessages = [], okMessages = [];
+
+  for(let i=0;i<kpSelectedFiles.length;i++){
+    const file = kpSelectedFiles[i];
+    const week = document.getElementById('kpFileWeek'+i).value;
+    const statusEl = document.getElementById('kpFileStatus'+i);
+    if(!week){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: set the target week first`);
+      continue;
+    }
+    setStatus('statusKP', 'busy', `Uploading ${i+1} of ${kpSelectedFiles.length}: ${file.name}…`);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('week', week);
+    try{
+      const res = await fetch(`${EDGE_BASE}/upload-keepa-bsr`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if(!res.ok){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+      } else {
+        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+        successCount++;
+        const catNote = data.categoryMissing ? ' (no category on file yet — upload the Data Rova Project-ASINs report to add one)' : '';
+        okMessages.push(`${data.parentAsin}: BSR ${data.bsr}${data.bsrCategory ? ' in '+data.bsrCategory : ''} (best subcat rank ${data.bestSubcatRank} in ${data.bestSubcatName})${catNote}`);
+      }
+    }catch(err){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+    }
+  }
+
+  btn.disabled = false;
+  if(failCount === 0){
+    setStatus('statusKP', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${okMessages.join('; ')}`);
+    kpSelectedFiles = [];
+    document.getElementById('fileKP').value = '';
+    renderKpFileList();
+  } else {
+    setStatus('statusKP', 'err', `${successCount} of ${kpSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
+  }
+  await refreshAllViews();
+}
 document.getElementById('filePA').addEventListener('change', ()=> stageFile('filePA','statusPA','btnUploadPA'));
 
 ['dropSB','dropSF','dropPR','dropTG','dropWT','dropPA'].forEach((id, idx)=>{
@@ -1446,6 +1641,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
     salesOrganic:0, salesOrganicSeen:false, salesPpc:0, salesPpcSeen:false,
     kwTop10:null,
+    visibility:0, visibilitySeen:false, bsrCategory:null,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
@@ -1504,6 +1700,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.sales_organic!=null){ w.salesOrganic+=+r.sales_organic; w.salesOrganicSeen=true; }
     if(r.sales_ppc!=null){ w.salesPpc+=+r.sales_ppc; w.salesPpcSeen=true; }
     if(r.kw_top10){ w.kwTop10 = r.kw_top10; }
+    if(r.visibility!=null){ w.visibility=+r.visibility; w.visibilitySeen=true; }
+    if(r.bsr_category){ w.bsrCategory = r.bsr_category; }
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
@@ -1544,6 +1742,7 @@ function finalizeWeek(w){
       cvr:null, avgSalesPrice:null, impressions:null, clicks:null, adsOrders:null,
       ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
       kwTop10:null,
+      visibility:null, bsrCategory:null,
       hasData:false,
     };
   }
@@ -1594,6 +1793,8 @@ function finalizeWeek(w){
     organicRevenue,
     advertisedRevenue,
     kwTop10: w.kwTop10,
+    visibility: w.visibilitySeen ? w.visibility/100 : null,
+    bsrCategory: w.bsrCategory,
     hasData:true,
   };
 }
@@ -2535,8 +2736,10 @@ const METRICS = [
   {key:'adsOrders', label:'Ad Orders', fmt:fmtIntNA, kind:'sum'},
   {key:'ctr', label:'Click-Through Rate (%)', fmt:fmtPct, kind:'calc', ratioOf:{num:'clicks',den:'impressions'}},
   {key:'avgSalesPrice', label:'Average Sales Price (€)', fmt:fmtMoney, kind:'calc', ratioOf:{num:'sales',den:'units'}},
-  {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}},
+  {key:'bsr', label:'Highest BSR', fmt:fmtRank, kind:'min', lowerIsBetter:true, tierKeys:{good:'target_bsr_good',better:'target_bsr_better',best:'target_bsr_best'}, categoryKey:'bsrCategory'},
   {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true},
+  {key:'visibility', label:'Visibility (%)', fmt:fmtPct, kind:'calc',
+    description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
 
 // Matches the Annahmen & Prognosen template's own row order, in English.
@@ -2586,11 +2789,15 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const vals = weeks.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
     const min = Math.min(...numericVals), max = Math.max(...numericVals);
-    html += `<tr><td>${m.label}</td>`;
+    const labelHtml = m.description
+      ? `<span class="note-cell" style="position:relative;display:inline-block;border-bottom:1px dotted var(--text-muted);cursor:help;">${m.label}<div class="note-hover-tooltip">${escapeHtml(m.description)}</div></span>`
+      : m.label;
+    html += `<tr><td>${labelHtml}</td>`;
     vals.forEach((v,i)=>{
       const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       const formatted = m.fmt(v);
-      const displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
+      let displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
+      if(m.categoryKey && v!=null && weeks[i][m.categoryKey]) displayValue += ` in ${escapeHtml(weeks[i][m.categoryKey])}`;
       html += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
@@ -2606,7 +2813,11 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const tier = thresholds ? computeTier(total, thresholds, m.lowerIsBetter) : null;
     const totalStyle = tier ? `background:${TIER_COLORS[tier]};color:#fff;` : '';
     const formattedTotal = m.fmt(total);
-    const displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
+    let displayTotal = (blankForNA && formattedTotal==='N/A') ? '' : formattedTotal;
+    if(m.categoryKey && total!=null){
+      const bestWeek = weeks.find(w=>w[m.key]===total);
+      if(bestWeek && bestWeek[m.categoryKey]) displayTotal += ` in ${escapeHtml(bestWeek[m.categoryKey])}`;
+    }
     html += `<td class="total-col" style="${totalStyle}">${displayTotal}</td>`;
     html += `<td></td></tr>`;
   });
