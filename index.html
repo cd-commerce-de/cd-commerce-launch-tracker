@@ -1351,7 +1351,16 @@ async function confirmUploadDV(){
       const data = await res.json();
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+        failCount++;
+        let detail = data.error || 'upload failed';
+        if(data.unknownChildAsinsSample && data.unknownChildAsinsSample.length){
+          detail += ` — ${data.unknownChildAsins} ASIN(s) not found in your child\u2192parent mapping, e.g.: ${data.unknownChildAsinsSample.slice(0,5).join(', ')}`;
+        }
+        if(data.skippedUntrackedParentDetails && data.skippedUntrackedParentDetails.length){
+          const d0 = data.skippedUntrackedParentDetails[0];
+          detail += ` — e.g. child ${d0.childAsin} (${d0.marketplace}) resolved to parent ${d0.parentAsin}, which isn't a tracked product`;
+        }
+        failMessages.push(`${file.name}: ${detail}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
