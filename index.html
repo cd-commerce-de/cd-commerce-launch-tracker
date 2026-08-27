@@ -131,6 +131,13 @@
   .table-wrap{overflow-x:auto;max-height:520px;overflow-y:auto;border-radius:8px;border:1px solid var(--border);}
   .note-hover-tooltip{display:none;position:absolute;top:100%;left:0;z-index:50;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:4px;box-shadow:0 8px 24px rgba(15,23,42,0.18);font-size:12.5px;line-height:1.5;white-space:normal;min-width:220px;max-width:300px;color:var(--text-dark);text-align:left;}
   .note-cell:hover .note-hover-tooltip{display:block;}
+  /* Notes cells sit inside a scrollable .table-wrap (overflow:auto), which
+     clips the regular position:absolute tooltip above whenever a note is
+     near the bottom or edge of the visible scroll area. This floating
+     tooltip is appended straight to <body> and positioned in JS via
+     position:fixed, so it always escapes that clipping and is always fully
+     visible on hover, regardless of scroll position. */
+  .global-note-tooltip{display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(15,23,42,0.22);font-size:12.5px;line-height:1.5;white-space:normal;min-width:220px;max-width:320px;color:var(--text-dark);text-align:left;pointer-events:none;}
   .total-col{background:var(--gold-light);font-weight:700;}
 
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#F8FAFC;transition:.15s;}
@@ -175,6 +182,7 @@
 </style>
 </head>
 <body>
+<div id="globalNoteTooltip" class="global-note-tooltip"></div>
 
 <header>
   <div class="brand">
@@ -576,6 +584,16 @@
             </div>
           </div>
           <div class="col">
+            <div class="upload-box" id="dropRV">
+              <label for="fileRV">Choose Reviews XLSX/CSV(s)</label>
+              <input type="file" id="fileRV" accept=".xlsx,.xls,.csv" multiple>
+              <div class="hint">Set the week for each file below (its Monday). Rows with no ASIN filled in fall back to the ASIN in the filename. Counts new reviews and averages the rating for that week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s).</div>
+              <div id="rvFileList" style="margin-top:8px;"></div>
+              <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadRV" style="display:none;" onclick="confirmUploadRV()">Upload</button></div>
+              <div class="status-line" id="statusRV"></div>
+            </div>
+          </div>
+          <div class="col">
             <div class="upload-box" id="dropPR">
               <label for="filePR">Choose Products CSV</label>
               <input type="file" id="filePR" accept=".csv">
@@ -720,6 +738,7 @@ function fmtMoney(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; retu
 function fmtInt(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return Math.round(n).toLocaleString('en-US'); }
 function fmtPct(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n*100).toFixed(1)+'%'; }
 function fmtRank(n){ return n?fmtInt(n):'–'; }
+function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
 function fmtMoney2dp(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -897,6 +916,10 @@ function describeMatchError(data){
   if(data.skippedUntrackedParentDetails && data.skippedUntrackedParentDetails.length){
     const d0 = data.skippedUntrackedParentDetails[0];
     detail += ` — e.g. child ${d0.childAsin} (${d0.marketplace}) resolved to parent ${d0.parentAsin}, which isn't a tracked product`;
+  }
+  if(data.ambiguousChildAsins && data.ambiguousChildAsins.length){
+    const d0 = data.ambiguousChildAsins[0];
+    detail += ` — e.g. child ${d0.childAsin} maps to more than one parent (${d0.parentAsins.join(', ')}), can't tell which`;
   }
   return detail;
 }
@@ -1487,6 +1510,83 @@ async function confirmUploadKP(){
   }
   await refreshAllViews();
 }
+
+/* Reviews upload — same per-file week pattern as Keepa. */
+let rvSelectedFiles = [];
+document.getElementById('fileRV').addEventListener('change', e=>{
+  rvSelectedFiles = Array.from(e.target.files);
+  renderRvFileList();
+});
+function renderRvFileList(){
+  const container = document.getElementById('rvFileList');
+  const btn = document.getElementById('btnUploadRV');
+  if(!rvSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
+  container.innerHTML = rvSelectedFiles.map((file,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <input type="date" id="rvFileWeek${i}" style="min-width:130px;font-size:11px;padding:2px 4px;" title="Monday of the target week">
+      <button class="btn btn-sm" onclick="removeRvFile(${i})" style="padding:1px 7px;">✕</button>
+      <span id="rvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+    </div>`).join('');
+  btn.style.display = 'inline-block';
+  btn.textContent = `Upload ${rvSelectedFiles.length} file${rvSelectedFiles.length>1?'s':''}`;
+}
+function removeRvFile(i){
+  rvSelectedFiles.splice(i,1);
+  renderRvFileList();
+}
+async function confirmUploadRV(){
+  if(!rvSelectedFiles.length){ setStatus('statusRV', 'err', 'Choose at least one file first.'); return; }
+  const btn = document.getElementById('btnUploadRV');
+  btn.disabled = true;
+  let successCount = 0, failCount = 0;
+  const failMessages = [], okMessages = [];
+
+  for(let i=0;i<rvSelectedFiles.length;i++){
+    const file = rvSelectedFiles[i];
+    const week = document.getElementById('rvFileWeek'+i).value;
+    const statusEl = document.getElementById('rvFileStatus'+i);
+    if(!week){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: set the target week first`);
+      continue;
+    }
+    setStatus('statusRV', 'busy', `Uploading ${i+1} of ${rvSelectedFiles.length}: ${file.name}…`);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('week', week);
+    try{
+      const res = await fetch(`${EDGE_BASE}/upload-reviews`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if(!res.ok){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
+      } else {
+        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+        successCount++;
+        okMessages.push(`${data.rowsLoaded} product(s) updated from ${data.totalReviewsInFile} reviews in file`);
+      }
+    }catch(err){
+      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+    }
+  }
+
+  btn.disabled = false;
+  if(failCount === 0){
+    setStatus('statusRV', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${okMessages.join('; ')}`);
+    rvSelectedFiles = [];
+    document.getElementById('fileRV').value = '';
+    renderRvFileList();
+  } else {
+    setStatus('statusRV', 'err', `${successCount} of ${rvSelectedFiles.length} uploaded, ${failCount} failed — ${failMessages.join('; ')}`);
+  }
+  await refreshAllViews();
+}
 document.getElementById('filePA').addEventListener('change', ()=> stageFile('filePA','statusPA','btnUploadPA'));
 
 ['dropSB','dropSF','dropPR','dropTG','dropWT','dropPA'].forEach((id, idx)=>{
@@ -1661,6 +1761,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     salesOrganic:0, salesOrganicSeen:false, salesPpc:0, salesPpcSeen:false,
     kwTop10:null,
     visibility:0, visibilitySeen:false, bsrCategory:null,
+    newReviews:0, newReviewsSeen:false, avgRating:null, lowRatingDetails:null,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
@@ -1721,6 +1822,9 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.kw_top10){ w.kwTop10 = r.kw_top10; }
     if(r.visibility!=null){ w.visibility=+r.visibility; w.visibilitySeen=true; }
     if(r.bsr_category){ w.bsrCategory = r.bsr_category; }
+    if(r.new_reviews!=null){ w.newReviews=+r.new_reviews; w.newReviewsSeen=true; }
+    if(r.avg_rating!=null){ w.avgRating=+r.avg_rating; }
+    if(r.low_rating_details){ w.lowRatingDetails = r.low_rating_details; }
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
@@ -1762,6 +1866,7 @@ function finalizeWeek(w){
       ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
       kwTop10:null,
       visibility:null, bsrCategory:null,
+      newReviews:null, avgRating:null, lowRatingDetails:null, ratingPoints:null,
       hasData:false,
     };
   }
@@ -1814,6 +1919,10 @@ function finalizeWeek(w){
     kwTop10: w.kwTop10,
     visibility: w.visibilitySeen ? w.visibility/100 : null,
     bsrCategory: w.bsrCategory,
+    newReviews: w.newReviewsSeen ? w.newReviews : null,
+    avgRating: w.avgRating,
+    lowRatingDetails: w.lowRatingDetails,
+    ratingPoints: (w.avgRating!=null && w.newReviewsSeen && w.newReviews) ? w.avgRating*w.newReviews : null,
     hasData:true,
   };
 }
@@ -2392,7 +2501,6 @@ function renderTagDashboard(tag){
       const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
       ohtml += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openPortfolioNoteModal('${p}','${wk}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
-        ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
       </td>`;
     });
     ohtml += `<td style="background:#F1F5F9;"></td><td></td></tr>`;
@@ -2759,6 +2867,8 @@ const METRICS = [
   {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName', noTotal:true},
   {key:'visibility', label:'Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
+  {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
+  {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
 ];
 
 // Matches the Annahmen & Prognosen template's own row order, in English.
@@ -2823,7 +2933,10 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const cellStyle = m.categoryKey
         ? 'display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;'
         : 'display:inline-block;max-width:75px;overflow:hidden;';
-      html += `<td style="background:${bg};"><div style="${cellStyle}">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
+      const flagDetail = m.redFlagKey ? weeks[i][m.redFlagKey] : null;
+      const tdAttrs = flagDetail ? ` class="note-cell" data-note="${escapeHtml(flagDetail)}" style="background:${bg};cursor:help;"` : ` style="background:${bg};"`;
+      const valueStyle = flagDetail ? `${cellStyle}color:var(--red);font-weight:700;` : cellStyle;
+      html += `<td${tdAttrs}><div style="${valueStyle}">${displayValue}${weekDelta(vals, i, m.lowerIsBetter)}</div></td>`;
     });
     let total;
     if(m.noTotal) total = null;
@@ -2870,7 +2983,6 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
       html += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
-        ${existing ? `<div class="note-hover-tooltip">${escapeHtml(existing)}</div>` : ''}
       </td>`;
     });
     html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
@@ -2926,17 +3038,6 @@ async function saveNoteModal(){
   const preview = noteModalCell.querySelector('div');
   preview.textContent = trimmed ? (trimmed.length>13 ? trimmed.slice(0,13)+'…' : trimmed) : '+ Note';
   preview.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
-  let tooltip = noteModalCell.querySelector('.note-hover-tooltip');
-  if(trimmed){
-    if(!tooltip){
-      tooltip = document.createElement('div');
-      tooltip.className = 'note-hover-tooltip';
-      noteModalCell.appendChild(tooltip);
-    }
-    tooltip.textContent = trimmed;
-  } else if(tooltip){
-    tooltip.remove();
-  }
   closeNoteModal();
 }
 async function savePortfolioWeekNote(tag, week, note){
@@ -3348,6 +3449,41 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   html += '</tbody>';
   return html;
 }
+
+/* Floating Notes tooltip — see the .global-note-tooltip CSS comment for why
+   this can't just be the usual position:absolute .note-hover-tooltip. Scoped
+   to elements with a data-note attribute, since that's unique to the two
+   Notes-row implementations (per-product and Portfolio Total) — other
+   .note-cell tooltips elsewhere keep their existing plain CSS behavior. */
+(function(){
+  const tip = document.getElementById('globalNoteTooltip');
+  let currentCell = null;
+  document.addEventListener('mouseover', e=>{
+    const cell = e.target.closest('[data-note]');
+    if(!cell || cell === currentCell) return;
+    currentCell = cell;
+    const note = cell.dataset.note;
+    if(!note){ tip.style.display = 'none'; return; }
+    tip.textContent = note;
+    tip.style.display = 'block';
+    const r = cell.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    let top = r.bottom + 6;
+    let left = r.left;
+    if(left + tipRect.width > window.innerWidth - 8) left = window.innerWidth - tipRect.width - 8;
+    if(left < 8) left = 8;
+    if(top + tipRect.height > window.innerHeight - 8) top = r.top - tipRect.height - 6;
+    tip.style.top = top + 'px';
+    tip.style.left = left + 'px';
+  });
+  document.addEventListener('mouseout', e=>{
+    if(!currentCell) return;
+    if(e.target.closest('[data-note]') === currentCell && !currentCell.contains(e.relatedTarget)){
+      currentCell = null;
+      tip.style.display = 'none';
+    }
+  });
+})();
 
 (async function init(){
   const up = await checkServer();
