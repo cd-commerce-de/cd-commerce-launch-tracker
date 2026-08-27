@@ -241,40 +241,9 @@
         <h2>Launch Dashboard</h2>
         <div class="meta">Every launch product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field msel" id="launchFilterMarketplace" data-tag="launch">
-            <label>Marketplace</label>
-            <div class="msel-control" onclick="toggleMultiSelect('launchFilterMarketplace')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="launchFilterBrand" data-tag="launch">
-            <label>Brand</label>
-            <div class="msel-control" onclick="toggleMultiSelect('launchFilterBrand')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="launchFilterProduct" data-tag="launch">
-            <label>Products</label>
-            <div class="msel-control" onclick="toggleMultiSelect('launchFilterProduct')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="launchFilterMonth" data-tag="launch">
-            <label>Month</label>
-            <div class="msel-control" onclick="toggleMultiSelect('launchFilterMonth')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="launchFilterWeek" data-tag="launch">
-            <label>Week</label>
-            <div class="msel-control" onclick="toggleMultiSelect('launchFilterWeek')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <button class="btn" onclick="resetTagFilters('launch')">Reset filters</button>
-        </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks. Once a product is past its own Week 12, it drops off this dashboard entirely — its full history is still available in Product Detail.</p>
-      </div>
       <div class="panel" id="launchDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product shown above (after your Marketplace/Brand/Product filters), each measured on its own first 12 weeks so products launched at different times are compared on equal footing.</p>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product currently within its first 12 weeks, each measured on its own Week 1 so products launched at different times are compared on equal footing.</p>
         <div class="kpi-grid" id="launchDashAnalysisKpiGrid"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
           <div>
@@ -320,40 +289,9 @@
         <h2>Expansion Dashboard</h2>
         <div class="meta">Every expansion product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
-      <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field msel" id="expansionFilterMarketplace" data-tag="expansion">
-            <label>Marketplace</label>
-            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterMarketplace')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="expansionFilterBrand" data-tag="expansion">
-            <label>Brand</label>
-            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterBrand')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="expansionFilterProduct" data-tag="expansion">
-            <label>Products</label>
-            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterProduct')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="expansionFilterMonth" data-tag="expansion">
-            <label>Month</label>
-            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterMonth')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <div class="filter-field msel" id="expansionFilterWeek" data-tag="expansion">
-            <label>Week</label>
-            <div class="msel-control" onclick="toggleMultiSelect('expansionFilterWeek')"><span class="msel-label">All</span><span class="msel-caret">▾</span></div>
-            <div class="msel-panel"></div>
-          </div>
-          <button class="btn" onclick="resetTagFilters('expansion')">Reset filters</button>
-        </div>
-        <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;">Totals below only count a product for weeks that fall within <em>that product's own</em> first 12 weeks. Once a product is past its own Week 12, it drops off this dashboard entirely — its full history is still available in Product Detail.</p>
-      </div>
       <div class="panel" id="expansionDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product shown above (after your Marketplace/Brand/Product filters), each measured on its own first 12 weeks so products launched at different times are compared on equal footing.</p>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product currently within its first 12 weeks, each measured on its own Week 1 so products launched at different times are compared on equal footing.</p>
         <div class="kpi-grid" id="expansionDashAnalysisKpiGrid"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
           <div>
@@ -1783,11 +1721,18 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
   // Product Detail's own scorecard extends past Week 12 when real data exists
   // out there (a product doesn't stop having weeks just because the "launch
   // window" convention ends) — everywhere else (dashboards, child SKUs,
-  // Actual vs. Target) stays capped at the standard 12-week view.
+  // Actual vs. Target) stays capped at the standard 12-week view. Passing a
+  // specific number instead of `true` caps the extension at exactly that
+  // many weeks (used by the collapsed past-Week-12 dashboard panels, which
+  // show weeks 13-16 shaded gray rather than a product's full history).
   let totalWeeks = 12 + (hasWeekZero ? 1 : 0);
-  if(anchor && extendBeyond12 && allDates.length){
-    const maxWeekFound = Math.max(...allDates.map(d => weekNumber(anchor, d)));
-    totalWeeks = Math.max(totalWeeks, maxWeekFound);
+  if(anchor && extendBeyond12){
+    if(extendBeyond12 === true && allDates.length){
+      const maxWeekFound = Math.max(...allDates.map(d => weekNumber(anchor, d)));
+      totalWeeks = Math.max(totalWeeks, maxWeekFound);
+    } else if(typeof extendBeyond12 === 'number'){
+      totalWeeks = Math.max(totalWeeks, extendBeyond12);
+    }
   }
 
   const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
@@ -2142,93 +2087,13 @@ function openProductFromOverview(asin){
 document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
 /* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
-// Multi-select filter widget: each field id maps to a Set of selected values.
-// An empty Set means "All" (no filter applied) for that field. Formatters are
-// kept per-id so the "N selected" label can still show a real name when N=1.
-const multiSelectState = {};
-const multiSelectFormatters = {};
-function getMultiSelectValues(id){
-  return Array.from(multiSelectState[id] || []);
-}
-function closeAllMultiSelects(exceptId){
-  document.querySelectorAll('.msel-panel.open').forEach(panel=>{
-    if(panel.closest('.msel').id !== exceptId) panel.classList.remove('open');
-  });
-}
-function toggleMultiSelect(id){
-  const field = document.getElementById(id);
-  const panel = field.querySelector('.msel-panel');
-  const isOpen = panel.classList.contains('open');
-  closeAllMultiSelects(id);
-  panel.classList.toggle('open', !isOpen);
-}
-document.addEventListener('click', (e)=>{
-  if(!e.target.closest('.msel')) closeAllMultiSelects(null);
-});
-function updateMultiSelectLabel(id){
-  const field = document.getElementById(id);
-  const labelEl = field.querySelector('.msel-label');
-  const selected = multiSelectState[id] || new Set();
-  const formatLabel = multiSelectFormatters[id];
-  if(!selected.size) labelEl.textContent = 'All';
-  else if(selected.size === 1) labelEl.textContent = formatLabel ? formatLabel([...selected][0]) : [...selected][0];
-  else labelEl.textContent = `${selected.size} selected`;
-}
-function onMultiSelectOptionChange(id, value, checked, tag){
-  if(!multiSelectState[id]) multiSelectState[id] = new Set();
-  if(checked) multiSelectState[id].add(value); else multiSelectState[id].delete(value);
-  updateMultiSelectLabel(id);
-  renderTagDashboard(tag);
-}
-function populateMultiSelect(id, values, formatLabel){
-  const field = document.getElementById(id);
-  if(!field) return;
-  const tag = field.dataset.tag;
-  multiSelectFormatters[id] = formatLabel;
-  if(!multiSelectState[id]) multiSelectState[id] = new Set();
-  // Drop any previously-selected values that no longer exist in this data set.
-  multiSelectState[id] = new Set([...multiSelectState[id]].filter(v=>values.includes(v)));
-  const panel = field.querySelector('.msel-panel');
-  const wasOpen = panel.classList.contains('open');
-  if(!values.length){
-    panel.innerHTML = '<div class="msel-empty">No options yet</div>';
-  } else {
-    const actions = `<div class="msel-actions"><a onclick="event.stopPropagation(); selectAllMultiSelect('${id}')">Select all</a><a onclick="event.stopPropagation(); clearMultiSelect('${id}')">Clear</a></div>`;
-    const options = values.map(v=>{
-      const checked = multiSelectState[id].has(v) ? 'checked' : '';
-      const displayLabel = formatLabel ? formatLabel(v) : v;
-      return `<label class="msel-option"><input type="checkbox" value="${escapeHtml(v)}" data-id="${id}" data-tag="${tag}" ${checked} onclick="event.stopPropagation();" onchange="onMultiSelectOptionChange(this.dataset.id, this.value, this.checked, this.dataset.tag)"><span>${escapeHtml(displayLabel)}</span></label>`;
-    }).join('');
-    panel.innerHTML = actions + options;
-  }
-  panel.classList.toggle('open', wasOpen);
-  updateMultiSelectLabel(id);
-}
-function selectAllMultiSelect(id){
-  const field = document.getElementById(id);
-  const tag = field.dataset.tag;
-  const allValues = Array.from(field.querySelectorAll('.msel-option input')).map(cb=>cb.value);
-  multiSelectState[id] = new Set(allValues);
-  field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = true; });
-  updateMultiSelectLabel(id);
-  renderTagDashboard(tag);
-}
-function clearMultiSelect(id){
-  const field = document.getElementById(id);
-  const tag = field.dataset.tag;
-  multiSelectState[id] = new Set();
-  field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
-  updateMultiSelectLabel(id);
-  renderTagDashboard(tag);
-}
-function resetTagFilters(tag){
-  ['Marketplace','Brand','Product','Month','Week'].forEach(f=>{
-    const id = tag+'Filter'+f;
-    multiSelectState[id] = new Set();
-    const field = document.getElementById(id);
-    if(field) field.querySelectorAll('.msel-option input').forEach(cb=>{ cb.checked = false; });
-    updateMultiSelectLabel(id);
-  });
+// Which past-Week-12 product panels are currently expanded, per dashboard
+// tag — persists across re-renders (e.g. after an edit) until toggled again.
+const expandedPastWindowAsins = new Set();
+function togglePastWindowProduct(tag, asin){
+  const key = tag+'::'+asin;
+  if(expandedPastWindowAsins.has(key)) expandedPastWindowAsins.delete(key);
+  else expandedPastWindowAsins.add(key);
   renderTagDashboard(tag);
 }
 let tagDashboardCache = {};
@@ -2256,27 +2121,7 @@ function renderTagDashboard(tag){
   const portfolioNotesMap = {};
   (allPortfolioNotes||[]).forEach(r=>{ portfolioNotesMap[r.week] = r.note; });
 
-  // Marketplace and Brand options come from the full tag-scoped product list,
-  // so the dropdowns stay populated even if the current selection filters
-  // everything else down to zero rows.
-  populateMultiSelect(p+'FilterMarketplace', [...new Set(allTagProducts.map(pr=>pr.marketplace).filter(Boolean))].sort());
-  populateMultiSelect(p+'FilterBrand', [...new Set(allTagProducts.map(pr=>pr.brand).filter(Boolean))].sort());
-
-  const mktFilter = getMultiSelectValues(p+'FilterMarketplace');
-  const brandFilter = getMultiSelectValues(p+'FilterBrand');
-
-  let products = allTagProducts
-    .filter(pr => !mktFilter.length || mktFilter.includes(pr.marketplace))
-    .filter(pr => !brandFilter.length || brandFilter.includes(pr.brand));
-
-  // Product options are scoped to whatever Marketplace/Brand already left in
-  // play, and sorted newest-launched-first to match how they'll be displayed.
-  const productOptionList = products.slice().sort((a,b)=>(b.launch||'').localeCompare(a.launch||''));
-  const productDisplayById = {};
-  productOptionList.forEach(pr=>{ productDisplayById[pr.asin] = productDisplayName(pr); });
-  populateMultiSelect(p+'FilterProduct', productOptionList.map(pr=>pr.asin), (asin)=>productDisplayById[asin] || asin);
-  const productFilter = getMultiSelectValues(p+'FilterProduct');
-  products = products.filter(pr => !productFilter.length || productFilter.includes(pr.asin));
+  const products = allTagProducts;
 
   document.getElementById(p+'DashEmpty').style.display = products.length ? 'none' : 'block';
   document.getElementById(p+'DashKpiPanel').style.display = products.length ? 'block' : 'none';
@@ -2286,22 +2131,6 @@ function renderTagDashboard(tag){
   if(!products.length) return;
 
   let asins = products.map(pr => pr.asin);
-
-  // Month/Week options are derived from the calendar weeks actually present
-  // for the currently marketplace/brand-filtered products, so picking a
-  // marketplace or brand first narrows these lists down sensibly too.
-  const allCalWeeks = [...new Set([...(allSbRows||[]), ...(allSfRows||[])].map(r=>r.week).filter(Boolean))].sort();
-  populateMultiSelect(p+'FilterMonth', [...new Set(allCalWeeks.map(wk=>wk.slice(0,7)))].sort(), (v)=>{
-    const d = new Date(v+'-01T00:00:00Z');
-    return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-  });
-  populateMultiSelect(p+'FilterWeek', allCalWeeks, (v)=>{
-    const dateStr = new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    return `${getISOWeekLabel(v)} (${dateStr})`;
-  });
-  // Re-read after populate, since out-of-range selections may have been dropped.
-  const monthFilterFinal = getMultiSelectValues(p+'FilterMonth');
-  const weekFilterFinal = getMultiSelectValues(p+'FilterWeek');
 
   const sbByAsin = {}, sfByAsin = {}, targetsByAsin = {}, notesByAsin = {};
   (allSbRows||[]).forEach(r=>{ if(!sbByAsin[r.asin]) sbByAsin[r.asin] = []; sbByAsin[r.asin].push(r); });
@@ -2320,52 +2149,42 @@ function renderTagDashboard(tag){
     return { product, weeks, anchor, weekDates, hasWeekZero, targetRow: targetsByAsin[product.asin] || null, notesMap: notesByAsin[product.asin] || {} };
   });
 
-  // Which products get a *scorecard panel* is narrower than which products
-  // count toward the Portfolio Total / KPI totals below: panels only show
-  // for products still inside their own first 12 weeks (Product Detail has
-  // the full history), but a product that's since passed Week 12 should
-  // still have its historical weeks 1-12 counted in the totals and still be
-  // listed (as "counted" or "excluded") in each week's hover tooltip. So
-  // `products`/`asins` stay as the full filtered set here — only the panel
-  // render loop further down narrows to `visibleProductData`.
+  // Which products get a *fully expanded scorecard panel* is narrower than
+  // which products count toward the Portfolio Total / KPI totals below: only
+  // products still inside their own first 12 weeks show expanded (Product
+  // Detail has the full history either way), but a product that's since
+  // passed Week 12 should still have its historical weeks 1-12 counted in
+  // the totals and still be listed (as "counted" or "excluded") in each
+  // week's hover tooltip. So `products`/`asins` stay as the full set above —
+  // only the panel render loop further down splits into two groups.
   let visibleProductData = productData.filter(pd => {
     if(!pd.anchor) return true; // no anchor known — can't judge eligibility, so don't hide it
     const ageDays = Math.floor((new Date() - new Date(pd.anchor)) / 86400000);
     const currentWeekNum = Math.floor(ageDays / 7) + 1;
     return currentWeekNum <= 12;
   });
+  // Products past their own Week 12 still get a panel, just collapsed by
+  // default below the active ones, and extended to show weeks 13-16 (shaded
+  // gray) when expanded rather than the usual 12.
+  const pastWindowProductData = productData.filter(pd => !visibleProductData.includes(pd));
 
-  // A week index passes the Month/Week filter if its real calendar date
-  // (weekDates[i]) falls in one of the selected months and/or matches one of
-  // the selected weeks exactly. With nothing selected in a field, that field
-  // imposes no restriction (multi-select empty = "All").
-  function passesDateFilter(dateStr){
-    if(!dateStr) return !monthFilterFinal.length && !weekFilterFinal.length;
-    if(monthFilterFinal.length && !monthFilterFinal.includes(dateStr.slice(0,7))) return false;
-    if(weekFilterFinal.length && !weekFilterFinal.includes(dateStr)) return false;
-    return true;
-  }
-  function filteredSum(weeks, weekDates, key){
-    return weeks.reduce((a,w,i)=> passesDateFilter(weekDates[i]) ? a+(+w[key]||0) : a, 0);
-  }
-
-  const totalSales = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sales'),0);
-  const totalUnits = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'units'),0);
-  const totalNetProfit = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'netProfit'),0);
-  const totalAdSpend = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'adSpend'),0);
-  const totalSessions = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'sessions'),0);
-  const totalRefunds = productData.reduce((a,pd)=>a+filteredSum(pd.weeks,pd.weekDates,'refunds'),0);
+  const totalSales = productData.reduce((a,pd)=>a+sum(pd.weeks,'sales'),0);
+  const totalUnits = productData.reduce((a,pd)=>a+sum(pd.weeks,'units'),0);
+  const totalNetProfit = productData.reduce((a,pd)=>a+sum(pd.weeks,'netProfit'),0);
+  const totalAdSpend = productData.reduce((a,pd)=>a+sum(pd.weeks,'adSpend'),0);
+  const totalSessions = productData.reduce((a,pd)=>a+sum(pd.weeks,'sessions'),0);
+  const totalRefunds = productData.reduce((a,pd)=>a+sum(pd.weeks,'refunds'),0);
   const avgMargin = totalSales? totalNetProfit/totalSales : 0;
   const avgTacos = totalSales? totalAdSpend/totalSales : 0;
   const avgRefundPct = totalUnits? totalRefunds/totalUnits : 0;
   document.getElementById(p+'DashKpiGrid').innerHTML = [
-    {label:'Total Sales', value:fmtMoney(totalSales), desc:'Sum across every product and week shown, after your filters above'},
-    {label:'Total Units', value:fmtInt(totalUnits), desc:'Units sold across every product and week shown'},
+    {label:'Total Sales', value:fmtMoney(totalSales), desc:'Sum across every product\'s own first 12 weeks'},
+    {label:'Total Units', value:fmtInt(totalUnits), desc:'Units sold across every product\'s own first 12 weeks'},
     {label:'Net Profit', value:fmtMoney(totalNetProfit), desc:'Total profit after Amazon fees, ad spend, and COGS'},
     {label:'Net Margin %', value:fmtPct(avgMargin), desc:'Total Net Profit ÷ Total Sales — sales-weighted, not a simple average'},
-    {label:'Ad Spend', value:fmtMoney(totalAdSpend), desc:'Total spent on ads across every product and week shown'},
+    {label:'Ad Spend', value:fmtMoney(totalAdSpend), desc:'Total spent on ads across every product\'s own first 12 weeks'},
     {label:'TACoS', value:fmtPct(avgTacos), desc:'Total Ad Spend ÷ Total Sales — how much of revenue is going to ads'},
-    {label:'Sessions', value:fmtInt(totalSessions), desc:'Total product page visits across every product and week shown'},
+    {label:'Sessions', value:fmtInt(totalSessions), desc:'Total product page visits across every product\'s own first 12 weeks'},
     {label:'Refund Rate', value:fmtPct(avgRefundPct), desc:'Total Refunds ÷ Total Units — a rising rate can flag a listing or quality issue'},
   ].map(c=>`<div class="kpi"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="desc">${c.desc}</div></div>`).join('');
 
@@ -2433,7 +2252,7 @@ function renderTagDashboard(tag){
   });
   // Month/Week filters narrow down which calendar-week columns are shown —
   // applied after 12-week eligibility, so both rules stack correctly.
-  const sortedCalWeeks = Object.keys(calBuckets).sort().filter(passesDateFilter);
+  const sortedCalWeeks = Object.keys(calBuckets).sort();
   const weekTotals = sortedCalWeeks.map(wk=>{
     const b = calBuckets[wk];
     return { ...b, margin: b.sales? b.netProfit/b.sales : 0, tacos: b.sales? b.adSpend/b.sales : 0, refundPct: b.units? b.refunds/b.units : 0 };
@@ -2467,7 +2286,7 @@ function renderTagDashboard(tag){
   colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
   ohtml += '<th>12-Week Total</th><th></th></tr></thead><tbody>';
   if(!sortedCalWeeks.length){
-    ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks match the current filters.</td></tr>`;
+    ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks with data yet.</td></tr>`;
   }
   // The Total column is always exactly a 12-week total — capped to the
   // LAST 12 calendar-week columns shown (most recent) — even though the
@@ -2510,39 +2329,21 @@ function renderTagDashboard(tag){
 
   renderTagAnalysis(p, visibleProductData);
 
-  // Per-product full scorecards — sorted newest-launched to oldest, for
-  // whichever products passed the "still within Week 12" filter above
-  // (Product Detail is the place to see a product's full unbounded history,
-  // including past Week 12, in more depth).
-  // Each panel's own columns are also narrowed to whichever of its weeks fall
-  // inside the selected Month/Week, and a product with zero matching weeks is
-  // skipped rather than showing an empty table.
-  const sortedProductData = visibleProductData.slice().sort((a,b)=>{
-    const da = a.product.launch || a.anchor || '';
-    const db = b.product.launch || b.anchor || '';
-    return db.localeCompare(da);
-  });
-  sortedProductData.forEach(({product, weeks, anchor, weekDates, hasWeekZero, targetRow, notesMap})=>{
-    let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
-    if(anchor){
-      ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
-      currentWeekNum = Math.floor(ageDays / 7) + 1;
-      ageWeeks = +(ageDays / 7).toFixed(1);
-      ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
-    }
-
-    const visibleIdx = weeks.map((_,i)=>i).filter(i=>passesDateFilter(weekDates[i]));
-    if((monthFilterFinal.length || weekFilterFinal.length) && !visibleIdx.length) return;
-    const shownWeeks = visibleIdx.map(i=>weeks[i]);
-    const shownWeekDates = visibleIdx.map(i=>weekDates[i]);
-    const colLabels = visibleIdx.map(i=>{
-      const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
-      if(!anchor) return wkLabel;
-      const dateStr = new Date(weekDates[i]).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-      return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+  // Per-product full scorecards — sorted newest-launched to oldest. Products
+  // still within their own first 12 weeks show fully expanded; products past
+  // their own Week 12 are listed below, collapsed by default (toggle to
+  // expand), and when expanded extend to weeks 13-16 shaded gray so it's
+  // obvious that range is past the normal launch window — full unbounded
+  // history is still in Product Detail.
+  function sortNewestFirst(list){
+    return list.slice().sort((a,b)=>{
+      const da = a.product.launch || a.anchor || '';
+      const db = b.product.launch || b.anchor || '';
+      return db.localeCompare(da);
     });
-    const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
-    const metaFields = [
+  }
+  function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
+    return [
       {label:'Marketplace', value: product.marketplace || '–'},
       {label:'Brand', value: product.brand || '–'},
       {label:'Product Line Code', value: product.product_line_code || '–'},
@@ -2553,6 +2354,24 @@ function renderTagDashboard(tag){
       {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
       {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
     ];
+  }
+
+  sortNewestFirst(visibleProductData).forEach(({product, weeks, anchor, weekDates, hasWeekZero, targetRow, notesMap})=>{
+    let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
+    if(anchor){
+      ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
+      currentWeekNum = Math.floor(ageDays / 7) + 1;
+      ageWeeks = +(ageDays / 7).toFixed(1);
+      ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
+    }
+    const colLabels = weeks.map((_,i)=>{
+      const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
+      if(!anchor) return wkLabel;
+      const dateStr = new Date(weekDates[i]).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+    });
+    const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
+    const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
@@ -2569,11 +2388,81 @@ function renderTagDashboard(tag){
       </div>
       <div class="table-wrap"><table class="stretch-table"></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(shownWeeks, targetRow, colLabels, product.asin, shownWeekDates, notesMap, null, true);
+    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap, null, true);
     blocksContainer.appendChild(panel);
   });
+
+  if(pastWindowProductData.length){
+    const divider = document.createElement('div');
+    divider.style.cssText = 'margin:24px 0 12px;padding-top:16px;border-top:2px solid var(--border);';
+    divider.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--text-muted);">Past Week 12 (${pastWindowProductData.length})</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">These products have aged out of the 12-week launch window. Click one to expand it — showing weeks 13–16 shaded gray so it's clear that range is past the normal window. Full unbounded history is always available in Product Detail.</div>`;
+    blocksContainer.appendChild(divider);
+
+    sortNewestFirst(pastWindowProductData).forEach(({product, anchor, targetRow})=>{
+      const asin = product.asin;
+      const isExpanded = expandedPastWindowAsins.has(p+'::'+asin);
+      const ageDays = anchor ? Math.floor((new Date() - new Date(anchor)) / 86400000) : null;
+      const currentWeekNum = ageDays!=null ? Math.floor(ageDays / 7) + 1 : null;
+      const ageWeeks = ageDays!=null ? +(ageDays / 7).toFixed(1) : null;
+      const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
+
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.style.opacity = '0.85';
+      const toggleHtml = `<span onclick="togglePastWindowProduct('${p}','${asin}')" style="display:inline-block;width:16px;cursor:pointer;color:var(--text-muted);transform:rotate(${isExpanded?90:0}deg);transition:transform .1s;">▶</span>`;
+      let bodyHtml = '';
+      let deferredTableFill = null;
+      if(isExpanded){
+        // Recomputed on demand, extended to 16 weeks (weeks 13-16 shaded
+        // gray), rather than the standard 12 used for active products.
+        const extended = computeWeeksFromRows(product, sbByAsin[product.asin]||[], sfByAsin[product.asin]||[], 16);
+        const exWeeks = extended.weeks, exAnchor = extended.anchor, exHasWeekZero = extended.hasWeekZero;
+        const exWeekDates = exWeeks.map((_,i)=>{
+          if(!exAnchor) return null;
+          const d = new Date(exAnchor);
+          d.setDate(d.getDate() + i*7);
+          return d.toISOString().slice(0,10);
+        });
+        const exColLabels = exWeeks.map((_,i)=>{
+          const wkLabel = exHasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
+          if(!exAnchor) return wkLabel;
+          const dateStr = new Date(exWeekDates[i]).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+          return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+        });
+        const grayFromIndex = 12 + (exHasWeekZero ? 1 : 0);
+        const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
+        bodyHtml = `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;margin:14px 0;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);">
+            ${metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('')}
+          </div>
+          <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;"><span style="display:inline-block;width:10px;height:10px;background:#E2E8F0;border:1px solid var(--border);vertical-align:middle;margin-right:5px;"></span>Weeks 13–16 are shown for context only — past this product's 12-week launch window.</p>
+          <div class="table-wrap"><table class="stretch-table"></table></div>
+        `;
+        deferredTableFill = () => buildScorecardTable(exWeeks, targetRow, exColLabels, product.asin, exWeekDates, {}, null, true, grayFromIndex);
+      }
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;cursor:pointer;" onclick="togglePastWindowProduct('${p}','${asin}')">
+          <div style="display:flex;align-items:center;">
+            ${toggleHtml}${thumb(product.image_url, 32)}
+            <div>
+              <div style="font-weight:700;font-size:13.5px;">${escapeHtml(productDisplayName(product))}</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">ASIN: ${product.asin}${currentWeekNum!=null?' · Week '+currentWeekNum+' (past 12)':''} · Launched ${dateLaunchedStr}</div>
+            </div>
+          </div>
+          <button class="btn" onclick="event.stopPropagation(); document.getElementById('productSelect').value='${product.asin}'; switchView('weekly-pulse');">Open in Product Detail →</button>
+        </div>
+        ${bodyHtml}
+      `;
+      if(deferredTableFill){
+        panel.querySelector('table').innerHTML = deferredTableFill();
+      }
+      blocksContainer.appendChild(panel);
+    });
+  }
+
   if(!blocksContainer.children.length){
-    blocksContainer.innerHTML = `<div class="panel" style="color:var(--text-muted);">No products match the current filters.</div>`;
+    blocksContainer.innerHTML = `<div class="panel" style="color:var(--text-muted);">No products yet.</div>`;
   }
 }
 
@@ -2908,11 +2797,12 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA, grayFromIndex){
   const metrics = metricList || METRICS;
   const t = targets || {};
+  const isGray = i => grayFromIndex!=null && i>=grayFromIndex;
   let html = '<thead><tr><th>Metric</th>';
-  colLabels.forEach(l=> html += `<th>${l}</th>`);
+  colLabels.forEach((l,i)=> html += `<th${isGray(i)?' style="background:#E2E8F0;"':''}>${l}</th>`);
   html += `<th>${weeks.length}-Wk Total/Avg</th><th></th></tr></thead><tbody>`;
   metrics.forEach(m=>{
     const vals = weeks.map(w=>w[m.key]);
@@ -2923,7 +2813,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       : m.label;
     html += `<tr><td>${labelHtml}</td>`;
     vals.forEach((v,i)=>{
-      const bg = (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
+      const bg = isGray(i) ? '#E2E8F0' : (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       const formatted = m.fmt(v);
       let displayValue = (blankForNA && formatted==='N/A') ? '' : formatted;
       if(m.categoryKey && v!=null){
@@ -2967,21 +2857,23 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     html += `<td></td></tr>`;
   });
   html += `<tr><td style="font-weight:700;">KW in Top 10</td>`;
-  weeks.forEach(w=>{
+  weeks.forEach((w,i)=>{
     const kw = w.kwTop10;
-    if(!kw){ html += `<td style="background:#fff;">–</td>`; return; }
-    html += `<td style="background:#fff;">
+    const bg = isGray(i) ? '#E2E8F0' : '#fff';
+    if(!kw){ html += `<td style="background:${bg};">–</td>`; return; }
+    html += `<td style="background:${bg};">
       <div style="display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;">${escapeHtml(kw)}</div>
     </td>`;
   });
   html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
   if(asin && weekDates){
     html += `<tr><td style="font-weight:700;">Notes</td>`;
-    weekDates.forEach(wd=>{
-      if(!wd){ html += `<td style="background:#fff;">–</td>`; return; }
+    weekDates.forEach((wd,i)=>{
+      const bg = isGray(i) ? '#E2E8F0' : '#fff';
+      if(!wd){ html += `<td style="background:${bg};">–</td>`; return; }
       const existing = (notesMap && notesMap[wd]) ? notesMap[wd] : '';
       const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
-      html += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
+      html += `<td style="background:${bg};cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
       </td>`;
     });
