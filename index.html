@@ -141,6 +141,17 @@
   .total-col{background:var(--gold-light);font-weight:700;}
 
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#F8FAFC;transition:.15s;}
+  .step-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--gold);color:#fff;font-size:11px;font-weight:700;margin-right:6px;vertical-align:middle;}
+  .instr-toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px 10px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;}
+  .instr-sep{width:1px;height:20px;background:var(--border);margin:0 4px;}
+  .instructions-content{font-size:13.5px;line-height:1.65;color:var(--text-dark);}
+  .instructions-content[contenteditable="true"]{outline:2px solid var(--gold);border-radius:8px;padding:12px;background:#fff;}
+  .instructions-content h3{font-size:16px;margin:20px 0 8px;}
+  .instructions-content h4{font-size:13.5px;margin:16px 0 6px;color:var(--gold-dark);}
+  .instructions-content p{margin:0 0 10px;}
+  .instructions-content ul,.instructions-content ol{margin:0 0 10px;padding-left:22px;}
+  .instructions-content img{max-width:100%;border-radius:8px;border:1px solid var(--border);margin:8px 0;}
+  .instructions-content hr{border:none;border-top:1px solid var(--border);margin:16px 0;}
   .upload-box.drag{border-color:var(--gold);background:var(--gold-light);}
   .upload-box input[type=file]{display:none;}
   .upload-box label{cursor:pointer;color:var(--gold-dark);font-weight:700;font-size:13.5px;}
@@ -224,6 +235,10 @@
     <div class="nav-item" data-view="data-manage" onclick="switchView('data-manage')" title="Upload weekly exports and manage your product list">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v12"/><polyline points="7,10 12,15 17,10"/><path d="M5 19h14"/></svg></div>
       Upload &amp; Manage
+    </div>
+    <div class="nav-item" data-view="instructions" onclick="switchView('instructions')" title="Step-by-step guide for keeping the dashboard up to date">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></div>
+      Instructions
     </div>
     <div class="nav-item" data-view="glossary" onclick="switchView('glossary')" title="How every calculated metric in this dashboard is derived, with formulas">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
@@ -450,10 +465,11 @@
 
       <div class="panel">
         <h3>Upload weekly exports</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Upload in this numbered order each week — later reports rely on the child↔parent mapping the Sellerboard upload (Step 1) establishes. See the <a href="#" onclick="switchView('instructions'); return false;" style="color:var(--gold-dark);font-weight:600;">Instructions</a> tab for detailed steps.</p>
         <div class="row">
           <div class="col">
             <div class="upload-box" id="dropSB">
-              <label for="fileSB">Choose Sellerboard CSV(s)</label>
+              <label for="fileSB"><span class="step-badge">1</span>Choose Sellerboard CSV(s)</label>
               <input type="file" id="fileSB" accept=".csv" multiple>
               <div class="hint">Export from Sellerboard with "Group by Parent" — select one or several weekly files at once, each week's date is read from its own filename</div>
               <div id="sbFileList" style="margin-top:8px;"></div>
@@ -467,7 +483,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropSF">
-              <label for="fileSF">Choose Sellerfox CSV(s)</label>
+              <label for="fileSF"><span class="step-badge">2</span>Choose Sellerfox CSV(s)</label>
               <input type="file" id="fileSF" accept=".csv" multiple>
               <div class="hint">Sessions, Impressions, Clicks, Orders, Ad Spend, per child ASIN — marketplace is read directly from each row, no need to set it</div>
               <div id="sfFileList" style="margin-top:8px;"></div>
@@ -480,7 +496,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropSBO">
-              <label for="fileSBO">Choose Sellerboard "By Child" CSV(s)</label>
+              <label for="fileSBO"><span class="step-badge">3</span>Choose Sellerboard "By Child" CSV(s)</label>
               <input type="file" id="fileSBO" accept=".csv" multiple>
               <div class="hint">Sales Organic, Sales PPC, Units Organic — daily, per child ASIN, no parent rows. Upload this AFTER the main Sellerboard file for the same week(s) — it maps each child ASIN to its parent using the mapping your main upload already created, and never creates new SKUs or products.</div>
               <div id="sboFileList" style="margin-top:8px;"></div>
@@ -491,7 +507,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropDR">
-              <label for="fileDR">Choose Data Rova "Ranks by ASIN — Daily" CSV(s)</label>
+              <label for="fileDR"><span class="step-badge">4</span>Choose Data Rova "Ranks by ASIN — Daily" CSV(s)</label>
               <input type="file" id="fileDR" accept=".csv,.xlsx,.xls" multiple>
               <div class="hint">Set the date for each file below — usually the last day of the week you're tracking. Only keywords ranking organically in the top 10 on that exact date are kept, mapped from child ASIN to parent using your existing Sellerboard child mapping, and stored as that week's "KW in Top 10."</div>
               <div id="drFileList" style="margin-top:8px;"></div>
@@ -502,7 +518,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropDV">
-              <label for="fileDV">Choose Data Rova "Project - ASINs" CSV(s)</label>
+              <label for="fileDV"><span class="step-badge">5</span>Choose Data Rova "Project - ASINs" CSV(s)</label>
               <input type="file" id="fileDV" accept=".csv,.xlsx,.xls" multiple>
               <div class="hint">A current snapshot, not a weekly history — set the date each file should be filed under below. Most rows are competitor ASINs and are automatically skipped; only rows matching your own tracked ASINs are kept, mapped from child to parent, and stored as "Visibility."</div>
               <div id="dvFileList" style="margin-top:8px;"></div>
@@ -513,7 +529,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropKP">
-              <label for="fileKP">Choose Keepa/SellerSprite XLSX(s)</label>
+              <label for="fileKP"><span class="step-badge">6</span>Choose Keepa/SellerSprite XLSX(s)</label>
               <input type="file" id="fileKP" accept=".xlsx,.xls,.csv" multiple>
               <div class="hint">Set the week for each file below (its Monday). The child ASIN is read from the sheet name / filename, not a column. Finds the day in that week with the best subcategory BSR rank, and uses that same day's main BSR to replace "Highest BSR."</div>
               <div id="kpFileList" style="margin-top:8px;"></div>
@@ -523,7 +539,7 @@
           </div>
           <div class="col">
             <div class="upload-box" id="dropRV">
-              <label for="fileRV">Choose Reviews XLSX/CSV(s)</label>
+              <label for="fileRV"><span class="step-badge">7</span>Choose Reviews XLSX/CSV(s)</label>
               <input type="file" id="fileRV" accept=".xlsx,.xls,.csv" multiple>
               <div class="hint">Set the week for each file below (its Monday). Rows with no ASIN filled in fall back to the ASIN in the filename. Counts new reviews and averages the rating for that week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s).</div>
               <div id="rvFileList" style="margin-top:8px;"></div>
@@ -531,6 +547,13 @@
               <div class="status-line" id="statusRV"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>One-time / as-needed setup</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Not part of the weekly sequence above — set these up once per product, or update them as things change.</p>
+        <div class="row">
           <div class="col">
             <div class="upload-box" id="dropPR">
               <label for="filePR">Choose Products CSV</label>
@@ -589,6 +612,37 @@
           </table>
         </div>
         <div class="toolbar"><button class="btn btn-primary" onclick="addProductRow()">+ Add product</button></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-instructions">
+      <div class="page-head">
+        <h2>Instructions</h2>
+        <div class="meta">How to keep this dashboard updated, week to week — editable, so you can expand this with your own detailed steps and screenshots.</div>
+      </div>
+      <div class="panel">
+        <div id="instructionsToolbar" class="instr-toolbar" style="display:none;">
+          <button class="btn btn-sm" onclick="instrCmd('bold')" title="Bold"><strong>B</strong></button>
+          <button class="btn btn-sm" onclick="instrCmd('italic')" title="Italic"><em>I</em></button>
+          <button class="btn btn-sm" onclick="instrCmd('underline')" title="Underline"><u>U</u></button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="instrFormatBlock('h3')" title="Heading">H3</button>
+          <button class="btn btn-sm" onclick="instrFormatBlock('h4')" title="Subheading">H4</button>
+          <button class="btn btn-sm" onclick="instrFormatBlock('p')" title="Paragraph">¶</button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="instrCmd('insertUnorderedList')" title="Bullet list">• List</button>
+          <button class="btn btn-sm" onclick="instrCmd('insertOrderedList')" title="Numbered list">1. List</button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="document.getElementById('instrImageInput').click()" title="Insert image">🖼 Image</button>
+          <input type="file" id="instrImageInput" accept="image/*" style="display:none;" onchange="instrInsertImage(event)">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+          <button class="btn" id="btnInstrEdit" onclick="startEditInstructions()">Edit</button>
+          <button class="btn btn-primary" id="btnInstrSave" style="display:none;" onclick="saveInstructions()">Save</button>
+          <button class="btn" id="btnInstrCancel" style="display:none;" onclick="cancelEditInstructions()">Cancel</button>
+        </div>
+        <div id="instructionsContent" class="instructions-content"></div>
+        <div class="status-line" id="statusInstructions"></div>
       </div>
     </div>
 
@@ -769,6 +823,7 @@ function switchView(view){
   if(view==='launch-dash') loadTagDashboard('launch');
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
+  if(view==='instructions') loadInstructions();
 }
 
 /* ---------------- Server / Supabase reachability check ---------------- */
@@ -3258,6 +3313,65 @@ function computeDerivedSoll(inputs, assumptions, week1SalesPriceGood){
   const roi = (profitPerOrder!=null && assumptions.cogs_eur) ? profitPerOrder/assumptions.cogs_eur : null;
   return { avgSalesPrice, units, cpc, cvr, organicPct, sales, organicRevenue, advertisedRevenue, adSpend, realAcos, tacos, cpo, clicks, profitPerOrder, margin, roi, netProfit };
 }
+/* ---------------- Instructions tab (editable rich text) ---------------- */
+let instructionsOriginalHTML = '';
+async function loadInstructions(){
+  const el = document.getElementById('instructionsContent');
+  const { data, error } = await sb.from('app_instructions').select('content').eq('id', 1).maybeSingle();
+  if(error){ el.innerHTML = '<p style="color:var(--red);">Failed to load instructions: '+escapeHtml(error.message)+'</p>'; return; }
+  el.innerHTML = (data && data.content) ? data.content : '<p><em>No instructions yet — click Edit to add some.</em></p>';
+}
+function startEditInstructions(){
+  const el = document.getElementById('instructionsContent');
+  instructionsOriginalHTML = el.innerHTML;
+  el.contentEditable = 'true';
+  el.focus();
+  document.getElementById('instructionsToolbar').style.display = 'flex';
+  document.getElementById('btnInstrEdit').style.display = 'none';
+  document.getElementById('btnInstrSave').style.display = 'inline-block';
+  document.getElementById('btnInstrCancel').style.display = 'inline-block';
+}
+function stopEditingInstructionsUI(){
+  const el = document.getElementById('instructionsContent');
+  el.contentEditable = 'false';
+  document.getElementById('instructionsToolbar').style.display = 'none';
+  document.getElementById('btnInstrEdit').style.display = 'inline-block';
+  document.getElementById('btnInstrSave').style.display = 'none';
+  document.getElementById('btnInstrCancel').style.display = 'none';
+}
+function cancelEditInstructions(){
+  document.getElementById('instructionsContent').innerHTML = instructionsOriginalHTML;
+  stopEditingInstructionsUI();
+  setStatus('statusInstructions', 'ok', '');
+}
+async function saveInstructions(){
+  const content = document.getElementById('instructionsContent').innerHTML;
+  setStatus('statusInstructions', 'busy', 'Saving…');
+  const { error } = await sb.from('app_instructions').upsert({ id: 1, content, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if(error){ setStatus('statusInstructions', 'err', 'Failed to save: ' + error.message); return; }
+  stopEditingInstructionsUI();
+  setStatus('statusInstructions', 'ok', 'Saved.');
+}
+function instrCmd(cmd){
+  document.getElementById('instructionsContent').focus();
+  document.execCommand(cmd, false, null);
+}
+function instrFormatBlock(tag){
+  document.getElementById('instructionsContent').focus();
+  document.execCommand('formatBlock', false, tag);
+}
+function instrInsertImage(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('instructionsContent').focus();
+    document.execCommand('insertImage', false, reader.result);
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
 async function loadTseForecast(){
   const sel = document.getElementById('tseProductSelect');
   if(!sel.value){ document.getElementById('tseEmpty').style.display='block'; document.getElementById('tseBody').style.display='none'; return; }
