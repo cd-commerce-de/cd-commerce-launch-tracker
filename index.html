@@ -266,7 +266,7 @@
       </div>
       <div class="panel" id="launchDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product currently within its first 12 weeks, each measured on its own Week 1 so products launched at different times are compared on equal footing.</p>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every launch product with at least one week of data, each measured on its own Week 1 so products launched at different times are compared on equal footing — including products already past their 12-week window, using their own historical weeks 1–12.</p>
         <div class="kpi-grid" id="launchDashAnalysisKpiGrid"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
           <div>
@@ -314,7 +314,7 @@
       </div>
       <div class="panel" id="expansionDashAnalysisPanel" style="display:none;">
         <h3>Analysis — Time to Profitability</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every product currently within its first 12 weeks, each measured on its own Week 1 so products launched at different times are compared on equal footing.</p>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every expansion product with at least one week of data, each measured on its own Week 1 so products launched at different times are compared on equal footing — including products already past their 12-week window, using their own historical weeks 1–12.</p>
         <div class="kpi-grid" id="expansionDashAnalysisKpiGrid"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
           <div>
@@ -2423,7 +2423,7 @@ function renderTagDashboard(tag){
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
 
-  renderTagAnalysis(p, visibleProductData);
+  renderTagAnalysis(p, productData);
 
   // Per-product full scorecards — sorted newest-launched to oldest. Products
   // still within their own first 12 weeks show fully expanded; products past
