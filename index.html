@@ -152,6 +152,10 @@
   .instructions-content ul,.instructions-content ol{margin:0 0 10px;padding-left:22px;}
   .instructions-content img{max-width:100%;border-radius:8px;border:1px solid var(--border);margin:8px 0;}
   .instructions-content hr{border:none;border-top:1px solid var(--border);margin:16px 0;}
+  .instructions-content pre{background:#0F172A;color:#E2E8F0;padding:10px 12px;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:12px;overflow-x:auto;margin:0 0 10px;white-space:pre-wrap;}
+  .instructions-content code{background:#F1F5F9;padding:1px 5px;border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:12px;}
+  .instructions-content table{border-collapse:collapse;margin:0 0 10px;font-size:12.5px;}
+  .instructions-content table td,.instructions-content table th{border:1px solid var(--border);padding:5px 9px;}
   .upload-box.drag{border-color:var(--gold);background:var(--gold-light);}
   .upload-box input[type=file]{display:none;}
   .upload-box label{cursor:pointer;color:var(--gold-dark);font-weight:700;font-size:13.5px;}
@@ -239,6 +243,10 @@
     <div class="nav-item" data-view="instructions" onclick="switchView('instructions')" title="Step-by-step guide for keeping the dashboard up to date">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></div>
       Instructions
+    </div>
+    <div class="nav-item" data-view="documentation" onclick="switchView('documentation')" title="Technical reference: how every tab, table, and data source works, for anyone maintaining this codebase">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg></div>
+      Documentation
     </div>
     <div class="nav-item" data-view="glossary" onclick="switchView('glossary')" title="How every calculated metric in this dashboard is derived, with formulas">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
@@ -646,6 +654,38 @@
       </div>
     </div>
 
+    <div class="view" id="view-documentation">
+      <div class="page-head">
+        <h2>Documentation</h2>
+        <div class="meta">Technical reference for this codebase — how every tab, table, chart, and data source works, and how the app is structured under the hood. Editable, so whoever maintains this can keep it in sync with the code.</div>
+      </div>
+      <div class="panel">
+        <div id="documentationToolbar" class="instr-toolbar" style="display:none;">
+          <button class="btn btn-sm" onclick="docCmd('bold')" title="Bold"><strong>B</strong></button>
+          <button class="btn btn-sm" onclick="docCmd('italic')" title="Italic"><em>I</em></button>
+          <button class="btn btn-sm" onclick="docCmd('underline')" title="Underline"><u>U</u></button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="docFormatBlock('h3')" title="Heading">H3</button>
+          <button class="btn btn-sm" onclick="docFormatBlock('h4')" title="Subheading">H4</button>
+          <button class="btn btn-sm" onclick="docFormatBlock('p')" title="Paragraph">¶</button>
+          <button class="btn btn-sm" onclick="docFormatBlock('pre')" title="Code block">&lt;/&gt;</button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="docCmd('insertUnorderedList')" title="Bullet list">• List</button>
+          <button class="btn btn-sm" onclick="docCmd('insertOrderedList')" title="Numbered list">1. List</button>
+          <span class="instr-sep"></span>
+          <button class="btn btn-sm" onclick="document.getElementById('docImageInput').click()" title="Insert image">🖼 Image</button>
+          <input type="file" id="docImageInput" accept="image/*" style="display:none;" onchange="docInsertImage(event)">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+          <button class="btn" id="btnDocEdit" onclick="startEditDocumentation()">Edit</button>
+          <button class="btn btn-primary" id="btnDocSave" style="display:none;" onclick="saveDocumentation()">Save</button>
+          <button class="btn" id="btnDocCancel" style="display:none;" onclick="cancelEditDocumentation()">Cancel</button>
+        </div>
+        <div id="documentationContent" class="instructions-content"></div>
+        <div class="status-line" id="statusDocumentation"></div>
+      </div>
+    </div>
+
     <div class="view" id="view-glossary">
       <div class="page-head">
         <h2>Metrics Glossary</h2>
@@ -824,6 +864,7 @@ function switchView(view){
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
   if(view==='instructions') loadInstructions();
+  if(view==='documentation') loadDocumentation();
 }
 
 /* ---------------- Server / Supabase reachability check ---------------- */
@@ -3366,6 +3407,65 @@ function instrInsertImage(e){
   const reader = new FileReader();
   reader.onload = () => {
     document.getElementById('instructionsContent').focus();
+    document.execCommand('insertImage', false, reader.result);
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+/* ---------------- Documentation tab (same pattern, separate row) ---------------- */
+let documentationOriginalHTML = '';
+async function loadDocumentation(){
+  const el = document.getElementById('documentationContent');
+  const { data, error } = await sb.from('app_instructions').select('content').eq('id', 2).maybeSingle();
+  if(error){ el.innerHTML = '<p style="color:var(--red);">Failed to load documentation: '+escapeHtml(error.message)+'</p>'; return; }
+  el.innerHTML = (data && data.content) ? data.content : '<p><em>No documentation yet — click Edit to add some.</em></p>';
+}
+function startEditDocumentation(){
+  const el = document.getElementById('documentationContent');
+  documentationOriginalHTML = el.innerHTML;
+  el.contentEditable = 'true';
+  el.focus();
+  document.getElementById('documentationToolbar').style.display = 'flex';
+  document.getElementById('btnDocEdit').style.display = 'none';
+  document.getElementById('btnDocSave').style.display = 'inline-block';
+  document.getElementById('btnDocCancel').style.display = 'inline-block';
+}
+function stopEditingDocumentationUI(){
+  const el = document.getElementById('documentationContent');
+  el.contentEditable = 'false';
+  document.getElementById('documentationToolbar').style.display = 'none';
+  document.getElementById('btnDocEdit').style.display = 'inline-block';
+  document.getElementById('btnDocSave').style.display = 'none';
+  document.getElementById('btnDocCancel').style.display = 'none';
+}
+function cancelEditDocumentation(){
+  document.getElementById('documentationContent').innerHTML = documentationOriginalHTML;
+  stopEditingDocumentationUI();
+  setStatus('statusDocumentation', 'ok', '');
+}
+async function saveDocumentation(){
+  const content = document.getElementById('documentationContent').innerHTML;
+  setStatus('statusDocumentation', 'busy', 'Saving…');
+  const { error } = await sb.from('app_instructions').upsert({ id: 2, content, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if(error){ setStatus('statusDocumentation', 'err', 'Failed to save: ' + error.message); return; }
+  stopEditingDocumentationUI();
+  setStatus('statusDocumentation', 'ok', 'Saved.');
+}
+function docCmd(cmd){
+  document.getElementById('documentationContent').focus();
+  document.execCommand(cmd, false, null);
+}
+function docFormatBlock(tag){
+  document.getElementById('documentationContent').focus();
+  document.execCommand('formatBlock', false, tag);
+}
+function docInsertImage(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('documentationContent').focus();
     document.execCommand('insertImage', false, reader.result);
   };
   reader.readAsDataURL(file);
