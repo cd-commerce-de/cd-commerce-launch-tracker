@@ -623,6 +623,66 @@
       </div>
     </div>
 
+    <div class="view" id="view-glossary">
+      <div class="page-head">
+        <h2>Metrics Glossary</h2>
+        <div class="meta">Every metric in this dashboard: where its weekly value comes from, and — separately — exactly how its 12-Wk Total/Avg column is computed. Those two are not always the same method, so each is documented for every metric individually below.</div>
+      </div>
+      <div class="panel">
+        <h3>Taken directly from the export</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">The weekly value is never calculated for these — it's whatever the source file reported for that week, or "N/A" if it didn't report one (except where noted, a handful of fields default to €0 instead of N/A when absent — flagged explicitly below).</p>
+        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
+          <table class="glossary-table">
+            <thead><tr><th>Metric</th><th>Weekly Source</th><th>12-Wk Total/Avg</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Total Sales (€)</td><td>Sellerboard — "Sales" column</td><td>Sum</td><td>N/A for a week if that week's row doesn't report Sales</td></tr>
+              <tr><td>Units Sold</td><td>Sellerboard — "Units" column</td><td>Sum</td><td>N/A if not reported</td></tr>
+              <tr><td>Refund Units</td><td>Sellerboard — "Refunds" column</td><td>Sum</td><td>N/A if not reported</td></tr>
+              <tr><td>Ad Spend (€)</td><td>Sellerboard — "Ads" column</td><td>Sum</td><td>Stored as a positive number regardless of sign in the export. N/A if not reported.</td></tr>
+              <tr><td>Amazon Fees (€)</td><td>Sellerboard — "Amazon fees" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Unlike most fields on this page, this one is <strong>not</strong> N/A-tracked — a week with no data here shows €0, not N/A.</td></tr>
+              <tr><td>Cost of Goods (€)</td><td>Sellerboard — "COGS" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Same €0-not-N/A behavior as Amazon Fees above.</td></tr>
+              <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>Sum</td><td>N/A if not reported</td></tr>
+              <tr><td>Sessions</td><td>Sellerfox — "Sessions" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it. Sellerboard's own Sessions column is not used, even when present, since it measures/aggregates this differently.</td></tr>
+              <tr><td>Impressions</td><td>Sellerfox — "Impressions (SP)" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded, or didn't report it</td></tr>
+              <tr><td>Ad Clicks</td><td>Sellerfox — "Clicks (SP)" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded, or didn't report it</td></tr>
+              <tr><td>Ad Orders</td><td>Sellerfox — "Units 7D Same (SP)" column</td><td>Sum</td><td>Sellerfox has no literal "Ad Orders" column — this is the closest real field (same-SKU, ad-attributed units over a 7-day window). "Units 7D (SP)" without "Same" was deliberately not used, since it includes halo/cross-sell units for other products bought after this product's ad was clicked.</td></tr>
+              <tr><td>Ad Sales (€)</td><td>Sellerboard "Sales PPC" (Organic/PPC upload) if present, else Sellerfox "Sales 7D (SP)"</td><td>Sum</td><td>Preferring Sellerboard's own PPC split keeps this consistent with Organic Sales below (the two always add up to Total Sales). Falls back to Sellerfox only if that upload hasn't been done yet for the week.</td></tr>
+              <tr><td>Organic Sales (€)</td><td>Sellerboard — "Sales Organic" column (Organic/PPC upload only)</td><td>Sum</td><td>No literal column exists in the main Sellerboard/Sellerfox exports — Total Sales − Ad Sales was deliberately rejected as "still a calculation." Stays N/A until the Organic/PPC upload has been done for that week, never derived by subtraction.</td></tr>
+              <tr><td>Highest BSR</td><td>Sellerboard's own "BSR" column, overwritten by Keepa's derived main-category BSR once that upload is done for the week</td><td><em>No total shown</em></td><td>Displayed as "#1,234 in Category Name" once a category is on file (from the Data Rova ASINs upload). Ranks aren't meaningfully summarized across 12 weeks, so the Total/Avg cell is deliberately left blank.</td></tr>
+              <tr><td>Highest BSR (Subcategory)</td><td>Sellerboard's own subcategory BSR column, overwritten by Keepa's derived subcategory BSR once uploaded</td><td><em>No total shown</em></td><td>Same "#rank in name" display and same reasoning for no total as above</td></tr>
+              <tr><td>Visibility (%)</td><td>Data Rova "Project - ASINs" upload</td><td><em>No total shown</em></td><td>Covers all keywords in the Data Rova project for this product, using organic rank and sales per keyword to reflect overall performance. Deliberately has no 12-week total.</td></tr>
+              <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The comma-joined list of keywords that ranked organically in the top 10 on the exact date you set for that upload (rank 0 = not ranked, excluded)</td></tr>
+              <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
+              <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Calculated in this dashboard</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Any calculation involving a metric from the table above inherits its N/A behavior — e.g. if Ad Spend is N/A for a week, TACoS is N/A for that week too, not silently treated as based on €0. Several metrics below use a <em>different</em> method for their weekly value than for their 12-week total — those are called out explicitly.</p>
+        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
+          <table class="glossary-table">
+            <thead><tr><th>Metric</th><th>Weekly Value</th><th>12-Wk Total/Avg</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Refund Rate (%)</td><td>Sellerboard's own reported Refund %, first choice; falls back to Refund Units ÷ Units Sold</td><td>Total Refund Units ÷ Total Units Sold</td><td></td></tr>
+              <tr><td>Margin (%)</td><td>Sellerboard's own reported Margin %, first choice; falls back to Net Profit ÷ Sales</td><td>Total Net Profit ÷ Total Sales</td><td>Sales-weighted total — a €50,000 week counts more than a €500 week, never a simple average of weekly percentages</td></tr>
+              <tr><td>ROI (%)</td><td>Sellerboard's own reported ROI %, averaged if multiple rows exist that week — no fallback formula, N/A if not reported</td><td>Total Net Profit ÷ Total Cost of Goods</td><td><strong>Weekly and Total use genuinely different methods</strong> — the weekly figure is never recalculated from Net Profit/COGS, but the 12-week total is. The two won't necessarily reconcile to the same number if you tried to average the weekly figures by hand.</td></tr>
+              <tr><td>Real ACOS (%)</td><td>Sellerboard's own reported Real ACOS %, averaged if multiple rows exist that week — no fallback formula</td><td>Simple average of the weekly values shown</td><td>Not independently recalculated at either the weekly or total level</td></tr>
+              <tr><td>TACoS (%)</td><td>Ad Spend ÷ Total Sales</td><td>Total Ad Spend ÷ Total Sales</td><td>Always calculated, never pulled from either source directly</td></tr>
+              <tr><td>Cost Per Order (€)</td><td>Ad Spend ÷ Units Sold</td><td>Total Ad Spend ÷ Total Units Sold</td><td></td></tr>
+              <tr><td>Profit Per Order (€)</td><td>Net Profit ÷ Units Sold</td><td>Total Net Profit ÷ Total Units Sold</td><td></td></tr>
+              <tr><td>Avg. CPC (€)</td><td>Ad Spend ÷ Ad Clicks</td><td>Total Ad Spend ÷ Total Ad Clicks</td><td>Ad Spend from Sellerboard, Ad Clicks from Sellerfox</td></tr>
+              <tr><td>Organic Sales (%)</td><td>Organic Sales ÷ Total Sales</td><td>Total Organic Sales ÷ Total Sales</td><td></td></tr>
+              <tr><td>Conversion Rate (%)</td><td>Sellerboard's own reported Unit Session %, first choice; falls back to Units Sold ÷ Sessions</td><td>Total Units Sold ÷ Total Sessions</td><td></td></tr>
+              <tr><td>Click-Through Rate (%)</td><td>Ad Clicks ÷ Impressions</td><td>Total Ad Clicks ÷ Total Impressions</td><td></td></tr>
+              <tr><td>Average Sales Price (€)</td><td>Sellerboard's own reported Average Sales Price, averaged if multiple rows exist that week</td><td>Total Sales ÷ Total Units Sold</td><td><strong>Weekly and Total use genuinely different methods</strong>, same pattern as ROI above — the weekly figure is Sellerboard's own number, never Sales/Units; the total is the calculated ratio.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="view" id="view-instructions">
       <div class="page-head">
         <h2>Instructions</h2>
@@ -683,64 +743,6 @@
         </div>
         <div id="documentationContent" class="instructions-content"></div>
         <div class="status-line" id="statusDocumentation"></div>
-      </div>
-    </div>
-
-    <div class="view" id="view-glossary">
-      <div class="page-head">
-        <h2>Metrics Glossary</h2>
-        <div class="meta">Every metric in this dashboard, split into two groups: taken directly from your Sellerboard/Sellerfox uploads (never calculated, shows "N/A" if the source file doesn't report it for that week), and calculated from those direct values.</div>
-      </div>
-      <div class="panel">
-        <h3>Taken directly from the export</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">These never get computed, approximated, or defaulted to zero. If the underlying export doesn't report a value for a given week, the cell shows "N/A" rather than guessing.</p>
-        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
-          <table class="glossary-table">
-            <thead><tr><th>Metric</th><th>Source</th><th>Notes</th></tr></thead>
-            <tbody>
-              <tr><td>Total Sales (€)</td><td>Sellerboard — "Sales" column</td><td>N/A if that week's row doesn't report Sales</td></tr>
-              <tr><td>Units Sold</td><td>Sellerboard — "Units" column</td><td>N/A if that week's row doesn't report Units</td></tr>
-              <tr><td>Refund Units</td><td>Sellerboard — "Refunds" column</td><td>N/A if that week's row doesn't report Refunds</td></tr>
-              <tr><td>Ad Spend (€)</td><td>Sellerboard — "Ads" column</td><td>Stored as a positive number regardless of sign in the export. N/A if not reported.</td></tr>
-              <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>N/A if that week's row doesn't report Net profit</td></tr>
-              <tr><td>Sessions</td><td>Sellerfox — "Sessions" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it. Sellerboard's own Sessions column is not used, even when present, since it measures/aggregates this differently.</td></tr>
-              <tr><td>Impressions</td><td>Sellerfox — "Impressions (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
-              <tr><td>Ad Clicks</td><td>Sellerfox — "Clicks (SP)" column</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it</td></tr>
-              <tr><td>Ad Orders</td><td>Sellerfox — "Units 7D Same (SP)" column</td><td>Sellerfox's own export doesn't have a literal "Ad Orders" column — this is the closest real field (same-SKU, ad-attributed units over a 7-day window). "Units 7D (SP)" without "Same" was deliberately not used, since it includes halo/cross-sell units for other products bought after this product's ad was clicked. N/A if Sellerfox wasn't uploaded.</td></tr>
-              <tr><td>Ad Sales (€)</td><td>Sellerfox — "Sales 7D (SP)" column</td><td>No "Same SKU" variant exists for Sales the way it does for Units, so this may include some halo/cross-sell sales attributed to other products. N/A if Sellerfox wasn't uploaded.</td></tr>
-              <tr><td>Organic Sales (€) / Organic Sales (%)</td><td>Not available from either export</td><td>Always shows N/A. Total Sales − Ad Sales was considered and deliberately rejected — even though both pieces are real numbers, subtracting them is still a calculation, and this metric is meant to be a direct figure or nothing.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="panel">
-        <h3>Calculated from the values above</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Metric names below match exactly what's shown on the dashboard. Any calculation involving a metric from the table above inherits its N/A behavior — e.g. if Ad Spend is N/A for a week, TACoS is N/A for that week too, not silently treated as based on €0.</p>
-        <div class="table-wrap" style="overflow-x:visible;max-height:none;overflow-y:visible;">
-          <table class="glossary-table">
-            <thead><tr><th>Metric</th><th>Formula</th><th>Notes</th></tr></thead>
-            <tbody>
-              <tr><td>Refund Rate (%)</td><td>Refund Units ÷ Units Sold</td><td>Uses Sellerboard's own reported Refund % first if available; this formula is only the fallback</td></tr>
-              <tr><td>Margin (%)</td><td>Net Profit ÷ Total Sales</td><td>Uses Sellerboard's own reported Margin % first if available; this formula is only the fallback. Totals/aggregates always use this formula (sales-weighted), never Sellerboard's raw per-week number.</td></tr>
-              <tr><td>ROI (%)</td><td>Sellerboard's own reported ROI %, averaged across weeks</td><td>Not independently recalculated — no fallback formula, N/A if Sellerboard doesn't report it</td></tr>
-              <tr><td>Real ACOS (%)</td><td>Sellerboard's own reported Real ACOS %, averaged across weeks</td><td>Not independently recalculated — no fallback formula, N/A if Sellerboard doesn't report it</td></tr>
-              <tr><td>TACoS (%)</td><td>Ad Spend ÷ Total Sales</td><td>Always calculated, never pulled from either source directly</td></tr>
-              <tr><td>Cost Per Order (€)</td><td>Ad Spend ÷ Units Sold</td><td></td></tr>
-              <tr><td>Profit Per Order (€)</td><td>Net Profit ÷ Units Sold</td><td></td></tr>
-              <tr><td>Conversion Rate (%)</td><td>Units Sold ÷ Sessions</td><td>Uses Sellerboard's own reported Unit Session % first if available; this formula is only the fallback</td></tr>
-              <tr><td>Click-Through Rate (%)</td><td>Ad Clicks ÷ Impressions</td><td></td></tr>
-              <tr><td>Avg. CPC (€)</td><td>Ad Spend ÷ Ad Clicks</td><td>Ad Spend from Sellerboard, Ad Clicks from Sellerfox</td></tr>
-              <tr><td>Average Sales Price (€)</td><td>Sellerboard's own reported Average Sales Price, averaged across weeks</td><td>Not independently recalculated from Sales ÷ Units</td></tr>
-              <tr><td>Refund Rate (%) — totals/aggregates</td><td>Total Refund Units ÷ Total Units Sold</td><td>Used in Overview, Launch/Expansion Dashboard, and Portfolio Total</td></tr>
-              <tr><td>Margin (%) — totals/aggregates</td><td>Total Net Profit ÷ Total Sales</td><td>Sales-weighted — a €50,000 week counts more than a €500 week</td></tr>
-              <tr><td>TACoS (%) — totals/aggregates</td><td>Total Ad Spend ÷ Total Sales</td><td></td></tr>
-              <tr><td>Avg. Margin — Overview / Child SKU Summary row</td><td>Simple average of that product's weekly Margin % values</td><td>Not sales-weighted — can differ slightly from Total Net Profit ÷ Total Sales for the same product</td></tr>
-              <tr><td>12-Wk Total column</td><td>Sum</td><td>Total Sales, Units Sold, Refund Units, Ad Spend, Amazon Fees, Cost of Goods, Net Profit, Organic Sales, Ad Sales, Sessions, Impressions, Ad Clicks, Ad Orders</td></tr>
-              <tr><td>12-Wk Avg column</td><td>Simple average</td><td>Margin, ROI, Real ACOS, TACoS, Cost Per Order, Profit Per Order, Avg. CPC, Organic Sales %, Conversion Rate, Click-Through Rate, Average Sales Price</td></tr>
-              <tr><td>12-Wk Best BSR column</td><td>Minimum</td><td>Lowest rank across the weeks shown — lower is better</td></tr>
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
 
