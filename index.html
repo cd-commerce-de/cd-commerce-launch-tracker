@@ -479,6 +479,7 @@
       <div class="panel">
         <h3>Upload weekly exports</h3>
         <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Upload in this numbered order each week — later reports rely on the child↔parent mapping the Sellerboard upload (Step 1) establishes. See the <a href="#" onclick="switchView('instructions'); return false;" style="color:var(--gold-dark);font-weight:600;">Instructions</a> tab for detailed steps.</p>
+        <div id="sbSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
         <div class="row">
           <div class="col">
             <div class="upload-box" id="dropSB">
@@ -530,7 +531,7 @@
             <div class="upload-box" id="dropKP">
               <label for="fileKP"><span class="step-badge">5</span>Choose Keepa/SellerSprite XLSX(s)</label>
               <input type="file" id="fileKP" accept=".xlsx,.xls,.csv" multiple>
-              <div class="hint">Set the week for each file below (its Monday). The child ASIN is read from the sheet name / filename, not a column. Finds the day in that week with the best subcategory BSR rank, and uses that same day's main BSR to replace "Highest BSR."</div>
+              <div class="hint">Set the week for each file below (its Monday). The child ASIN is read from the sheet name / filename, not a column. Finds the day in that week with the best subcategory BSR rank, and uses that same day's main BSR to replace "Highest BSR." If this ASIN is shared across marketplaces pointing to different parents, also set the Marketplace field so it's matched to the right one.</div>
               <div id="kpFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadKP" style="display:none;" onclick="confirmUploadKP()">Upload</button></div>
               <div class="status-line" id="statusKP"></div>
@@ -540,7 +541,7 @@
             <div class="upload-box" id="dropRV">
               <label for="fileRV"><span class="step-badge">6</span>Choose Reviews XLSX/CSV(s)</label>
               <input type="file" id="fileRV" accept=".xlsx,.xls,.csv" multiple>
-              <div class="hint">Set the week for each file below (its Monday). Rows with no ASIN filled in fall back to the ASIN in the filename. Counts new reviews and averages the rating for that week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s).</div>
+              <div class="hint">Set the week for each file below (its Monday). Rows with no ASIN filled in are skipped (not attributed to any product). Counts new reviews and averages the rating for that week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s). The Marketplace field is pre-filled from the filename when possible — check it's correct if this ASIN is shared across marketplaces pointing to different parents.</div>
               <div id="rvFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadRV" style="display:none;" onclick="confirmUploadRV()">Upload</button></div>
               <div class="status-line" id="statusRV"></div>
@@ -938,6 +939,7 @@ function switchView(view){
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
   if(view==='instructions') loadInstructions();
+  if(view==='data-manage') loadSbSyncStatus();
   if(view==='asin-mapping') loadAsinMapping();
   if(view==='documentation') loadDocumentation();
 }
@@ -1465,6 +1467,7 @@ function renderKpFileList(){
     <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
       <input type="date" id="kpFileWeek${i}" style="min-width:130px;font-size:11px;padding:2px 4px;" title="Monday of the target week">
+      <input type="text" id="kpFileMarketplace${i}" placeholder="Marketplace (if shared ASIN)" style="min-width:150px;font-size:11px;padding:2px 4px;" title="Only needed if this child ASIN is registered under more than one parent across marketplaces">
       <button class="btn btn-sm" onclick="removeKpFile(${i})" style="padding:1px 7px;">✕</button>
       <span id="kpFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
     </div>`).join('');
@@ -1495,6 +1498,8 @@ async function confirmUploadKP(){
     const fd = new FormData();
     fd.append('file', file);
     fd.append('week', week);
+    const marketplace = document.getElementById('kpFileMarketplace'+i).value.trim();
+    if(marketplace) fd.append('marketplace', marketplace);
     try{
       const res = await fetch(`${EDGE_BASE}/upload-keepa-bsr`, {
         method: 'POST',
@@ -1535,6 +1540,15 @@ document.getElementById('fileRV').addEventListener('change', e=>{
   rvSelectedFiles = Array.from(e.target.files);
   renderRvFileList();
 });
+// Reviews exports are often named like "B0XXXXXXXX-UK-Reviews-date.xlsx" —
+// this just pre-fills a sensible guess from the filename; the field is
+// still freely editable before upload.
+function guessMarketplaceFromFilename(name){
+  const KNOWN = ['DE','UK','FR','ES','IT','US','NL','SE','PL','BE'];
+  const parts = name.toUpperCase().split(/[-_.\s]+/);
+  for(const p of parts){ if(KNOWN.includes(p)) return p; }
+  return '';
+}
 function renderRvFileList(){
   const container = document.getElementById('rvFileList');
   const btn = document.getElementById('btnUploadRV');
@@ -1543,6 +1557,7 @@ function renderRvFileList(){
     <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
       <input type="date" id="rvFileWeek${i}" style="min-width:130px;font-size:11px;padding:2px 4px;" title="Monday of the target week">
+      <input type="text" id="rvFileMarketplace${i}" value="${escapeHtml(guessMarketplaceFromFilename(file.name))}" placeholder="Marketplace (if shared ASIN)" style="min-width:150px;font-size:11px;padding:2px 4px;" title="Only needed if a child ASIN in this file is registered under more than one parent across marketplaces">
       <button class="btn btn-sm" onclick="removeRvFile(${i})" style="padding:1px 7px;">✕</button>
       <span id="rvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
     </div>`).join('');
@@ -1573,6 +1588,8 @@ async function confirmUploadRV(){
     const fd = new FormData();
     fd.append('file', file);
     fd.append('week', week);
+    const marketplace = document.getElementById('rvFileMarketplace'+i).value.trim();
+    if(marketplace) fd.append('marketplace', marketplace);
     try{
       const res = await fetch(`${EDGE_BASE}/upload-reviews`, {
         method: 'POST',
@@ -3471,6 +3488,17 @@ function computeDerivedSoll(inputs, assumptions, week1SalesPriceGood){
 }
 /* ---------------- Instructions tab (editable rich text) ---------------- */
 let instructionsOriginalHTML = '';
+async function loadSbSyncStatus(){
+  const el = document.getElementById('sbSyncStatus');
+  const { data, error } = await sb.from('sellerboard_sync_log').select('*').order('run_at', { ascending: false }).limit(1).maybeSingle();
+  if(error || !data){ el.style.display = 'none'; return; }
+  const when = new Date(data.run_at).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+  el.style.display = 'block';
+  el.style.background = data.success ? '#F0FDF4' : '#FEF2F2';
+  el.style.color = data.success ? '#166534' : '#991B1B';
+  el.style.border = `1px solid ${data.success ? '#BBF7D0' : '#FECACA'}`;
+  el.innerHTML = `<strong>Last automated Sellerboard sync</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
+}
 async function loadInstructions(){
   const el = document.getElementById('instructionsContent');
   const { data, error } = await sb.from('app_instructions').select('content').eq('id', 1).maybeSingle();
