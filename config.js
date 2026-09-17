@@ -1,3 +1,3 @@
 window.SUPABASE_URL = 'https://qbyllabheioviurypsgf.supabase.co';
 window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFieWxsYWJoZWlvdml1cnlwc2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4MzMxNDIsImV4cCI6MjEwMTQwOTE0Mn0.geD0vL7cEbsLlCcO-ZSjoeZ9DSEUSHPPhaCika8oEE4';
-window.SYNC_TRIGGER_SECRET = 'cdcommerce2026';
+window.SYNC_TRIGGER_SECRET = 'sb-sync-2026-x7k2m9';
