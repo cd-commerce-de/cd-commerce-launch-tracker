@@ -502,6 +502,15 @@
       </div>
 
       <div class="panel">
+        <h3>Data Rova — automated</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">KW in Top 10 and Visibility pull in automatically every Monday, covering the previous complete week — no upload needed. Scoped to whichever products are still within their own first 12 weeks (Launch and Expansion both); only Data Rova projects containing a registered ASIN are queried.</p>
+        <div id="drSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
+        <div class="toolbar" style="justify-content:flex-start;">
+          <button class="btn btn-sm" id="btnForceDrSync" onclick="forceDatarovaSync()">⟳ Force update now (pulls latest data immediately, instead of waiting for Monday)</button>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>Upload weekly exports</h3>
         <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Upload in this numbered order each week. See the <a href="#" onclick="switchView('instructions'); return false;" style="color:var(--gold-dark);font-weight:600;">Instructions</a> tab for detailed steps.</p>
         <div class="row">
@@ -737,7 +746,7 @@
               <tr><td>Highest BSR</td><td>Sellerboard's own "BSR" column, overwritten by Keepa's derived main-category BSR once that upload is done for the week</td><td><em>No total shown</em></td><td>Displayed as "#1,234 in Category Name" once a category is on file (from the Data Rova ASINs upload). Ranks aren't meaningfully summarized across 12 weeks, so the Total/Avg cell is deliberately left blank.</td></tr>
               <tr><td>Highest BSR (Subcategory)</td><td>Sellerboard's own subcategory BSR column, overwritten by Keepa's derived subcategory BSR once uploaded</td><td><em>No total shown</em></td><td>Same "#rank in name" display and same reasoning for no total as above</td></tr>
               <tr><td>Visibility (%)</td><td>Data Rova "Project - ASINs" upload</td><td><em>No total shown</em></td><td>Covers all keywords in the Data Rova project for this product, using organic rank and sales per keyword to reflect overall performance. Deliberately has no 12-week total.</td></tr>
-              <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The comma-joined list of keywords that ranked organically in the top 10 on the exact date you set for that upload (rank 0 = not ranked, excluded)</td></tr>
+              <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
             </tbody>
@@ -952,7 +961,7 @@ function switchView(view){
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
   if(view==='instructions') loadInstructions();
-  if(view==='data-manage') loadSbSyncStatus();
+  if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); }
   if(view==='asin-mapping') loadAsinMapping();
   if(view==='documentation') loadDocumentation();
 }
@@ -3170,8 +3179,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const kw = w.kwTop10;
     const bg = isGray(i) ? '#E2E8F0' : '#fff';
     if(!kw){ html += `<td style="background:${bg};">–</td>`; return; }
-    html += `<td style="background:${bg};">
-      <div style="display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;">${escapeHtml(kw)}</div>
+    const count = kw.split(',').map(s=>s.trim()).filter(Boolean).length;
+    html += `<td style="background:${bg};cursor:help;" class="note-cell" data-note="${escapeHtml(kw)}">
+      <div style="display:inline-block;font-size:12px;font-weight:600;border-bottom:1px dotted var(--text-muted);">${count}</div>
     </td>`;
   });
   html += `<td colspan="2" style="background:#F1F5F9;"></td></tr>`;
@@ -3607,6 +3617,46 @@ async function forceSellerboardSync(){
   btn.disabled = false;
   btn.textContent = originalText;
   await loadSbSyncStatus();
+  await refreshAllViews();
+}
+async function loadDrSyncStatus(){
+  const el = document.getElementById('drSyncStatus');
+  const { data, error } = await sb.from('datarova_sync_log').select('*').order('run_at', { ascending: false }).limit(1).maybeSingle();
+  if(error || !data){ el.style.display = 'none'; return; }
+  const when = new Date(data.run_at).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+  el.style.display = 'block';
+  el.style.background = data.success ? '#F0FDF4' : '#FEF2F2';
+  el.style.color = data.success ? '#166534' : '#991B1B';
+  el.style.border = `1px solid ${data.success ? '#BBF7D0' : '#FECACA'}`;
+  el.innerHTML = `<strong>Last automated Data Rova sync</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
+}
+async function forceDatarovaSync(){
+  const btn = document.getElementById('btnForceDrSync');
+  const secret = window.SYNC_TRIGGER_SECRET;
+  if(!secret){
+    alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.');
+    return;
+  }
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = '⟳ Pulling latest data…';
+  try{
+    const res = await fetch(`${EDGE_BASE}/sync-datarova-weekly`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': secret },
+    });
+    const data = await res.json();
+    if(!res.ok){
+      alert('Sync failed: ' + (data.error || 'Unknown error'));
+    } else {
+      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (checked ${data.projectsChecked||0} Data Rova projects, ${data.projectsMatched||0} matched a tracked ASIN).`);
+    }
+  }catch(err){
+    alert('Could not reach the sync function: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  await loadDrSyncStatus();
   await refreshAllViews();
 }
 async function loadInstructions(){
