@@ -142,6 +142,13 @@
   .global-note-tooltip-text{user-select:text;}
   .global-note-tooltip-copy{display:block;margin-top:8px;font-size:11px;padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:#F8FAFC;color:var(--text-muted);cursor:pointer;}
   .global-note-tooltip-copy:hover{background:#F1F5F9;color:var(--text-dark);}
+  .modal-overlay{display:none;position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.5);align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:24px 28px;box-shadow:0 20px 50px rgba(15,23,42,0.3);}
+  .modal-box h3{margin:0 0 4px;}
+  .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);}
+  .modal-box{position:relative;}
+  .child-asin-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
   .total-col{background:var(--gold-light);font-weight:700;}
 
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#F8FAFC;transition:.15s;}
@@ -204,6 +211,64 @@
 <div id="globalNoteTooltip" class="global-note-tooltip">
   <div id="globalNoteTooltipText" class="global-note-tooltip-text"></div>
   <button type="button" class="global-note-tooltip-copy" id="globalNoteTooltipCopy">📋 Copy</button>
+</div>
+
+<div id="addProductModal" class="modal-overlay">
+  <div class="modal-box">
+    <button type="button" class="modal-close" onclick="closeAddProductModal()">✕</button>
+    <h3>Add Product</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px;">Creates the product and registers its child ASIN(s) in one step — everything a weekly upload needs to start matching data to it.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Product Name</label>
+        <input id="apName" placeholder="Product name" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Parent ASIN</label>
+        <input id="apAsin" placeholder="B0XXXXXXXX" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Tag</label>
+        <select id="apTag" style="width:100%;">
+          <option value="launch">launch</option>
+          <option value="expansion">expansion</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Brand</label>
+        <select id="apBrand" style="width:100%;">
+          <option value="">—</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Marketplace</label>
+        <input id="apMarketplace" placeholder="e.g. UK" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Launch Date</label>
+        <input type="date" id="apLaunch" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Product Line Code</label>
+        <input id="apLineCode" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Product Line</label>
+        <input id="apLineName" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Image</label>
+        <input type="file" id="apImage" accept="image/*" style="width:100%;font-size:11px;">
+      </div>
+    </div>
+    <div style="margin-top:18px;">
+      <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:6px;">Child ASIN(s)</label>
+      <div id="apChildRows"></div>
+      <button type="button" class="btn btn-sm" onclick="addChildAsinRow()">+ Add another child ASIN</button>
+    </div>
+    <div class="toolbar" style="margin-top:16px;"><button class="btn btn-primary" onclick="submitAddProduct()">Save Product</button></div>
+    <div class="status-line" id="statusAddProduct"></div>
+  </div>
 </div>
 
 <header>
@@ -643,7 +708,10 @@
             <tbody id="productsBody"></tbody>
           </table>
         </div>
-        <div class="toolbar"><button class="btn btn-primary" onclick="addProductRow()">+ Add product</button></div>
+        <div class="toolbar" style="gap:8px;">
+          <button class="btn btn-primary" onclick="openAddProductModal()">+ Add Product</button>
+          <button class="btn btn-sm" onclick="addProductRow()">+ Quick add row (edit inline, no image or child ASINs)</button>
+        </div>
       </div>
     </div>
 
@@ -1886,6 +1954,104 @@ async function removeAsinMapping(childAsin, marketplace){
   if(!confirm(`Remove mapping for ${childAsin} (${marketplace})? This does not delete any weekly data already uploaded for it.`)) return;
   await sb.from('child_asin_mapping').delete().eq('child_asin', childAsin).eq('marketplace', marketplace);
   await loadAsinMapping();
+}
+let childAsinRowCounter = 0;
+function openAddProductModal(tag){
+  document.getElementById('apName').value = '';
+  document.getElementById('apAsin').value = '';
+  document.getElementById('apTag').value = tag || 'launch';
+  document.getElementById('apMarketplace').value = '';
+  document.getElementById('apLaunch').value = '';
+  document.getElementById('apLineCode').value = '';
+  document.getElementById('apLineName').value = '';
+  document.getElementById('apImage').value = '';
+  setStatus('statusAddProduct', '', '');
+  const brandSel = document.getElementById('apBrand');
+  if(brandSel.options.length <= 1){
+    BRAND_OPTIONS.forEach(b=>{
+      const o = document.createElement('option'); o.value = b; o.textContent = b;
+      brandSel.appendChild(o);
+    });
+  }
+  brandSel.value = '';
+  document.getElementById('apChildRows').innerHTML = '';
+  childAsinRowCounter = 0;
+  addChildAsinRow(); // always start with one row
+  document.getElementById('addProductModal').classList.add('open');
+}
+function closeAddProductModal(){
+  document.getElementById('addProductModal').classList.remove('open');
+}
+function addChildAsinRow(){
+  const id = 'childRow' + (childAsinRowCounter++);
+  const row = document.createElement('div');
+  row.className = 'child-asin-row';
+  row.id = id;
+  row.innerHTML = `
+    <input class="ap-child-asin" placeholder="Child ASIN">
+    <input class="ap-child-marketplace" placeholder="Marketplace (e.g. UK)">
+    <input class="ap-child-sku" placeholder="SKU (optional)">
+    <button type="button" class="btn btn-sm" onclick="document.getElementById('${id}').remove()" title="Remove this row">✕</button>`;
+  document.getElementById('apChildRows').appendChild(row);
+}
+async function submitAddProduct(){
+  const name = document.getElementById('apName').value.trim();
+  const asin = document.getElementById('apAsin').value.trim().toUpperCase();
+  if(!name || !asin){
+    setStatus('statusAddProduct', 'err', 'Product Name and Parent ASIN are required.');
+    return;
+  }
+  const childRows = [...document.querySelectorAll('#apChildRows .child-asin-row')].map(row=>({
+    asin: row.querySelector('.ap-child-asin').value.trim().toUpperCase(),
+    marketplace: row.querySelector('.ap-child-marketplace').value.trim().toUpperCase(),
+    sku: row.querySelector('.ap-child-sku').value.trim(),
+  })).filter(c=>c.asin || c.marketplace); // ignore fully-blank rows
+  const invalidRow = childRows.find(c=>!c.asin || !c.marketplace);
+  if(invalidRow){
+    setStatus('statusAddProduct', 'err', 'Every child ASIN row needs both an ASIN and a Marketplace.');
+    return;
+  }
+
+  setStatus('statusAddProduct', 'busy', 'Saving…');
+  const tag = document.getElementById('apTag').value;
+  const record = {
+    asin, name, tag,
+    brand: document.getElementById('apBrand').value || null,
+    marketplace: document.getElementById('apMarketplace').value.trim() || null,
+    launch: document.getElementById('apLaunch').value || null,
+    product_line_code: document.getElementById('apLineCode').value.trim() || null,
+    product_line: document.getElementById('apLineName').value.trim() || null,
+  };
+  const { error: prodErr } = await sb.from('products').insert(record);
+  if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to create product: ' + prodErr.message); return; }
+
+  const imageFile = document.getElementById('apImage').files[0];
+  if(imageFile){
+    const ext = (imageFile.name.split('.').pop()||'jpg').toLowerCase();
+    const path = `${asin}.${ext}`;
+    const { error: imgErr } = await sb.storage.from('product-images').upload(path, imageFile, { upsert: true });
+    if(!imgErr){
+      const { data } = sb.storage.from('product-images').getPublicUrl(path);
+      await sb.from('products').update({ image_url: data.publicUrl + '?t=' + Date.now() }).eq('asin', asin);
+    }
+  }
+
+  if(childRows.length){
+    const mappingRecords = childRows.map(c=>({
+      child_asin: c.asin, marketplace: c.marketplace, parent_asin: asin,
+      sku: c.sku || null, name, tag,
+    }));
+    const { error: mapErr } = await sb.from('child_asin_mapping').upsert(mappingRecords, { onConflict: 'child_asin,marketplace' });
+    if(mapErr){
+      setStatus('statusAddProduct', 'err', `Product was created, but child ASIN mapping failed: ${mapErr.message}`);
+      return;
+    }
+  }
+
+  setStatus('statusAddProduct', 'ok', 'Saved.');
+  closeAddProductModal();
+  await renderProductsTable();
+  await refreshAllViews();
 }
 async function submitAsinMapping(){
   const childAsin = document.getElementById('mapChildAsin').value.trim().toUpperCase();
