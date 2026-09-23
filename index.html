@@ -138,7 +138,10 @@
      tooltip is appended straight to <body> and positioned in JS via
      position:fixed, so it always escapes that clipping and is always fully
      visible on hover, regardless of scroll position. */
-  .global-note-tooltip{display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(15,23,42,0.22);font-size:12.5px;line-height:1.5;white-space:normal;min-width:220px;max-width:320px;color:var(--text-dark);text-align:left;pointer-events:none;}
+  .global-note-tooltip{display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(15,23,42,0.22);font-size:12.5px;line-height:1.5;white-space:normal;min-width:220px;max-width:320px;color:var(--text-dark);text-align:left;}
+  .global-note-tooltip-text{user-select:text;}
+  .global-note-tooltip-copy{display:block;margin-top:8px;font-size:11px;padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:#F8FAFC;color:var(--text-muted);cursor:pointer;}
+  .global-note-tooltip-copy:hover{background:#F1F5F9;color:var(--text-dark);}
   .total-col{background:var(--gold-light);font-weight:700;}
 
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#F8FAFC;transition:.15s;}
@@ -198,7 +201,10 @@
 </style>
 </head>
 <body>
-<div id="globalNoteTooltip" class="global-note-tooltip"></div>
+<div id="globalNoteTooltip" class="global-note-tooltip">
+  <div id="globalNoteTooltipText" class="global-note-tooltip-text"></div>
+  <button type="button" class="global-note-tooltip-copy" id="globalNoteTooltipCopy">📋 Copy</button>
+</div>
 
 <header>
   <div class="brand">
@@ -3873,14 +3879,24 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
    .note-cell tooltips elsewhere keep their existing plain CSS behavior. */
 (function(){
   const tip = document.getElementById('globalNoteTooltip');
+  const tipText = document.getElementById('globalNoteTooltipText');
+  const tipCopyBtn = document.getElementById('globalNoteTooltipCopy');
   let currentCell = null;
+  function hideTip(){
+    currentCell = null;
+    tip.style.display = 'none';
+  }
   document.addEventListener('mouseover', e=>{
+    // Treat the tooltip itself as part of the hoverable region — moving the
+    // mouse from the triggering cell onto the tooltip (e.g. to click Copy)
+    // should keep it open, not count as "leaving."
+    if(tip.contains(e.target)) return;
     const cell = e.target.closest('[data-note]');
     if(!cell || cell === currentCell) return;
     currentCell = cell;
     const note = cell.dataset.note;
     if(!note){ tip.style.display = 'none'; return; }
-    tip.textContent = note;
+    tipText.textContent = note;
     tip.style.display = 'block';
     const r = cell.getBoundingClientRect();
     const tipRect = tip.getBoundingClientRect();
@@ -3894,9 +3910,31 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   });
   document.addEventListener('mouseout', e=>{
     if(!currentCell) return;
-    if(e.target.closest('[data-note]') === currentCell && !currentCell.contains(e.relatedTarget)){
-      currentCell = null;
-      tip.style.display = 'none';
+    // Only hide once the mouse has actually left BOTH the triggering cell
+    // AND the tooltip itself — otherwise moving between the two (to select
+    // text or click Copy) would prematurely close it.
+    const leavingCell = e.target.closest('[data-note]') === currentCell;
+    const leavingTip = tip.contains(e.target);
+    if(!leavingCell && !leavingTip) return;
+    const goingSomewhereElse = !currentCell.contains(e.relatedTarget) && !tip.contains(e.relatedTarget);
+    if(goingSomewhereElse){
+      hideTip();
+    }
+  });
+  tipCopyBtn.addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(tipText.textContent);
+      const original = tipCopyBtn.textContent;
+      tipCopyBtn.textContent = '✓ Copied';
+      setTimeout(()=>{ tipCopyBtn.textContent = original; }, 1200);
+    }catch(err){
+      // Clipboard API can fail (e.g. no permission, non-HTTPS) — fall back
+      // to selecting the text so the user can copy it manually instead.
+      const range = document.createRange();
+      range.selectNodeContents(tipText);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   });
 })();
