@@ -505,8 +505,12 @@
         <h3>Data Rova — automated</h3>
         <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">KW in Top 10 and Visibility pull in automatically every Monday, covering the previous complete week — no upload needed. Scoped to whichever products are still within their own first 12 weeks (Launch and Expansion both); only Data Rova projects containing a registered ASIN are queried.</p>
         <div id="drSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
-        <div class="toolbar" style="justify-content:flex-start;">
-          <button class="btn btn-sm" id="btnForceDrSync" onclick="forceDatarovaSync()">⟳ Force update now (pulls latest data immediately, instead of waiting for Monday)</button>
+        <div class="toolbar" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-sm" id="btnForceDrSync" onclick="forceDatarovaSync()">⟳ Force update now</button>
+          <label style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+            for week of
+            <input type="date" id="drForceWeek" style="font-size:11.5px;padding:2px 4px;" title="Leave blank to use the most recently completed week (same as the automatic Monday run)">
+          </label>
         </div>
       </div>
 
@@ -3640,16 +3644,19 @@ async function forceDatarovaSync(){
   btn.disabled = true;
   const originalText = btn.textContent;
   btn.textContent = '⟳ Pulling latest data…';
+  const week = document.getElementById('drForceWeek').value; // optional — blank uses the function's own default (last completed week)
   try{
     const res = await fetch(`${EDGE_BASE}/sync-datarova-weekly`, {
       method: 'POST',
-      headers: { 'x-cron-secret': secret },
+      headers: { 'x-cron-secret': secret, 'Content-Type': 'application/json' },
+      body: JSON.stringify(week ? { week } : {}),
     });
     const data = await res.json();
     if(!res.ok){
       alert('Sync failed: ' + (data.error || 'Unknown error'));
     } else {
-      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (checked ${data.projectsChecked||0} Data Rova projects, ${data.projectsMatched||0} matched a tracked ASIN).`);
+      const noteLine = data.note ? `\n\n⚠ ${data.note}` : '';
+      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (checked ${data.projectsChecked||0} Data Rova projects, ${data.projectsMatched||0} matched a tracked ASIN).${noteLine}`);
     }
   }catch(err){
     alert('Could not reach the sync function: ' + err.message);
