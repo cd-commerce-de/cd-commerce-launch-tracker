@@ -4048,17 +4048,31 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   const tipText = document.getElementById('globalNoteTooltipText');
   const tipCopyBtn = document.getElementById('globalNoteTooltipCopy');
   let currentCell = null;
+  let hideTimer = null;
+  function cancelHide(){
+    if(hideTimer){ clearTimeout(hideTimer); hideTimer = null; }
+  }
   function hideTip(){
     currentCell = null;
     tip.style.display = 'none';
   }
+  // A short grace period before actually hiding, instead of checking exactly
+  // which element the mouse landed on next — the cell and the floating
+  // tooltip sit a few pixels apart (not DOM-adjacent), so a precise
+  // relatedTarget check would falsely trigger a hide the instant the mouse
+  // crosses that small gap on its way to the tooltip. A brief delay that
+  // gets cancelled if the mouse lands back on either the cell or the
+  // tooltip is far more forgiving of exactly how the mouse gets there.
+  function scheduleHide(){
+    cancelHide();
+    hideTimer = setTimeout(hideTip, 250);
+  }
   document.addEventListener('mouseover', e=>{
-    // Treat the tooltip itself as part of the hoverable region — moving the
-    // mouse from the triggering cell onto the tooltip (e.g. to click Copy)
-    // should keep it open, not count as "leaving."
-    if(tip.contains(e.target)) return;
+    if(tip.contains(e.target)){ cancelHide(); return; }
     const cell = e.target.closest('[data-note]');
-    if(!cell || cell === currentCell) return;
+    if(!cell){ return; }
+    cancelHide();
+    if(cell === currentCell) return;
     currentCell = cell;
     const note = cell.dataset.note;
     if(!note){ tip.style.display = 'none'; return; }
@@ -4076,16 +4090,9 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   });
   document.addEventListener('mouseout', e=>{
     if(!currentCell) return;
-    // Only hide once the mouse has actually left BOTH the triggering cell
-    // AND the tooltip itself — otherwise moving between the two (to select
-    // text or click Copy) would prematurely close it.
     const leavingCell = e.target.closest('[data-note]') === currentCell;
     const leavingTip = tip.contains(e.target);
-    if(!leavingCell && !leavingTip) return;
-    const goingSomewhereElse = !currentCell.contains(e.relatedTarget) && !tip.contains(e.relatedTarget);
-    if(goingSomewhereElse){
-      hideTip();
-    }
+    if(leavingCell || leavingTip) scheduleHide();
   });
   tipCopyBtn.addEventListener('click', async ()=>{
     try{
