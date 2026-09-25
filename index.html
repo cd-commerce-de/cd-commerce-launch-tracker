@@ -4122,7 +4122,7 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   // tooltip is far more forgiving of exactly how the mouse gets there.
   function scheduleHide(){
     cancelHide();
-    hideTimer = setTimeout(hideTip, 250);
+    hideTimer = setTimeout(hideTip, 350);
   }
   document.addEventListener('mouseover', e=>{
     if(tip.contains(e.target)){ cancelHide(); return; }
@@ -4149,7 +4149,19 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
     if(!currentCell) return;
     const leavingCell = e.target.closest('[data-note]') === currentCell;
     const leavingTip = tip.contains(e.target);
-    if(leavingCell || leavingTip) scheduleHide();
+    if(!leavingCell && !leavingTip) return;
+    // Moving between child elements WITHIN the same cell, or within the
+    // tooltip itself (e.g. from the keyword text toward the Copy button),
+    // fires its own mouseout/mouseover pair even though the mouse never
+    // actually left either region — checking relatedTarget here (where the
+    // mouse is actually going) avoids scheduling a pointless hide for those
+    // purely-internal transitions. Only a genuine departure — somewhere that
+    // is neither the cell nor the tooltip — should start the grace-period
+    // timer, which exists specifically to tolerate the small physical gap
+    // between the cell and the floating tooltip.
+    const goingInternal = currentCell.contains(e.relatedTarget) || tip.contains(e.relatedTarget);
+    if(goingInternal) return;
+    scheduleHide();
   });
   tipCopyBtn.addEventListener('click', async ()=>{
     try{
