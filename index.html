@@ -586,6 +586,19 @@
       </div>
 
       <div class="panel">
+        <h3>Keepa BSR — automated</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Highest BSR (main and subcategory) pulls in automatically every Monday, covering the previous complete week — no upload needed. Scoped to whichever products are still within their own first 12 weeks (Launch and Expansion both). NL/SE/PL/BE child ASINs are skipped — Keepa doesn't track those marketplaces.</p>
+        <div id="kpSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
+        <div class="toolbar" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-sm" id="btnForceKpSync" onclick="forceKeepaSync()">⟳ Force update now</button>
+          <label style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+            for week of
+            <input type="date" id="kpForceWeek" style="font-size:11.5px;padding:2px 4px;" title="Leave blank to use the most recently completed week (same as the automatic Monday run)">
+          </label>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>Upload weekly exports</h3>
         <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Upload in this numbered order each week. See the <a href="#" onclick="switchView('instructions'); return false;" style="color:var(--gold-dark);font-weight:600;">Instructions</a> tab for detailed steps.</p>
         <div class="row">
@@ -1039,7 +1052,7 @@ function switchView(view){
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
   if(view==='instructions') loadInstructions();
-  if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); }
+  if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); loadKpSyncStatus(); }
   if(view==='asin-mapping') loadAsinMapping();
   if(view==='documentation') loadDocumentation();
 }
@@ -3836,6 +3849,50 @@ async function forceDatarovaSync(){
   btn.disabled = false;
   btn.textContent = originalText;
   await loadDrSyncStatus();
+  await refreshAllViews();
+}
+async function loadKpSyncStatus(){
+  const el = document.getElementById('kpSyncStatus');
+  const { data, error } = await sb.from('keepa_sync_log').select('*').order('run_at', { ascending: false }).limit(1).maybeSingle();
+  if(error || !data){ el.style.display = 'none'; return; }
+  const when = new Date(data.run_at).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+  el.style.display = 'block';
+  el.style.background = data.success ? '#F0FDF4' : '#FEF2F2';
+  el.style.color = data.success ? '#166534' : '#991B1B';
+  el.style.border = `1px solid ${data.success ? '#BBF7D0' : '#FECACA'}`;
+  el.innerHTML = `<strong>Last automated Keepa BSR sync</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
+}
+async function forceKeepaSync(){
+  const btn = document.getElementById('btnForceKpSync');
+  const secret = window.SYNC_TRIGGER_SECRET;
+  if(!secret){
+    alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.');
+    return;
+  }
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = '⟳ Pulling latest data…';
+  const week = document.getElementById('kpForceWeek').value; // optional — blank uses the function's own default (last completed week)
+  try{
+    const res = await fetch(`${EDGE_BASE}/sync-keepa-bsr`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': secret, 'Content-Type': 'application/json' },
+      body: JSON.stringify(week ? { week } : {}),
+    });
+    const data = await res.json();
+    if(!res.ok){
+      alert('Sync failed: ' + (data.error || 'Unknown error'));
+    } else {
+      const unsupported = (data.unsupportedMarketplace||[]).length;
+      const unsupportedLine = unsupported ? `\n\n⚠ ${unsupported} child ASIN(s) skipped — Keepa doesn't track their marketplace (NL/SE/PL/BE).` : '';
+      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (queried ${data.asinsQueried||0} child ASINs, ${data.asinsMatched||0} had a usable BSR this week).${unsupportedLine}`);
+    }
+  }catch(err){
+    alert('Could not reach the sync function: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  await loadKpSyncStatus();
   await refreshAllViews();
 }
 async function loadInstructions(){
