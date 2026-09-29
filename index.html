@@ -2988,18 +2988,56 @@ function renderTagDashboard(tag){
 let charts = {};
 function destroyCharts(){ Object.values(charts).forEach(c=>c && c.destroy()); charts = {}; }
 
+let lastLoadedProductAsin = undefined; // undefined = nothing loaded yet this session
 async function loadDashboard(){
   const sel = document.getElementById('productSelect');
-  if(!sel.value){ document.getElementById('emptyState').style.display='block'; document.getElementById('dashboardBody').style.display='none'; return; }
   const mktSel = document.getElementById('marketplaceSelect');
-  const curMkt = mktSel.value || 'ALL';
   const [products, marketplaces] = await Promise.all([fetchProducts(), getMarketplaces()]);
-  const product = products.find(p=>p.asin===sel.value);
 
+  // Detect whether the PRODUCT dropdown is what just changed (including the
+  // very first load), as opposed to the marketplace dropdown — only a
+  // product change should auto-pick that product's own marketplace; a
+  // marketplace change should filter the product list instead, not the
+  // other way around, so the two controls don't fight each other.
+  const productJustChanged = sel.value !== lastLoadedProductAsin;
+  lastLoadedProductAsin = sel.value;
+
+  const requestedProduct = products.find(p=>p.asin===sel.value);
+  const curMkt = mktSel.value || 'ALL';
   mktSel.innerHTML = '<option value="ALL">All</option>';
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
-  if([...mktSel.options].some(o=>o.value===curMkt)) mktSel.value = curMkt;
+
+  if(productJustChanged && requestedProduct && requestedProduct.marketplace && marketplaces.includes(requestedProduct.marketplace)){
+    // Opening a specific product — jump the marketplace filter to that
+    // product's own marketplace rather than leaving it on whatever was
+    // selected for the previous product.
+    mktSel.value = requestedProduct.marketplace;
+  } else if([...mktSel.options].some(o=>o.value===curMkt)){
+    mktSel.value = curMkt;
+  }
   const mkt = mktSel.value;
+
+  // The product list itself is filtered by the marketplace selection —
+  // selecting UK, for instance, only offers UK products to pick from. If
+  // the currently selected product doesn't match the filter (e.g. the
+  // marketplace was just changed by hand), fall through to the first
+  // product that does.
+  const visibleProducts = mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt);
+  const prevSelValue = sel.value;
+  sel.innerHTML = '';
+  visibleProducts.forEach(p=>{
+    const o = document.createElement('option'); o.value = p.asin; o.textContent = productDisplayName(p);
+    sel.appendChild(o);
+  });
+  if(visibleProducts.find(p=>p.asin===prevSelValue)){
+    sel.value = prevSelValue;
+  } else if(visibleProducts.length){
+    sel.value = visibleProducts[0].asin;
+    lastLoadedProductAsin = sel.value;
+  }
+
+  if(!sel.value){ document.getElementById('emptyState').style.display='block'; document.getElementById('dashboardBody').style.display='none'; return; }
+  const product = products.find(p=>p.asin===sel.value);
 
   const hasAnyData = !!product;
   document.getElementById('emptyState').style.display = hasAnyData ? 'none' : 'block';
