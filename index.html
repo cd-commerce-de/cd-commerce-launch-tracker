@@ -149,6 +149,10 @@
   .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);}
   .modal-box{position:relative;}
   .child-asin-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
+  .product-row-menu{position:absolute;top:100%;right:0;z-index:100;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,0.18);min-width:130px;padding:4px;}
+  .product-row-menu button{display:block;width:100%;text-align:left;background:none;border:none;padding:7px 10px;font-size:12.5px;border-radius:5px;cursor:pointer;color:var(--text-dark);}
+  .product-row-menu button:hover{background:#F1F5F9;}
+  .product-row-menu button.danger{color:var(--red);}
   .total-col{background:var(--gold-light);font-weight:700;}
 
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;background:#F8FAFC;transition:.15s;}
@@ -216,8 +220,8 @@
 <div id="addProductModal" class="modal-overlay">
   <div class="modal-box">
     <button type="button" class="modal-close" onclick="closeAddProductModal()">✕</button>
-    <h3>Add Product</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px;">Creates the product and registers its child ASIN(s) in one step — everything a weekly upload needs to start matching data to it.</p>
+    <h3 id="apModalTitle">Add Product</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px;" id="apModalSubtitle">Creates the product and registers its child ASIN(s) in one step — everything a weekly upload needs to start matching data to it.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
       <div>
         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Product Name</label>
@@ -266,7 +270,7 @@
       <div id="apChildRows"></div>
       <button type="button" class="btn btn-sm" onclick="addChildAsinRow()">+ Add another child ASIN</button>
     </div>
-    <div class="toolbar" style="margin-top:16px;"><button class="btn btn-primary" onclick="submitAddProduct()">Save Product</button></div>
+    <div class="toolbar" style="margin-top:16px;"><button class="btn btn-primary" onclick="submitAddProduct()" id="apSaveBtn">Save Product</button></div>
     <div class="status-line" id="statusAddProduct"></div>
   </div>
 </div>
@@ -1837,11 +1841,29 @@ async function renderProductsTable(){
       <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)"></td>
       <td><input value="${p.product_line_code||''}" onchange="updateProduct('${p.asin}','product_line_code',this.value)" style="width:90px;"></td>
       <td><input value="${p.product_line||''}" onchange="updateProduct('${p.asin}','product_line',this.value)" style="width:120px;"></td>
-      <td><button class="btn btn-danger" onclick="removeProduct('${p.asin}')">✕</button></td>`;
+      <td style="position:relative;">
+        <button class="btn btn-sm" onclick="toggleProductMenu('${p.asin}', event)" title="More actions">⋮</button>
+        <div class="product-row-menu" id="productMenu-${p.asin}" style="display:none;">
+          <button type="button" onclick="openAddProductModal(null,'edit','${p.asin}'); closeAllProductMenus();">✎ Edit</button>
+          <button type="button" onclick="openAddProductModal(null,'duplicate','${p.asin}'); closeAllProductMenus();">⧉ Duplicate</button>
+          <button type="button" class="danger" onclick="removeProduct('${p.asin}'); closeAllProductMenus();">✕ Delete</button>
+        </div>
+      </td>`;
     body.appendChild(tr);
   });
   return products;
 }
+function closeAllProductMenus(){
+  document.querySelectorAll('.product-row-menu').forEach(m=>{ m.style.display = 'none'; });
+}
+function toggleProductMenu(asin, event){
+  event.stopPropagation();
+  const menu = document.getElementById('productMenu-'+asin);
+  const isOpen = menu.style.display === 'block';
+  closeAllProductMenus();
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+document.addEventListener('click', closeAllProductMenus);
 async function uploadProductImage(asin, file){
   if(!file) return;
   const ext = (file.name.split('.').pop()||'jpg').toLowerCase();
@@ -1979,16 +2001,26 @@ async function removeAsinMapping(childAsin, marketplace){
   await loadAsinMapping();
 }
 let childAsinRowCounter = 0;
-function openAddProductModal(tag){
-  document.getElementById('apName').value = '';
-  document.getElementById('apAsin').value = '';
-  document.getElementById('apTag').value = tag || 'launch';
-  document.getElementById('apMarketplace').value = '';
-  document.getElementById('apLaunch').value = '';
-  document.getElementById('apLineCode').value = '';
-  document.getElementById('apLineName').value = '';
-  document.getElementById('apImage').value = '';
+let addProductMode = 'new'; // 'new' | 'edit' | 'duplicate'
+let addProductOriginalAsin = null; // the source product's ASIN, for edit (what to UPDATE) and duplicate (what to copy FROM)
+function fillChildAsinRow(container, prefill){
+  const id = 'childRow' + (childAsinRowCounter++);
+  const row = document.createElement('div');
+  row.className = 'child-asin-row';
+  row.id = id;
+  row.innerHTML = `
+    <input class="ap-child-asin" placeholder="Child ASIN" value="${escapeHtml(prefill?.asin||'')}">
+    <input class="ap-child-marketplace" placeholder="Marketplace (e.g. UK)" value="${escapeHtml(prefill?.marketplace||'')}">
+    <input class="ap-child-sku" placeholder="SKU (optional)" value="${escapeHtml(prefill?.sku||'')}">
+    <button type="button" class="btn btn-sm" onclick="document.getElementById('${id}').remove()" title="Remove this row">✕</button>`;
+  container.appendChild(row);
+}
+async function openAddProductModal(tag, mode, sourceAsin){
+  mode = mode || 'new';
+  addProductMode = mode;
+  addProductOriginalAsin = (mode === 'edit' || mode === 'duplicate') ? sourceAsin : null;
   setStatus('statusAddProduct', '', '');
+
   const brandSel = document.getElementById('apBrand');
   if(brandSel.options.length <= 1){
     BRAND_OPTIONS.forEach(b=>{
@@ -1996,26 +2028,82 @@ function openAddProductModal(tag){
       brandSel.appendChild(o);
     });
   }
-  brandSel.value = '';
+
+  const asinInput = document.getElementById('apAsin');
   document.getElementById('apChildRows').innerHTML = '';
   childAsinRowCounter = 0;
-  addChildAsinRow(); // always start with one row
+
+  if(mode === 'edit' || mode === 'duplicate'){
+    const [{ data: source }, { data: existingChildren }] = await Promise.all([
+      sb.from('products').select('*').eq('asin', sourceAsin).maybeSingle(),
+      sb.from('child_asin_mapping').select('*').eq('parent_asin', sourceAsin),
+    ]);
+    if(!source){ alert('Could not load that product.'); return; }
+
+    document.getElementById('apName').value = source.name || '';
+    document.getElementById('apTag').value = source.tag || 'launch';
+    brandSel.value = source.brand || '';
+    document.getElementById('apLineCode').value = source.product_line_code || '';
+    document.getElementById('apLineName').value = source.product_line || '';
+    document.getElementById('apImage').value = '';
+
+    if(mode === 'edit'){
+      document.getElementById('apModalTitle').textContent = 'Edit Product';
+      document.getElementById('apModalSubtitle').textContent = 'Updates this product and reconciles its child ASIN mapping — removing a row here un-registers that child ASIN too.';
+      document.getElementById('apSaveBtn').textContent = 'Save Changes';
+      asinInput.value = source.asin;
+      asinInput.disabled = true;
+      asinInput.title = 'The Parent ASIN can\'t be changed here — delete and re-add the product to change it.';
+      document.getElementById('apMarketplace').value = source.marketplace || '';
+      document.getElementById('apLaunch').value = source.launch || '';
+      (existingChildren||[]).forEach(c=>fillChildAsinRow(document.getElementById('apChildRows'), { asin: c.child_asin, marketplace: c.marketplace, sku: c.sku }));
+    } else {
+      // Duplicate: name/tag/brand/product line carry over since a new
+      // parent group usually shares them, but the Parent ASIN, Marketplace
+      // and Launch Date are explicitly what's DIFFERENT about the new
+      // group, so those start blank rather than copied. Child ASIN rows
+      // are pre-filled with the source's values as an editable starting
+      // point — usually easier to overwrite a few characters of an existing
+      // real ASIN than type a fresh one from nothing.
+      document.getElementById('apModalTitle').textContent = 'Duplicate Product';
+      document.getElementById('apModalSubtitle').textContent = 'Starts a new product from this one\'s details. Parent ASIN, Marketplace and Launch Date are left blank since those need to be different — the child ASIN rows are copied as a starting point, edit them to match the new group\'s real ASINs.';
+      document.getElementById('apSaveBtn').textContent = 'Save as New Product';
+      asinInput.value = '';
+      asinInput.disabled = false;
+      asinInput.title = '';
+      document.getElementById('apMarketplace').value = '';
+      document.getElementById('apLaunch').value = '';
+      if(existingChildren?.length){
+        existingChildren.forEach(c=>fillChildAsinRow(document.getElementById('apChildRows'), { asin: c.child_asin, marketplace: c.marketplace, sku: c.sku }));
+      } else {
+        fillChildAsinRow(document.getElementById('apChildRows'), null);
+      }
+    }
+  } else {
+    document.getElementById('apModalTitle').textContent = 'Add Product';
+    document.getElementById('apModalSubtitle').textContent = 'Creates the product and registers its child ASIN(s) in one step — everything a weekly upload needs to start matching data to it.';
+    document.getElementById('apSaveBtn').textContent = 'Save Product';
+    document.getElementById('apName').value = '';
+    asinInput.value = '';
+    asinInput.disabled = false;
+    asinInput.title = '';
+    document.getElementById('apTag').value = tag || 'launch';
+    document.getElementById('apMarketplace').value = '';
+    document.getElementById('apLaunch').value = '';
+    document.getElementById('apLineCode').value = '';
+    document.getElementById('apLineName').value = '';
+    document.getElementById('apImage').value = '';
+    brandSel.value = '';
+    fillChildAsinRow(document.getElementById('apChildRows'), null);
+  }
+
   document.getElementById('addProductModal').classList.add('open');
 }
 function closeAddProductModal(){
   document.getElementById('addProductModal').classList.remove('open');
 }
 function addChildAsinRow(){
-  const id = 'childRow' + (childAsinRowCounter++);
-  const row = document.createElement('div');
-  row.className = 'child-asin-row';
-  row.id = id;
-  row.innerHTML = `
-    <input class="ap-child-asin" placeholder="Child ASIN">
-    <input class="ap-child-marketplace" placeholder="Marketplace (e.g. UK)">
-    <input class="ap-child-sku" placeholder="SKU (optional)">
-    <button type="button" class="btn btn-sm" onclick="document.getElementById('${id}').remove()" title="Remove this row">✕</button>`;
-  document.getElementById('apChildRows').appendChild(row);
+  fillChildAsinRow(document.getElementById('apChildRows'), null);
 }
 async function submitAddProduct(){
   const name = document.getElementById('apName').value.trim();
@@ -2045,8 +2133,14 @@ async function submitAddProduct(){
     product_line_code: document.getElementById('apLineCode').value.trim() || null,
     product_line: document.getElementById('apLineName').value.trim() || null,
   };
-  const { error: prodErr } = await sb.from('products').insert(record);
-  if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to create product: ' + prodErr.message); return; }
+
+  if(addProductMode === 'edit'){
+    const { error: prodErr } = await sb.from('products').update(record).eq('asin', addProductOriginalAsin);
+    if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to update product: ' + prodErr.message); return; }
+  } else {
+    const { error: prodErr } = await sb.from('products').insert(record);
+    if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to create product: ' + prodErr.message); return; }
+  }
 
   const imageFile = document.getElementById('apImage').files[0];
   if(imageFile){
@@ -2059,6 +2153,19 @@ async function submitAddProduct(){
     }
   }
 
+  if(addProductMode === 'edit'){
+    // Reconcile child mapping to exactly match what's in the form now —
+    // rows present get upserted, rows that existed before but were removed
+    // from the form (or renamed) get deleted, so editing here is a true
+    // "this is now the full set" rather than only ever adding.
+    const { data: existingChildren } = await sb.from('child_asin_mapping').select('child_asin, marketplace').eq('parent_asin', addProductOriginalAsin);
+    const currentKeys = new Set(childRows.map(c=>`${c.asin}::${c.marketplace}`));
+    const toDelete = (existingChildren||[]).filter(c=>!currentKeys.has(`${c.child_asin}::${c.marketplace}`));
+    for(const del of toDelete){
+      await sb.from('child_asin_mapping').delete().eq('child_asin', del.child_asin).eq('marketplace', del.marketplace);
+    }
+  }
+
   if(childRows.length){
     const mappingRecords = childRows.map(c=>({
       child_asin: c.asin, marketplace: c.marketplace, parent_asin: asin,
@@ -2066,7 +2173,7 @@ async function submitAddProduct(){
     }));
     const { error: mapErr } = await sb.from('child_asin_mapping').upsert(mappingRecords, { onConflict: 'child_asin,marketplace' });
     if(mapErr){
-      setStatus('statusAddProduct', 'err', `Product was created, but child ASIN mapping failed: ${mapErr.message}`);
+      setStatus('statusAddProduct', 'err', `Product was saved, but child ASIN mapping failed: ${mapErr.message}`);
       return;
     }
   }
