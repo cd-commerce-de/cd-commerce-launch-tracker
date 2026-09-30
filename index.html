@@ -3107,7 +3107,14 @@ async function loadDashboard(){
   // the currently selected product doesn't match the filter (e.g. the
   // marketplace was just changed by hand), fall through to the first
   // product that does.
-  const visibleProducts = mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt);
+  const visibleProducts = (mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt))
+    .slice() // sort a copy — fetchProducts()'s own default (by name) is still what the Products table and other consumers use
+    .sort((a,b)=>{
+      if(!a.launch && !b.launch) return 0;
+      if(!a.launch) return 1; // no launch date on file — can't judge recency, so sorts after every dated product
+      if(!b.launch) return -1;
+      return new Date(b.launch) - new Date(a.launch); // newest launch first
+    });
   const prevSelValue = sel.value;
   sel.innerHTML = '';
   visibleProducts.forEach(p=>{
