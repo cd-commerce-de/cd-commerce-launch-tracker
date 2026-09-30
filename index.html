@@ -3079,16 +3079,20 @@ async function loadDashboard(){
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
 
   if(productJustChanged && requestedProduct && requestedProduct.marketplace && marketplaces.includes(requestedProduct.marketplace)){
-    // Only trust the product's own marketplace field if real data actually
-    // exists under that exact value — the product record and the row-level
-    // marketplace values aren't always kept in sync (we've already found
-    // real inconsistencies elsewhere in this data), and confidently
-    // filtering to a marketplace with zero matching rows is exactly what
-    // was producing an all-N/A scorecard for products that clearly have
-    // real data. Falling back to "All" is always safe — it's the value
-    // that was working correctly before this filter existed.
-    const { data: hasData } = await sb.from('sellerboard_rows').select('asin').eq('asin', requestedProduct.asin).eq('marketplace', requestedProduct.marketplace).limit(1);
-    if(hasData && hasData.length){
+    // The previous safety check here only verified "does at least one row
+    // exist under this marketplace" — too weak. A product whose weeks are
+    // recorded under INCONSISTENT marketplace values (confirmed to happen
+    // elsewhere in this data) could pass that check on the strength of just
+    // one or two matching weeks, while the filter it then applied silently
+    // hid every other week — exactly what produced an all-N/A scorecard for
+    // a product that demonstrably has full history. Now it only trusts the
+    // product's own marketplace field if it accounts for EVERY row this
+    // ASIN has — any mismatch at all falls back to "All", which is always
+    // safe and was the behavior before this auto-select feature existed.
+    const { data: allRows } = await sb.from('sellerboard_rows').select('marketplace').eq('asin', requestedProduct.asin);
+    const totalRows = allRows ? allRows.length : 0;
+    const matchingRows = allRows ? allRows.filter(r=>r.marketplace===requestedProduct.marketplace).length : 0;
+    if(totalRows > 0 && matchingRows === totalRows){
       mktSel.value = requestedProduct.marketplace;
     } else if([...mktSel.options].some(o=>o.value===curMkt)){
       mktSel.value = curMkt;
@@ -3461,7 +3465,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
     const min = Math.min(...numericVals), max = Math.max(...numericVals);
     const labelHtml = m.description
-      ? `<span class="note-cell" style="position:relative;display:inline-block;border-bottom:1px dotted var(--text-muted);cursor:help;">${m.label}<div class="note-hover-tooltip">${escapeHtml(m.description)}</div></span>`
+      ? `<span class="note-cell" data-note="${escapeHtml(m.description)}" style="border-bottom:1px dotted var(--text-muted);cursor:help;">${m.label}</span>`
       : m.label;
 
     // Total/Avg computed first now, since it renders before the per-week
