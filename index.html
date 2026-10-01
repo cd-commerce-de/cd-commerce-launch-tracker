@@ -838,7 +838,9 @@
               <tr><td>Ad Spend (€)</td><td>Sellerboard — "Ads" column</td><td>Sum</td><td>Stored as a positive number regardless of sign in the export. N/A if not reported.</td></tr>
               <tr><td>Amazon Fees (€)</td><td>Sellerboard — "Amazon fees" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Unlike most fields on this page, this one is <strong>not</strong> N/A-tracked — a week with no data here shows €0, not N/A.</td></tr>
               <tr><td>Cost of Goods (€)</td><td>Sellerboard — "COGS" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Same €0-not-N/A behavior as Amazon Fees above.</td></tr>
-              <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>Sum</td><td>N/A if not reported</td></tr>
+              <tr><td>VAT (€)</td><td>Sellerboard — "VAT" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Same €0-not-N/A behavior as Amazon Fees above. Shown inside the Net Profit breakdown — click the ▶ next to Net Profit to reveal it.</td></tr>
+              <tr><td>Shipping (€)</td><td>Sellerboard — "Shipping" column</td><td>Sum</td><td>Stored as a positive number (absolute value). Same €0-not-N/A behavior as Amazon Fees above. Shown inside the Net Profit breakdown.</td></tr>
+              <tr><td>Net Profit (€)</td><td>Sellerboard — "Net profit" column</td><td>Sum</td><td>N/A if not reported. Has a ▶ toggle to expand Ad Spend, Amazon Fees, COGS, VAT, and Shipping beneath it — collapsed by default.</td></tr>
               <tr><td>Sessions</td><td>Sellerfox — "Sessions" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded for that week, or didn't report it. Sellerboard's own Sessions column is not used, even when present, since it measures/aggregates this differently.</td></tr>
               <tr><td>Impressions</td><td>Sellerfox — "Impressions (SP)" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded, or didn't report it</td></tr>
               <tr><td>Ad Clicks</td><td>Sellerfox — "Clicks (SP)" column</td><td>Sum</td><td>N/A if Sellerfox wasn't uploaded, or didn't report it</td></tr>
@@ -851,6 +853,8 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
+              <tr><td>Global Reviews</td><td>Keepa API — all-time rating and review count for the listing</td><td><em>No total shown</em> — a current snapshot, not a weekly-summable figure</td><td>Different from New Reviews above: New Reviews is just this week's new arrivals; Global Reviews is the listing's entire history. Displayed as e.g. "4.4 stars (775)". May be a frozen historical count rather than live-updating, since Amazon stopped providing review-count updates through Keepa in April 2025. Never written for a backfilled past week, since Keepa can only report "right now."</td></tr>
+              <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
         </div>
@@ -872,7 +876,8 @@
               <tr><td>Avg. CPC (€)</td><td>Ad Spend ÷ Ad Clicks</td><td>Total Ad Spend ÷ Total Ad Clicks</td><td>Ad Spend from Sellerboard, Ad Clicks from Sellerfox</td></tr>
               <tr><td>Organic Sales (%)</td><td>Organic Sales ÷ Total Sales</td><td>Total Organic Sales ÷ Total Sales</td><td></td></tr>
               <tr><td>Unit Session % (%)</td><td>Units Sold ÷ Sessions, calculated directly — no longer pulled from Sellerboard's own reported figure</td><td>Total Units Sold ÷ Total Sessions</td><td></td></tr>
-              <tr><td>Click-Through Rate (%)</td><td>Ad Clicks ÷ Impressions</td><td>Total Ad Clicks ÷ Total Impressions</td><td></td></tr>
+              <tr><td>PPC CTR (%)</td><td>Ad Clicks ÷ Impressions</td><td>Total Ad Clicks ÷ Total Impressions</td><td>Renamed from "Click-Through Rate" for clarity alongside PPC CVR below</td></tr>
+              <tr><td>PPC CVR (%)</td><td>Ad Orders ÷ Ad Clicks</td><td>Total Ad Orders ÷ Total Ad Clicks</td><td>Conversion rate for ad-attributed traffic specifically — unlike Unit Session % above, which blends organic and PPC together</td></tr>
               <tr><td>Average Sales Price (€)</td><td>Sellerboard's own reported Average Sales Price, averaged if multiple rows exist that week</td><td>Total Sales ÷ Total Units Sold</td><td><strong>Weekly and Total use genuinely different methods</strong>, same pattern as ROI above — the weekly figure is Sellerboard's own number, never Sales/Units; the total is the calculated ratio.</td></tr>
             </tbody>
           </table>
@@ -970,6 +975,16 @@ function fmtInt(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return
 function fmtPct(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n*100).toFixed(1)+'%'; }
 function fmtRank(n){ return n?fmtInt(n):'–'; }
 function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; }
+// Combines rating + count into one display string, e.g. "4.4 stars (775)" —
+// takes the {rating, count} object set during week finalization, not a
+// plain number, since this one metric genuinely needs two values together.
+function fmtGlobalReviews(v){
+  if(!v || (v.rating==null && v.count==null)) return '–';
+  const parts = [];
+  if(v.rating!=null) parts.push(v.rating.toFixed(1)+' stars');
+  if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
+  return parts.join(' ') || '–';
+}
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
 function fmtMoney2dp(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -2323,6 +2338,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     kwTop10:null,
     visibility:0, visibilitySeen:false, bsrCategory:null,
     newReviews:0, newReviewsSeen:false, avgRating:null, lowRatingDetails:null,
+    globalReviewRating:null, globalReviewCount:null,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
@@ -2395,6 +2411,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.new_reviews!=null){ w.newReviews=+r.new_reviews; w.newReviewsSeen=true; }
     if(r.avg_rating!=null){ w.avgRating=+r.avg_rating; }
     if(r.low_rating_details){ w.lowRatingDetails = r.low_rating_details; }
+    if(r.global_review_rating!=null){ w.globalReviewRating=+r.global_review_rating; }
+    if(r.global_review_count!=null){ w.globalReviewCount=+r.global_review_count; }
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
@@ -2437,6 +2455,7 @@ function finalizeWeek(w){
       kwTop10:null,
       visibility:null, bsrCategory:null,
       newReviews:null, avgRating:null, lowRatingDetails:null, ratingPoints:null,
+      globalReviewRating:null, globalReviewCount:null, globalReviews:null,
       hasData:false,
     };
   }
@@ -2501,6 +2520,9 @@ function finalizeWeek(w){
     newReviews: w.newReviewsSeen ? w.newReviews : null,
     avgRating: w.avgRating,
     lowRatingDetails: w.lowRatingDetails,
+    globalReviewRating: w.globalReviewRating,
+    globalReviewCount: w.globalReviewCount,
+    globalReviews: (w.globalReviewRating!=null || w.globalReviewCount!=null) ? { rating: w.globalReviewRating, count: w.globalReviewCount } : null,
     ratingPoints: (w.avgRating!=null && w.newReviewsSeen && w.newReviews) ? w.avgRating*w.newReviews : null,
     hasData:true,
   };
@@ -3426,6 +3448,8 @@ const METRICS = [
   {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName', noTotal:true},
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
+  {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true,
+    description:"All-time rating and review count for this listing, from Keepa — distinct from New Reviews above, which is just this week's new arrivals (SellerSprite). Amazon stopped providing review-count updates through Keepa as of April 2025, so this figure may be a frozen historical snapshot rather than the current live count."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
