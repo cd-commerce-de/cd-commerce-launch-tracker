@@ -3064,6 +3064,12 @@ function toggleTrendsCharts(){
     Object.values(charts).forEach(c=>c && c.resize());
   }
 }
+function toggleBreakdownRows(key, iconEl){
+  const rows = document.querySelectorAll('.breakdown-row-'+key);
+  const isHidden = rows.length && rows[0].style.display === 'none';
+  rows.forEach(r=>{ r.style.display = isHidden ? 'table-row' : 'none'; });
+  iconEl.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+}
 function toggleAnalysisCharts(tag){
   const wrap = document.getElementById(tag+'AnalysisChartsWrap');
   const btn = document.getElementById('btnToggle'+(tag==='launch'?'Launch':'Expansion')+'AnalysisCharts');
@@ -3154,6 +3160,7 @@ async function loadDashboard(){
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
+  const priceNotesPromise = sb.from('price_notes').select('*').eq('asin', product.asin);
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
   const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(product, mkt, true);
   const banner = document.getElementById('noLaunchBanner');
@@ -3166,13 +3173,15 @@ async function loadDashboard(){
   } else {
     banner.classList.remove('show');
   }
-  const [{ data: targetRow }, { data: noteRows }, { data: childRows }] = await Promise.all([targetsPromise, notesPromise, childrenPromise]);
+  const [{ data: targetRow }, { data: noteRows }, { data: priceNoteRows }, { data: childRows }] = await Promise.all([targetsPromise, notesPromise, priceNotesPromise, childrenPromise]);
   const notesMap = {};
   (noteRows||[]).forEach(r=>{ notesMap[r.week] = r.note; });
+  const priceNotesMap = {};
+  (priceNoteRows||[]).forEach(r=>{ priceNotesMap[r.week] = r.note; });
   const labels = weeks.map((_,i)=> hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1));
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
-  renderTable(weeks, targetRow, anchor, product.asin, notesMap, hasWeekZero);
+  renderTable(weeks, targetRow, anchor, product.asin, notesMap, hasWeekZero, priceNotesMap);
   renderChildSkus(childRows, anchor);
 }
 
@@ -3394,10 +3403,12 @@ const METRICS = [
   {key:'advertisedRevenue', label:'Ad Sales (€)', fmt:fmtMoneyNA, kind:'sum'},
   {key:'refunds', label:'Refund Units', fmt:fmtIntNA, kind:'sum', lowerIsBetter:true},
   {key:'refundPct', label:'Refund Rate (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true, ratioOf:{num:'refunds',den:'units'}},
-  {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoneyNA, kind:'sum', lowerIsBetter:true},
-  {key:'amazonFees', label:'Amazon Fees (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
-  {key:'cogs', label:'Cost of Goods (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true},
-  {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_net_profit_good',better:'target_net_profit_better',best:'target_net_profit_best'}},
+  {key:'adSpend', label:'Ad Spend (€)', fmt:fmtMoneyNA, kind:'sum', lowerIsBetter:true, breakdownOf:'netProfit'},
+  {key:'amazonFees', label:'Amazon Fees (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true, breakdownOf:'netProfit'},
+  {key:'cogs', label:'Cost of Goods (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true, breakdownOf:'netProfit'},
+  {key:'vat', label:'VAT (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true, breakdownOf:'netProfit'},
+  {key:'shipping', label:'Shipping (€)', fmt:fmtMoney, kind:'sum', lowerIsBetter:true, breakdownOf:'netProfit'},
+  {key:'netProfit', label:'Net Profit (€)', fmt:fmtMoneyNA, kind:'sum', tierKeys:{good:'target_net_profit_good',better:'target_net_profit_better',best:'target_net_profit_best'}, expandable:true},
   {key:'margin', label:'Margin (%)', fmt:fmtPct, kind:'calc', tierKeys:{good:'target_margin_pct_good',better:'target_margin_pct_better',best:'target_margin_pct_best'}, targetIsPct:true, ratioOf:{num:'netProfit',den:'sales'}},
   {key:'tacos', label:'TACoS (%)', fmt:fmtPct, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'sales'}},
   {key:'cpo', label:'Cost Per Order (€)', fmt:fmtMoney, kind:'calc', lowerIsBetter:true, ratioOf:{num:'adSpend',den:'units'}},
@@ -3464,7 +3475,7 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA, grayFromIndex){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA, grayFromIndex, priceNotesMap){
   const metrics = metricList || METRICS;
   const t = targets || {};
   const isGray = i => grayFromIndex!=null && i>=grayFromIndex;
@@ -3487,6 +3498,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     const labelHtml = m.description
       ? `<span class="note-cell" data-note="${escapeHtml(m.description)}" style="border-bottom:1px dotted var(--text-muted);cursor:help;">${m.label}</span>`
       : m.label;
+    const expandToggle = m.expandable
+      ? `<span onclick="toggleBreakdownRows('${m.key}', this)" style="display:inline-block;width:14px;cursor:pointer;color:var(--text-muted);transform:rotate(0deg);transition:transform .1s;margin-right:4px;">▶</span>`
+      : (m.breakdownOf ? `<span style="display:inline-block;width:18px;"></span>` : '');
 
     // Total/Avg computed first now, since it renders before the per-week
     // values (right after the Metric label) rather than after them.
@@ -3515,7 +3529,8 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       }
     }
 
-    html += `<tr><td>${labelHtml}</td><td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>`;
+    const rowAttrs = m.breakdownOf ? ` class="breakdown-row-${m.breakdownOf}" style="display:none;background:#FAFAFA;"` : '';
+    html += `<tr${rowAttrs}><td>${expandToggle}${labelHtml}</td><td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>`;
     vals.forEach((v,i)=>{
       if(isFuture(i)){
         html += `<td style="background:#fff;"><div style="display:inline-block;max-width:75px;overflow:hidden;"></div></td>`;
@@ -3563,6 +3578,20 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     });
     html += `<td style="background:#F1F5F9;"></td></tr>`;
   }
+  if(asin && weekDates && priceNotesMap){
+    html += `<tr><td style="font-weight:700;">Pricing Notes</td><td style="background:${TOTAL_COL_BG};"></td>`;
+    weekDates.forEach((wd,i)=>{
+      const bg = isGray(i) ? '#E2E8F0' : '#fff';
+      if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
+      if(!wd){ html += `<td style="background:${bg};">–</td>`; return; }
+      const existing = priceNotesMap[wd] ? priceNotesMap[wd] : '';
+      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Price note';
+      html += `<td style="background:${bg};cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openPriceNoteModal('${asin}','${wd}',this)">
+        <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
+      </td>`;
+    });
+    html += `<td style="background:#F1F5F9;"></td></tr>`;
+  }
   html += '</tbody>';
   return html;
 }
@@ -3585,8 +3614,17 @@ function openNoteModal(asin, week, cellEl){
   document.getElementById('noteModalOverlay').style.display = 'flex';
   setTimeout(()=>document.getElementById('noteModalTextarea').focus(), 50);
 }
-// Same modal, different target — a note on the Portfolio Total's weekly
-// summary (keyed by tag + calendar week) rather than one product's own week.
+// Same modal again, this time for a free-text note on pricing changes for
+// that product that week — same interaction pattern as the other two, just
+// its own table (price_notes) so it never collides with the general Notes.
+function openPriceNoteModal(asin, week, cellEl){
+  noteModalMode = 'price';
+  noteModalCell = cellEl; noteModalAsin = asin; noteModalWeek = week;
+  document.getElementById('noteModalWeekLabel').textContent = 'Pricing — ' + new Date(week).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('noteModalTextarea').value = cellEl.dataset.note || '';
+  document.getElementById('noteModalOverlay').style.display = 'flex';
+  setTimeout(()=>document.getElementById('noteModalTextarea').focus(), 50);
+}
 function openPortfolioNoteModal(tag, week, cellEl){
   noteModalMode = 'portfolio';
   noteModalTag = tag;
@@ -3607,14 +3645,22 @@ async function saveNoteModal(){
   const btn = document.getElementById('noteModalSaveBtn');
   btn.disabled = true;
   if(noteModalMode === 'portfolio') await savePortfolioWeekNote(noteModalTag, noteModalWeek, text);
+  else if(noteModalMode === 'price') await savePriceNote(noteModalAsin, noteModalWeek, text);
   else await saveWeekNote(noteModalAsin, noteModalWeek, text);
   btn.disabled = false;
   const trimmed = text.trim();
   noteModalCell.dataset.note = trimmed;
   const preview = noteModalCell.querySelector('div');
-  preview.textContent = trimmed ? (trimmed.length>13 ? trimmed.slice(0,13)+'…' : trimmed) : '+ Note';
+  preview.textContent = trimmed ? (trimmed.length>13 ? trimmed.slice(0,13)+'…' : trimmed) : (noteModalMode === 'price' ? '+ Price note' : '+ Note');
   preview.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
   closeNoteModal();
+}
+async function savePriceNote(asin, week, note){
+  if(note && note.trim()){
+    await sb.from('price_notes').upsert({ asin, week, note: note.trim() }, { onConflict: 'asin,week' });
+  } else {
+    await sb.from('price_notes').delete().eq('asin', asin).eq('week', week);
+  }
 }
 async function savePortfolioWeekNote(tag, week, note){
   if(note && note.trim()){
@@ -3623,7 +3669,7 @@ async function savePortfolioWeekNote(tag, week, note){
     await sb.from('portfolio_notes').delete().eq('tag', tag).eq('week', week);
   }
 }
-function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero){
+function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceNotesMap){
   const colLabels = weeks.map((_,i)=>{
     const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
     if(!anchor) return wkLabel;
@@ -3638,7 +3684,7 @@ function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero){
     d.setDate(d.getDate() + i*7);
     return d.toISOString().slice(0,10);
   });
-  document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap);
+  document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, null, false, null, priceNotesMap);
 }
 
 /* ---------------- Analysis (integrated into each tag dashboard) ---------------- */
