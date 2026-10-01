@@ -2318,6 +2318,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     bsr:null, subcatBsr:null, subcatBsrName:null, sessions:0, sessionsSeen:false, cvrSum:0, cvrN:0, avgPriceSum:0, avgPriceN:0,
     impressions:0, impressionsSeen:false, clicks:0, clicksSeen:false, adsOrders:0, adsOrdersSeen:false, adSales:0, adSalesSeen:false,
     salesOrganic:0, salesOrganicSeen:false, salesPpc:0, salesPpcSeen:false,
+    unitsOrganic:0, unitsOrganicSeen:false, unitsPpc:0, unitsPpcSeen:false,
     kwTop10:null,
     visibility:0, visibilitySeen:false, bsrCategory:null,
     newReviews:0, newReviewsSeen:false, avgRating:null, lowRatingDetails:null,
@@ -2385,6 +2386,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.avg_sales_price!=null){ w.avgPriceSum+=+r.avg_sales_price; w.avgPriceN++; }
     if(r.sales_organic!=null){ w.salesOrganic+=+r.sales_organic; w.salesOrganicSeen=true; }
     if(r.sales_ppc!=null){ w.salesPpc+=+r.sales_ppc; w.salesPpcSeen=true; }
+    if(r.units_organic!=null){ w.unitsOrganic+=+r.units_organic; w.unitsOrganicSeen=true; }
+    if(r.units_ppc!=null){ w.unitsPpc+=+r.units_ppc; w.unitsPpcSeen=true; }
     if(r.kw_top10){ w.kwTop10 = r.kw_top10; }
     if(r.visibility!=null){ w.visibility=+r.visibility; w.visibilitySeen=true; }
     if(r.bsr_category){ w.bsrCategory = r.bsr_category; }
@@ -2438,8 +2441,17 @@ function finalizeWeek(w){
   }
   // These fields must come directly from the export — null (N/A) if the
   // source row genuinely didn't report them, never approximated or defaulted.
-  const sales = w.salesSeen ? w.sales : null;
-  const units = w.unitsSeen ? w.units : null;
+  // EXCEPTION: Sales and Units fall back to Organic+PPC when the dedicated
+  // combined field is missing — confirmed this gap is real, not a display
+  // bug: the current sync's child-level writes have never included a
+  // combined sales/units column, only the organic/ppc split, so any week
+  // written by it alone would otherwise show N/A at the child level despite
+  // Organic Sales and Ad Sales both being present and correct. Units can
+  // only derive its organic portion for now (no units_ppc column existed
+  // until this fix), so it may understate the true total until new weeks
+  // carry a real units_ppc value — still strictly better than N/A.
+  const sales = w.salesSeen ? w.sales : ((w.salesOrganicSeen || w.salesPpcSeen) ? (w.salesOrganic + w.salesPpc) : null);
+  const units = w.unitsSeen ? w.units : ((w.unitsOrganicSeen || w.unitsPpcSeen) ? (w.unitsOrganic + w.unitsPpc) : null);
   const netProfit = w.netProfitSeen ? w.netProfit : null;
   const refunds = w.refundsSeen ? w.refunds : null;
   const adSpend = w.adSpendSeen ? w.adSpend : null;
