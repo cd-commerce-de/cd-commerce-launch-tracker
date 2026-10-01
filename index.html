@@ -344,6 +344,11 @@
         <h2>Launch Dashboard</h2>
         <div class="meta">Every launch product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
       </div>
+      <div class="panel" id="launchDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
+        <div class="table-wrap"><table class="stretch-table" id="launchDashOverallTable"></table></div>
+      </div>
       <div class="panel" id="launchDashAnalysisPanel" style="display:none;">
         <h3 style="display:flex;align-items:center;justify-content:space-between;">Analysis — Time to Profitability <button class="btn btn-sm" id="btnToggleLaunchAnalysisCharts" onclick="toggleAnalysisCharts('launch')">Hide Charts</button></h3>
         <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Patterns across every launch product with at least one week of data, each measured on its own Week 1 so products launched at different times are compared on equal footing — including products already past their 12-week window, using their own historical weeks 1–12.</p>
@@ -372,11 +377,6 @@
         <h3>Overall</h3>
         <div class="kpi-grid" id="launchDashKpiGrid"></div>
       </div>
-      <div class="panel" id="launchDashOverallPanel" style="display:none;">
-        <h3>Portfolio Total — Week by Week</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table class="stretch-table" id="launchDashOverallTable"></table></div>
-      </div>
       <div id="launchDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No launch products yet</div>
         Add a product tagged "launch" and upload data from the <b>Upload &amp; Manage</b> tab.
@@ -388,6 +388,11 @@
       <div class="page-head">
         <h2>Expansion Dashboard</h2>
         <div class="meta">Every expansion product's own week-by-week performance, since each one's own Week 1 — plus the portfolio total</div>
+      </div>
+      <div class="panel" id="expansionDashOverallPanel" style="display:none;">
+        <h3>Portfolio Total — Week by Week</h3>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
+        <div class="table-wrap"><table class="stretch-table" id="expansionDashOverallTable"></table></div>
       </div>
       <div class="panel" id="expansionDashAnalysisPanel" style="display:none;">
         <h3 style="display:flex;align-items:center;justify-content:space-between;">Analysis — Time to Profitability <button class="btn btn-sm" id="btnToggleExpansionAnalysisCharts" onclick="toggleAnalysisCharts('expansion')">Hide Charts</button></h3>
@@ -416,11 +421,6 @@
       <div class="panel" id="expansionDashKpiPanel" style="display:none;">
         <h3>Overall</h3>
         <div class="kpi-grid" id="expansionDashKpiGrid"></div>
-      </div>
-      <div class="panel" id="expansionDashOverallPanel" style="display:none;">
-        <h3>Portfolio Total — Week by Week</h3>
-        <p style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 12px;">Columns are real calendar weeks, so every product's actual simultaneous contribution is summed together — unlike the per-product tables below, which use each product's own Week 1.</p>
-        <div class="table-wrap"><table class="stretch-table" id="expansionDashOverallTable"></table></div>
       </div>
       <div id="expansionDashEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No expansion products yet</div>
@@ -465,6 +465,15 @@
 
       <div id="dashboardBody" style="display:none;">
         <div class="panel">
+          <h3>Weekly Scorecard</h3>
+          <div class="table-wrap"><table class="stretch-table" id="scorecardTable"></table></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--text-muted);">
+            <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
+            <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
+          </div>
+        </div>
+
+        <div class="panel">
           <h3>12-week headline numbers</h3>
           <div class="kpi-grid" id="kpiGrid"></div>
         </div>
@@ -494,21 +503,13 @@
           </div>
         </div>
 
-        <div class="panel">
-          <h3>Weekly Scorecard</h3>
-          <div class="table-wrap"><table class="stretch-table" id="scorecardTable"></table></div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--text-muted);">
-            <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
-            <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
-          </div>
-        </div>
-
         <div class="panel" id="childSkuPanel" style="display:none;">
           <h3>Child SKUs</h3>
           <div class="meta" style="margin:-6px 0 16px;">This product is sold as <span id="childSkuCount"></span> — here's how they compare to each other.</div>
 
           <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Summary</h4>
           <div class="table-wrap" style="margin-bottom:22px;"><table class="stretch-table" id="childSkuSummaryTable"></table></div>
+
 
           <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">Compare Over Time</h4>
           <div class="filter-bar" style="margin-bottom:10px;">
