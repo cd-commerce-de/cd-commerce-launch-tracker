@@ -446,23 +446,22 @@
     <div class="view" id="view-weekly-pulse">
       <div class="page-head">
         <h2>Product Detail</h2>
-        <div class="meta" id="pulseMeta">Select a product to see its weekly scorecard</div>
+        <div class="meta">Select a product below to see its weekly scorecard</div>
       </div>
 
       <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Product</label><select id="productSelect" onchange="loadDashboard()"></select></div>
-          <div class="filter-field"><label>Marketplace</label><select id="marketplaceSelect" onchange="loadDashboard()"><option value="ALL">All</option></select></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:14px;">
+          <div id="productInfoDescription" style="display:none;">
+            <h3 id="productInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
+            <div style="font-size:12.5px;color:var(--text-muted);" id="productInfoAsinLine"></div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="productInfoLaunchLine"></div>
+          </div>
+          <div class="filter-bar" style="margin:0 0 0 auto;">
+            <div class="filter-field"><label>Product</label><select id="productSelect" onchange="loadDashboard()"></select></div>
+            <div class="filter-field"><label>Marketplace</label><select id="marketplaceSelect" onchange="loadDashboard()"><option value="ALL">All</option></select></div>
+          </div>
         </div>
-      </div>
-
-      <div class="panel" id="productInfoPanel" style="display:none;">
-        <div style="margin-bottom:14px;">
-          <h3 id="productInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
-          <div style="font-size:12.5px;color:var(--text-muted);" id="productInfoAsinLine"></div>
-          <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="productInfoLaunchLine"></div>
-        </div>
-        <div id="productInfoMetaGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);"></div>
+        <div id="productInfoMetaGrid" style="display:none;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);"></div>
       </div>
 
       <div class="banner" id="noLaunchBanner">No launch date set for this product yet — add one in Upload &amp; Manage so weeks can be calculated.</div>
@@ -3203,10 +3202,11 @@ async function loadDashboard(){
   const hasAnyData = !!product;
   document.getElementById('emptyState').style.display = hasAnyData ? 'none' : 'block';
   document.getElementById('dashboardBody').style.display = hasAnyData ? 'block' : 'none';
-  document.getElementById('pulseMeta').innerHTML = product
-    ? `${thumb(product.image_url, 44)}<strong>${escapeHtml(productDisplayName(product))}</strong>`
-    : 'Select a product to see its weekly scorecard';
-  if(!hasAnyData){ document.getElementById('productInfoPanel').style.display = 'none'; destroyCharts(); return; }
+  if(!hasAnyData){
+    document.getElementById('productInfoDescription').style.display = 'none';
+    document.getElementById('productInfoMetaGrid').style.display = 'none';
+    destroyCharts(); return;
+  }
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
@@ -3226,7 +3226,8 @@ async function loadDashboard(){
   }
   const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
   const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
-  document.getElementById('productInfoPanel').style.display = 'block';
+  document.getElementById('productInfoDescription').style.display = 'block';
+  document.getElementById('productInfoMetaGrid').style.display = 'grid';
   document.getElementById('productInfoName').innerHTML = `${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}`;
   document.getElementById('productInfoAsinLine').innerHTML = `ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}`;
   document.getElementById('productInfoLaunchLine').innerHTML = `Date Launched: <strong>${dateLaunchedStr}</strong>`;
