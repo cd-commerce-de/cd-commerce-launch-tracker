@@ -456,6 +456,15 @@
         </div>
       </div>
 
+      <div class="panel" id="productInfoPanel" style="display:none;">
+        <div style="margin-bottom:14px;">
+          <h3 id="productInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
+          <div style="font-size:12.5px;color:var(--text-muted);" id="productInfoAsinLine"></div>
+          <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="productInfoLaunchLine"></div>
+        </div>
+        <div id="productInfoMetaGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);"></div>
+      </div>
+
       <div class="banner" id="noLaunchBanner">No launch date set for this product yet — add one in Upload &amp; Manage so weeks can be calculated.</div>
 
       <div id="emptyState" class="panel empty-state" style="display:none;">
@@ -2788,6 +2797,18 @@ async function loadTagDashboard(tag){
   tagDashboardCache[tag] = { allTagProducts, allSbRows, allSfRows, allTargets, allNotes, allPortfolioNotes };
   renderTagDashboard(tag);
 }
+function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
+  return [
+    {label:'Marketplace', value: product.marketplace || '–'},
+    {label:'Brand', value: product.brand || '–'},
+    {label:'Product Line Code', value: product.product_line_code || '–'},
+    {label:'Product Line', value: product.product_line || '–'},
+    {label:'Parent ASIN', value: product.asin},
+    {label:'Date Launched', value: dateLaunchedStr},
+    {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
+    {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
+  ];
+}
 function renderTagDashboard(tag){
   const cache = tagDashboardCache[tag];
   if(!cache) return; // not fetched yet — loadTagDashboard() runs first on view switch
@@ -3017,19 +3038,6 @@ function renderTagDashboard(tag){
       return db.localeCompare(da);
     });
   }
-  function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
-    return [
-      {label:'Marketplace', value: product.marketplace || '–'},
-      {label:'Brand', value: product.brand || '–'},
-      {label:'Product Line Code', value: product.product_line_code || '–'},
-      {label:'Product Line', value: product.product_line || '–'},
-      {label:'Parent ASIN', value: product.asin},
-      {label:'Date Launched', value: dateLaunchedStr},
-      {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
-      {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
-    ];
-  }
-
   sortNewestFirst(visibleProductData).forEach(({product, weeks, anchor, weekDates, hasWeekZero, targetRow, notesMap})=>{
     let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
     if(anchor){
@@ -3198,13 +3206,32 @@ async function loadDashboard(){
   document.getElementById('pulseMeta').innerHTML = product
     ? `${thumb(product.image_url, 44)}<strong>${escapeHtml(productDisplayName(product))}</strong>`
     : 'Select a product to see its weekly scorecard';
-  if(!hasAnyData){ destroyCharts(); return; }
+  if(!hasAnyData){ document.getElementById('productInfoPanel').style.display = 'none'; destroyCharts(); return; }
 
   const targetsPromise = sb.from('targets').select('*').eq('asin', product.asin).maybeSingle();
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
   const priceNotesPromise = sb.from('price_notes').select('*').eq('asin', product.asin);
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
   const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(product, mkt, true);
+
+  // Same product-info block the dashboard's per-product panels used to show
+  // (name, image, ASIN, launch date, age, marketplace, brand, product line)
+  // — brought to the top of Product Detail instead, same computation.
+  let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
+  if(anchor){
+    ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
+    currentWeekNum = Math.floor(ageDays / 7) + 1;
+    ageWeeks = +(ageDays / 7).toFixed(1);
+    ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
+  }
+  const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
+  const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
+  document.getElementById('productInfoPanel').style.display = 'block';
+  document.getElementById('productInfoName').innerHTML = `${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}`;
+  document.getElementById('productInfoAsinLine').innerHTML = `ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}`;
+  document.getElementById('productInfoLaunchLine').innerHTML = `Date Launched: <strong>${dateLaunchedStr}</strong>`;
+  document.getElementById('productInfoMetaGrid').innerHTML = metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('');
+
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
     banner.textContent = `No launch date set — using the earliest uploaded week (${anchor}) as Week 1. Set a launch date in Upload & Manage if you'd rather anchor by the real launch date.`;
