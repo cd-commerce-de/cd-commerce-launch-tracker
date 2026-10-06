@@ -2460,7 +2460,7 @@ function finalizeWeek(w){
       grossProfit:null, netProfit:null, margin:null, roi:null, realAcos:null,
       tacos:null, cpo:null, profitPerOrder:null, bsr:null, subcatBsr:null, subcatBsrName:null, sessions:null,
       cvr:null, avgSalesPrice:null, impressions:null, clicks:null, adsOrders:null,
-      ctr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
+      ctr:null, ppcCvr:null, cpc:null, organicPct:null, organicRevenue:null, advertisedRevenue:null,
       kwTop10:null,
       visibility:null, bsrCategory:null,
       newReviews:null, avgRating:null, lowRatingDetails:null, ratingPoints:null,
@@ -2519,6 +2519,7 @@ function finalizeWeek(w){
     avgSalesPrice: w.avgPriceN? w.avgPriceSum/w.avgPriceN : null,
     impressions, clicks, adsOrders,
     ctr: (impressions!=null && clicks!=null && impressions) ? clicks/impressions : null,
+    ppcCvr: (adsOrders!=null && clicks!=null && clicks) ? adsOrders/clicks : null,
     cpc: (clicks!=null && adSpend!=null && clicks) ? adSpend/clicks : null,
     organicPct,
     organicRevenue,
@@ -3608,7 +3609,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
         html += `<td style="background:#fff;"><div style="display:inline-block;max-width:75px;overflow:hidden;"></div></td>`;
         return;
       }
-      const bg = isGray(i) ? '#E2E8F0' : (v===null) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
+      const bg = isGray(i) ? '#E2E8F0' : (v==null || isNaN(v)) ? '#fff' : (m.kind==='sum'||m.kind==='calc') ? heatColor(v,min,max) : '#fff';
       let displayValue = m.fmt(v);
       if(m.categoryKey && v!=null){
         displayValue = `#${displayValue}`;
