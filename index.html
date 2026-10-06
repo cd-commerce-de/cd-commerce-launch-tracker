@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <style>
   :root{
@@ -307,7 +308,7 @@
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="10" width="4" height="10"/><rect x="10" y="5" width="4" height="15"/><rect x="17" y="13" width="4" height="7"/></svg></div>
       All Products
     </div>
-    <div class="nav-item" data-view="tse-forecast" onclick="switchView('tse-forecast')" title="Every week's actual performance compared to your Good/Better/Best targets, matching the Annahmen & Prognosen template's metric list">
+    <div class="nav-item" data-view="tse-forecast" onclick="switchView('tse-forecast')" title="Every week's actual Revenue, Units Sold and Margin compared to the targets in your Deals Tracker">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 19V5"/><path d="M4 15l5-5 4 4 7-7"/></svg></div>
       Actual vs. Target
     </div>
@@ -535,7 +536,7 @@
     <div class="view" id="view-tse-forecast">
       <div class="page-head">
         <h2>Actual vs. Target</h2>
-        <div class="meta">Every week's actual performance, sourced from your Sellerboard and Sellerfox uploads, compared against the Good/Better/Best targets already set for this product.</div>
+        <div class="meta">Every week's actual Revenue, Units Sold and Margin from your Sellerboard data, compared against the weekly targets in your Deals Tracker.</div>
       </div>
       <div class="panel">
         <div class="filter-bar">
@@ -547,9 +548,12 @@
         Add a product and upload data from the <b>Upload &amp; Manage</b> tab.
       </div>
       <div id="tseBody" style="display:none;">
-        <div class="panel">
-          <div class="table-wrap"><table class="stretch-table" id="tseTable"></table></div>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Target shows the Good threshold for that specific week — Sales Price, Units, Avg. CPC, Avg. CR, and Organic Sales % come straight from your weekly forecast upload; every other row is calculated from those 5, the same way the template does it. Each week's Actual cell is colored by which tier that week hit: <span style="color:#EF4444;font-weight:700;">red</span> below Good, <span style="color:#F59E0B;font-weight:700;">yellow</span> Good to Better, <span style="color:#10B981;font-weight:700;">green</span> Better to Best, <span style="color:#D4AF37;font-weight:700;">gold</span> above Best. Rows show "–" for any week with no forecast uploaded yet. Avg. CPC and Number of clicks need a Sellerfox upload for that week to show an Actual value. Organic Sales % (and anything calculated from it) is an approximation — (Units − Ad Orders) ÷ Units — not an exact split.</p>
+        <div class="panel" id="ltComparePanel">
+          <h3>Deals Tracker targets — Revenue, Units &amp; Margin</h3>
+          <div class="meta" id="ltCompareSource" style="margin:-6px 0 12px;"></div>
+          <div id="ltCompareMessage"></div>
+          <div class="table-wrap"><table class="stretch-table" id="ltCompareTable"></table></div>
+          <p id="ltCompareLegend" style="display:none;font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Each finished week's <strong>% of target</strong> is colored the way your Deals Tracker does it: <span style="background:#F1BF42;color:#1a1a1a;padding:0 5px;border-radius:3px;">gold</span> 100% or more, <span style="background:#58A65C;color:#1a1a1a;padding:0 5px;border-radius:3px;">green</span> 90% or more, <span style="background:#FDF2D0;color:#1a1a1a;padding:0 5px;border-radius:3px;">cream</span> 80% or more, no color below 80%, <span style="background:#A22116;color:#fff;padding:0 5px;border-radius:3px;">dark red</span> at 0% or below. <strong>To date</strong> only counts finished weeks that have data — the week in progress (shown in italics) and future weeks are left out. Actuals are Sellerboard's Total Sales, Units Sold and Net Profit; the tracker's Margin target is a € amount, so it's compared against Net Profit (€).</p>
         </div>
       </div>
     </div>
@@ -681,6 +685,20 @@
       </div>
 
       <div class="panel">
+        <h3>Launch &amp; Expansion Targets — Deals Tracker</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Upload your Deals Tracker workbook and the weekly <strong>Revenue, Units Sold and Margin</strong> targets for every product line are loaded from its <strong>#Launch Targets</strong> and <strong>#Expansion Targets</strong> tabs (every other tab is ignored). They show up under <strong>Actual vs. Target</strong>. Re-uploading replaces what's stored, so just upload the latest version whenever the tracker changes. Lines are matched to products by <strong>Product Line Code</strong> — plus marketplace where the tracker's name has one (e.g. "LMT FR").</p>
+        <div id="ltStored" style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;"></div>
+        <div class="upload-box" id="dropLT">
+          <label for="fileLT">Choose Deals Tracker (.xlsx)</label>
+          <input type="file" id="fileLT" accept=".xlsx">
+          <div class="hint">The file is read in your browser and nothing is saved until you click Save targets — a large workbook is fine, only two tabs are read.</div>
+          <div id="ltPreview" style="margin-top:12px;text-align:left;"></div>
+          <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnSaveLT" style="display:none;" onclick="ltSave()">Save targets</button></div>
+          <div class="status-line" id="statusLT"></div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>One-time / as-needed setup</h3>
         <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Not part of the weekly sequence above — set these up once per product, or update them as things change.</p>
         <div class="row">
@@ -707,7 +725,7 @@
             <div class="upload-box" id="dropWT">
               <label for="fileWT">Choose Weekly Forecast CSV</label>
               <input type="file" id="fileWT" accept=".csv">
-              <div class="hint">One row per week (1-12) per product: Good/Better/Best for Sales Price, Units, CPC, CR, Organic Sales % — powers Actual vs. Target</div>
+              <div class="hint">No longer used — Actual vs. Target now compares against the Deals Tracker targets (see the Launch &amp; Expansion Targets panel above). Kept in case it's needed again.</div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadWT" style="display:none;" onclick="confirmUpload('upload-weekly-targets', 'fileWT', 'statusWT', 'btnUploadWT')">Upload</button></div>
               <div class="status-line" id="statusWT"></div>
             </div>
@@ -716,7 +734,7 @@
             <div class="upload-box" id="dropPA">
               <label for="filePA">Choose Product Assumptions CSV</label>
               <input type="file" id="filePA" accept=".csv">
-              <div class="hint">One row per product: COGS, FBA/FBM costs, Amazon Selling Fees % — needed to calculate Total Profit/Margin/ROI targets</div>
+              <div class="hint">No longer used — it only fed the old Good/Better/Best forecast on Actual vs. Target. Kept in case it's needed again.</div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadPA" style="display:none;" onclick="confirmUpload('upload-product-assumptions', 'filePA', 'statusPA', 'btnUploadPA')">Upload</button></div>
               <div class="status-line" id="statusPA"></div>
             </div>
@@ -1141,7 +1159,7 @@ function switchView(view){
   if(view==='expansion-dash') loadTagDashboard('expansion');
   if(view==='tse-forecast') loadTseForecast();
   if(view==='instructions') loadInstructions();
-  if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); loadKpSyncStatus(); }
+  if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); loadKpSyncStatus(); ltLoadStored(); }
   if(view==='asin-mapping') loadAsinMapping();
   if(view==='documentation') loadDocumentation();
 }
@@ -4392,6 +4410,504 @@ function docInsertImage(e){
   e.target.value = '';
 }
 
+/* LT-CORE-START
+   Deals Tracker targets (Launch & Expansion): parsing, product matching, and the
+   target-vs-actual comparison model. Everything between LT-CORE-START and
+   LT-CORE-END is deliberately pure — no DOM, no Supabase — so it can be tested
+   against the real workbook outside the browser. */
+
+const LT_THRESHOLDS = { gold: 1.0, green: 0.9, yellow: 0.8 }; // mirrors the colour rules already in the Deals Tracker
+
+function ltNormMarketplace(m){
+  const u = String(m == null ? '' : m).trim().toUpperCase();
+  return u === 'GB' ? 'UK' : u;
+}
+// Excel serial number (what the file stores) / Date / ISO string -> 'YYYY-MM-DD',
+// without ever passing through the browser's local timezone.
+function ltToIsoDate(v){
+  if(v == null || v === '') return null;
+  if(typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000).toISOString().slice(0, 10);
+  if(v instanceof Date) return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate(), 12)).toISOString().slice(0, 10);
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[0] : null;
+}
+function ltAddDays(iso, n){
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+function ltMondayOf(iso){
+  const [y, m, d] = iso.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun
+  return ltAddDays(iso, -(day === 0 ? 6 : day - 1));
+}
+function ltNum(v){
+  if(v == null || v === '') return 0;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+  return isFinite(n) ? n : NaN;
+}
+
+// "LMT (UK)", "LMT FR", "GWK FR (relaunch)", "VZW BE/NL/PL", "ATM"  ->  code + marketplaces + leftover notes
+function ltParseLineLabel(raw){
+  const flags = [], mk = [];
+  const addMk = s => s.split(/[\/,]/).map(x => ltNormMarketplace(x)).filter(Boolean).forEach(x => { if(!mk.includes(x)) mk.push(x); });
+  const isMk = s => /^[A-Za-z]{2}(\s*[\/,]\s*[A-Za-z]{2})*$/.test(s.trim());
+  let rest = String(raw == null ? '' : raw).trim().replace(/\(([^)]*)\)/g, (_, inner) => {
+    if(isMk(inner) && inner.trim() === inner.trim().toUpperCase()) addMk(inner); else if(inner.trim()) flags.push(inner.trim());
+    return ' ';
+  });
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  const code = tokens.shift() || null;
+  tokens.forEach(t => { if(/^[A-Z]{2}(\/[A-Z]{2})*$/.test(t)) addMk(t); else flags.push(t); });
+  return { code, marketplaces: mk, flags };
+}
+
+// One tab (as an array of rows) -> one block per product line, weekly Revenue/Units/Margin
+function ltExtractBlocks(aoa, kind){
+  const warnings = [], blocks = [];
+  const yw = aoa.findIndex(r => r && String(r[0] == null ? '' : r[0]).trim() === 'Year-Wk');
+  if(yw < 0) return { blocks, warnings: [`Couldn't find the "Year-Wk" header row on the ${kind} tab`] };
+  const ywRow = aoa[yw] || [], dRow = aoa[yw + 1] || [];
+  // The weekly block is the run of columns, starting at C, that carry a Year-Wk label. (Daily columns follow further right — not needed.)
+  const cols = [], seen = new Map();
+  for(let c = 2; c < ywRow.length; c++){
+    if(ywRow[c] == null || String(ywRow[c]).trim() === '') break;
+    const iso = ltToIsoDate(dRow[c]);
+    if(!iso){ warnings.push(`${kind} tab: column ${c + 1} has a week label but no readable date — skipped`); continue; }
+    const week = ltMondayOf(iso);
+    if(seen.has(week)) warnings.push(`${kind} tab: two columns resolve to the week of ${week} — the later one wins`);
+    seen.set(week, true);
+    cols.push({ c, week });
+  }
+  if(!cols.length) return { blocks, warnings: [...warnings, `No weekly columns found on the ${kind} tab`] };
+
+  const SUMMARY = new Set(['Target', 'Actual', 'Actual vs Target%']);
+  const labelsUsed = new Set();
+  for(let r = yw + 2; r < aoa.length; r++){
+    const row = aoa[r] || [];
+    const a = row[0] == null ? '' : String(row[0]).trim();
+    const b = row[1] == null ? '' : String(row[1]).trim();
+    if(a === 'ACTUALS') break;                       // Launch tab: everything below is actuals, not targets
+    if(a === 'Actual vs Target%' && b === '') break; // section header
+    if(b !== 'Revenue') continue;
+    const u = aoa[r + 1] || [], m = aoa[r + 2] || [];
+    const ub = u[1] == null ? '' : String(u[1]).trim(), mb = m[1] == null ? '' : String(m[1]).trim();
+    if(ub !== 'Units Sold' || mb !== 'Margin'){ warnings.push(`${kind} tab, row ${r + 1}: expected Units Sold and Margin rows under Revenue — skipped`); continue; }
+    const note = u[0] == null || String(u[0]).trim() === '' ? null : String(u[0]).trim();
+    const rowNo = r + 1;
+    if(SUMMARY.has(a)){ r += 2; continue; }         // the tab's own Target / Actual summary rows
+    r += 2;
+
+    const parsed = ltParseLineLabel(a);
+    if(!parsed.code){ continue; }                   // "(New)" placeholder rows etc.
+    let label = a, n = 2;
+    while(labelsUsed.has(label)) label = `${a} #${n++}`;
+    labelsUsed.add(label);
+
+    const weeks = []; let bad = 0;
+    cols.forEach(({ c, week }) => {
+      const rev = ltNum(row[c]), un = ltNum(u[c]), mg = ltNum(m[c]);
+      if([rev, un, mg].some(Number.isNaN)){ bad++; return; }
+      if(rev !== 0 || un !== 0 || mg !== 0) weeks.push({ week, revenue: rev, units: un, margin: mg });
+    });
+    if(bad) warnings.push(`${kind} tab, "${a}": ${bad} week(s) held text/errors instead of numbers and were ignored`);
+    weeks.sort((x, y) => x.week < y.week ? -1 : 1);
+    const sumOf = k => weeks.reduce((s, w) => s + w[k], 0);
+    blocks.push({
+      kind, label, code: parsed.code.toUpperCase(), marketplaces: parsed.marketplaces, flags: parsed.flags,
+      windowNote: note, sheetRow: rowNo, weeks,
+      firstWeek: weeks.length ? weeks[0].week : null, lastWeek: weeks.length ? weeks[weeks.length - 1].week : null,
+      totals: { revenue: sumOf('revenue'), units: sumOf('units'), margin: sumOf('margin') },
+    });
+  }
+  return { blocks, warnings };
+}
+function ltParseTargets(aoaByKind){
+  const out = { blocks: [], warnings: [] };
+  ['launch', 'expansion'].forEach(kind => {
+    if(!aoaByKind[kind]){ out.warnings.push(`The ${kind === 'launch' ? '#Launch Targets' : '#Expansion Targets'} tab wasn't found in this file`); return; }
+    const r = ltExtractBlocks(aoaByKind[kind], kind);
+    out.blocks.push(...r.blocks); out.warnings.push(...r.warnings);
+  });
+  return out;
+}
+
+// block-ish ({kind, code, marketplaces}) vs product. Launch tab -> launch-tagged products, Expansion tab -> expansion-tagged.
+function ltBlockMatchesProduct(b, p){
+  if(!b || !p || !p.product_line_code || !b.code) return false;
+  if(String(b.code).trim().toUpperCase() !== String(p.product_line_code).trim().toUpperCase()) return false;
+  const mks = b.marketplaces || [];
+  if(mks.length && !mks.includes(ltNormMarketplace(p.marketplace))) return false;
+  if(p.tag === 'launch' || p.tag === 'expansion') return b.kind === p.tag;
+  return true;
+}
+// Stored flat rows -> one entry per tracker line (so the importer preview and the comparison use the very same matching)
+function ltRowsToBlockMeta(row){
+  return { kind: row.kind, label: row.line_label, code: row.product_line_code,
+           marketplaces: row.marketplaces ? String(row.marketplaces).split(',').filter(Boolean) : [] };
+}
+function ltBlocksFromRows(rows){
+  const map = new Map();
+  rows.forEach(r => {
+    const k = r.kind + '|' + r.line_label;
+    const b = map.get(k) || { ...ltRowsToBlockMeta(r), windowNote: r.window_note || null, firstWeek: r.week };
+    if(r.week < b.firstWeek) b.firstWeek = r.week;
+    map.set(k, b);
+  });
+  return [...map.values()];
+}
+
+/* ---- One tracker line -> exactly one product, confirmed by dates ----------------------------------------
+   Targets are never added together or shared: a line's targets belong to the single product it is matched to.
+   A line is matched to a product only when ALL of these hold:
+     - same Product Line Code, and the line's marketplace (if its name has one) equals the product's
+     - the tab fits the product's tag (Launch tab -> launch products, Expansion tab -> expansion products)
+     - the line covers ONE marketplace (a line like "VZW BE/NL/PL" is a group target; one product's actuals
+       can't be compared to it without combining products, so it's left unmatched)
+     - the line's first target week is within LT_DATE_TOLERANCE_DAYS of the product's launch week
+   A product takes at most one line, a line goes to at most one product, and the closest dates win. */
+const LT_DATE_TOLERANCE_DAYS = 21;
+function ltDaysBetween(aIso, bIso){
+  const t = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((t(aIso) - t(bIso)) / 86400000);
+}
+// blocks: [{kind,label,code,marketplaces,firstWeek}], products: [{asin,product_line_code,marketplace,tag,launch}]
+// -> Map("kind|label" -> { status, asin, days, nearest:{asin,days}|null, tied:[asin] })
+function ltAssignBlocks(blocks, products){
+  const key = b => b.kind + '|' + b.label;
+  const result = new Map(), pairs = [];
+  blocks.forEach(b => {
+    const info = { status: null, asin: null, days: null, nearest: null, tied: [] };
+    result.set(key(b), info);
+    if((b.marketplaces || []).length > 1){ info.status = 'multi_marketplace'; return; }
+    const cand = products.filter(p => ltBlockMatchesProduct(b, p));
+    if(!cand.length){ info.status = 'no_product'; return; }
+    const dated = cand.filter(p => p.launch)
+      .map(p => ({ asin: p.asin, days: Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(p.launch))) }))
+      .sort((x, y) => x.days - y.days);
+    if(!dated.length){ info.status = 'no_launch_date'; return; }
+    info.nearest = dated[0];
+    const within = dated.filter(d => d.days <= LT_DATE_TOLERANCE_DAYS);
+    if(!within.length){ info.status = 'date_mismatch'; return; }
+    if(within.length > 1 && within[1].days === within[0].days){
+      info.status = 'ambiguous'; info.tied = within.filter(d => d.days === within[0].days).map(d => d.asin); return;
+    }
+    within.forEach(d => pairs.push({ b, asin: d.asin, days: d.days }));
+    info.status = 'pending';
+  });
+  pairs.sort((x, y) => x.days - y.days);               // closest dates first
+  const usedAsin = new Set();
+  pairs.forEach(pr => {
+    const info = result.get(key(pr.b));
+    if(info.asin || usedAsin.has(pr.asin)) return;     // line already placed, or product already has its line
+    info.asin = pr.asin; info.days = pr.days; info.status = 'assigned'; usedAsin.add(pr.asin);
+  });
+  result.forEach(info => { if(info.status === 'pending') info.status = 'taken'; });
+  return result;
+}
+// Plain-English reason a line is / isn't matched. productOf: asin -> product, nameOf: product -> display name
+function ltDescribeAssignment(b, info, productOf, nameOf, fmtDate){
+  const tol = Math.round(LT_DATE_TOLERANCE_DAYS / 7);
+  switch(info.status){
+    case 'assigned': {
+      const p = productOf(info.asin);
+      return { ok: true, text: `${nameOf(p)} — targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ' (same week)'}` };
+    }
+    case 'multi_marketplace': return { ok: false, text: `Covers ${b.marketplaces.join('/')} together — it can't be compared to a single product without combining products, so it's left unmatched` };
+    case 'no_product': return { ok: false, text: `No ${b.kind}-tagged product with Product Line Code ${b.code}${b.marketplaces.length ? ' in ' + b.marketplaces.join('/') : ''}` };
+    case 'no_launch_date': return { ok: false, text: `A product with code ${b.code} exists but has no launch date, so it can't be confirmed by date — set the launch date` };
+    case 'date_mismatch': {
+      const n = productOf(info.nearest.asin);
+      return { ok: false, text: `Targets start ${fmtDate(b.firstWeek)}, but the closest ${b.code} product (${nameOf(n)}) launched ${fmtDate(n.launch)} — ${info.nearest.days} days apart, more than the ${tol}-week limit` };
+    }
+    case 'ambiguous': return { ok: false, text: `Two products launched equally close to ${fmtDate(b.firstWeek)} (${info.tied.map(a => nameOf(productOf(a))).join(' / ')}) — can't tell which it belongs to` };
+    case 'taken': return { ok: false, text: `A line with closer dates was matched to the same product` };
+    default: return { ok: false, text: '' };
+  }
+}
+
+function ltWeekState(weekIso, todayIso){
+  if(todayIso < weekIso) return 'future';
+  if(todayIso <= ltAddDays(weekIso, 6)) return 'current';
+  return 'done';
+}
+function ltPctStyle(pct){
+  if(pct == null || !isFinite(pct)) return '';
+  if(pct <= 0) return 'background:#A22116;color:#fff;';
+  if(pct >= LT_THRESHOLDS.gold) return 'background:#F1BF42;color:#1a1a1a;';
+  if(pct >= LT_THRESHOLDS.green) return 'background:#58A65C;color:#1a1a1a;';
+  if(pct >= LT_THRESHOLDS.yellow) return 'background:#FDF2D0;color:#1a1a1a;';
+  return '';
+}
+const LT_METRICS = [
+  { key: 'revenue', label: 'Revenue', actualKey: 'sales' },
+  { key: 'units',   label: 'Units Sold', actualKey: 'units' },
+  { key: 'margin',  label: 'Margin', actualKey: 'net_profit' },
+];
+// targetRows: stored rows already filtered to this product's blocks. actualRows: sellerboard_rows for the product.
+function ltBuildComparison(targetRows, actualRows, todayIso){
+  const tByWeek = {};
+  targetRows.forEach(r => {
+    const t = tByWeek[r.week] || (tByWeek[r.week] = { revenue: 0, units: 0, margin: 0 });
+    t.revenue += +r.revenue || 0; t.units += +r.units || 0; t.margin += +r.margin || 0;
+  });
+  const withTargets = Object.keys(tByWeek).filter(w => tByWeek[w].revenue || tByWeek[w].units || tByWeek[w].margin).sort();
+  if(!withTargets.length) return null;
+  const aByWeek = {};
+  (actualRows || []).forEach(r => { aByWeek[r.week] = r; });
+
+  const weeks = [];
+  for(let w = withTargets[0]; w <= withTargets[withTargets.length - 1]; w = ltAddDays(w, 7)){
+    const tgt = tByWeek[w] || { revenue: 0, units: 0, margin: 0 };
+    const row = aByWeek[w];
+    const state = ltWeekState(w, todayIso);
+    const cell = {};
+    LT_METRICS.forEach(m => {
+      const actual = state === 'future' ? null : (row && row[m.actualKey] != null ? +row[m.actualKey] : null);
+      const target = tgt[m.key];
+      cell[m.key] = { target, actual, pct: (actual != null && target > 0) ? actual / target : null };
+    });
+    weeks.push({ week: w, state, cells: cell });
+  }
+  // "To date" = fully finished weeks that actually have data, per metric, so a missing upload can't drag the % down
+  const total = {};
+  LT_METRICS.forEach(m => {
+    const used = weeks.filter(x => x.state === 'done' && x.cells[m.key].actual != null);
+    const t = used.reduce((s, x) => s + x.cells[m.key].target, 0);
+    const a = used.reduce((s, x) => s + x.cells[m.key].actual, 0);
+    total[m.key] = { target: t, actual: a, weeksUsed: used.length, pct: t > 0 ? a / t : null,
+                     fullTarget: weeks.reduce((s, x) => s + x.cells[m.key].target, 0) };
+  });
+  return { weeks, total };
+}
+/* LT-CORE-END */
+
+/* LT-GLUE-START — Deals Tracker targets: Upload & Manage importer + Actual vs. Target comparison */
+let ltParsed = null;          // parsed workbook waiting for "Save targets"
+let ltCompareToken = 0;       // guards against a slow earlier product overwriting a newer one
+
+function ltFmtDate(iso){
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+function ltSetupMessage(err){
+  return /does not exist|schema cache|relation/i.test(err.message || '')
+    ? 'Setup needed: run add_line_targets_table.sql in Supabase (SQL Editor), then reload this page.'
+    : (err.message || String(err));
+}
+
+/* ---------- Upload & Manage: importer ---------- */
+function ltRenderPreview(parsed, products){
+  const withT = parsed.blocks.filter(b => b.weeks.length);
+  const without = parsed.blocks.filter(b => !b.weeks.length);
+  const assign = ltAssignBlocks(withT, products);
+  const productOf = asin => products.find(p => p.asin === asin);
+  let unmatched = 0;
+  const rows = withT.map(b => {
+    const info = assign.get(b.kind + '|' + b.label);
+    const d = ltDescribeAssignment(b, info, productOf, productDisplayName, ltFmtDate);
+    if(!d.ok) unmatched++;
+    const matchHtml = d.ok
+      ? `<span style="color:#166534;">✓ ${escapeHtml(d.text)}</span>`
+      : `<span style="color:var(--red);">${escapeHtml(d.text)}</span>`;
+    return `<tr>
+      <td>${b.kind === 'launch' ? 'Launch' : 'Expansion'}</td>
+      <td style="text-align:left;"><strong>${escapeHtml(b.label)}</strong>${b.windowNote ? `<div style="font-size:10px;color:var(--text-muted);">${escapeHtml(b.windowNote)}</div>` : ''}</td>
+      <td>${b.weeks.length}</td>
+      <td style="white-space:nowrap;">${ltFmtDate(b.firstWeek)} – ${ltFmtDate(b.lastWeek)}</td>
+      <td>${fmtMoney(b.totals.revenue)}</td><td>${fmtInt(b.totals.units)}</td><td>${fmtMoney(b.totals.margin)}</td>
+      <td style="text-align:left;font-size:11px;">${matchHtml}</td></tr>`;
+  }).join('');
+  let html = `<div class="table-wrap"><table class="stretch-table">
+    <thead><tr><th>Tab</th><th style="text-align:left;">Product line</th><th>Weeks</th><th>Target window</th><th>Revenue</th><th>Units</th><th>Margin</th><th style="text-align:left;">Matched product (code + launch date)</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0;">Each line belongs to <strong>one</strong> product, confirmed by dates: its targets must start within ${Math.round(LT_DATE_TOLERANCE_DAYS / 7)} weeks of that product's launch week. Targets are never added together or shared between products.</p>`;
+  if(unmatched) html += `<p style="font-size:11.5px;color:var(--text-muted);margin:6px 0 0;">${unmatched} of ${withT.length} lines aren't matched to a product. They'll still be saved, and get matched automatically once a product with that Product Line Code and a launch date near the target start exists.</p>`;
+  if(without.length) html += `<p style="font-size:11.5px;color:var(--text-muted);margin:6px 0 0;">No targets entered yet, so nothing to save for: ${without.map(x => escapeHtml(x.label)).join(', ')}.</p>`;
+  if(parsed.warnings.length) html += `<p style="font-size:11.5px;color:#92400E;margin:6px 0 0;">⚠ ${parsed.warnings.map(escapeHtml).join('<br>⚠ ')}</p>`;
+  return html;
+}
+async function ltOnFileChosen(){
+  const f = document.getElementById('fileLT').files[0];
+  const prev = document.getElementById('ltPreview'), saveBtn = document.getElementById('btnSaveLT');
+  ltParsed = null; saveBtn.style.display = 'none'; prev.innerHTML = '';
+  if(!f){ setStatus('statusLT', '', ''); return; }
+  if(typeof XLSX === 'undefined'){ setStatus('statusLT', 'err', 'The spreadsheet reader failed to load — check your connection and refresh the page.'); return; }
+  setStatus('statusLT', 'busy', 'Reading the workbook…');
+  try{
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', sheets: ['#Launch Targets', '#Expansion Targets'] });
+    const aoa = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: true }) : null;
+    ltParsed = ltParseTargets({ launch: aoa('#Launch Targets'), expansion: aoa('#Expansion Targets') });
+    const withT = ltParsed.blocks.filter(b => b.weeks.length);
+    prev.innerHTML = ltRenderPreview(ltParsed, await fetchProducts());
+    if(!withT.length){ setStatus('statusLT', 'err', 'No targets found. Check this is the Deals Tracker, with the #Launch Targets and #Expansion Targets tabs.'); ltParsed = null; return; }
+    saveBtn.style.display = 'inline-block';
+    setStatus('statusLT', 'ok', `Read ${withT.length} product lines with targets — review below, then click Save targets.`);
+  }catch(err){
+    setStatus('statusLT', 'err', 'Could not read that file: ' + (err.message || err));
+  }
+}
+async function ltSave(){
+  if(!ltParsed) return;
+  const btn = document.getElementById('btnSaveLT'); btn.disabled = true;
+  setStatus('statusLT', 'busy', 'Saving…');
+  try{
+    const withT = ltParsed.blocks.filter(b => b.weeks.length);
+    const stamp = new Date().toISOString();
+    const rows = [];
+    withT.forEach(b => b.weeks.forEach(w => rows.push({
+      kind: b.kind, line_label: b.label, product_line_code: b.code, marketplaces: b.marketplaces.join(',') || null,
+      window_note: b.windowNote, week: w.week, revenue: w.revenue, units: w.units, margin: w.margin, updated_at: stamp,
+    })));
+    for(let i = 0; i < rows.length; i += 300){
+      const { error } = await sb.from('line_targets').upsert(rows.slice(i, i + 300), { onConflict: 'kind,line_label,week' });
+      if(error) throw new Error(ltSetupMessage(error));
+    }
+    // Drop anything saved earlier that this file no longer has (a cleared week, a deleted line, a renamed line).
+    const { data: existing, error: exErr } = await sb.from('line_targets').select('kind,line_label,week');
+    if(exErr) throw new Error(exErr.message);
+    const keep = new Set(rows.map(r => `${r.kind}|${r.line_label}|${r.week}`));
+    const groups = {}; let removed = 0;
+    (existing || []).forEach(e => {
+      if(keep.has(`${e.kind}|${e.line_label}|${e.week}`)) return;
+      const k = e.kind + '|' + e.line_label;
+      (groups[k] = groups[k] || { kind: e.kind, label: e.line_label, weeks: [] }).weeks.push(e.week); removed++;
+    });
+    for(const g of Object.values(groups)){
+      const { error } = await sb.from('line_targets').delete().eq('kind', g.kind).eq('line_label', g.label).in('week', g.weeks);
+      if(error) throw new Error(error.message);
+    }
+    setStatus('statusLT', 'ok', `Saved ${rows.length} weekly targets across ${withT.length} product lines${removed ? ` (${removed} outdated rows removed)` : ''}.`);
+    document.getElementById('btnSaveLT').style.display = 'none';
+    ltParsed = null;
+    await ltLoadStored();
+  }catch(err){
+    setStatus('statusLT', 'err', 'Save failed: ' + (err.message || err));
+  }
+  btn.disabled = false;
+}
+async function ltLoadStored(){
+  const el = document.getElementById('ltStored'); if(!el) return;
+  const { data, error } = await sb.from('line_targets').select('kind,line_label,updated_at');
+  if(error){ el.innerHTML = `<span style="color:var(--red);">${escapeHtml(ltSetupMessage(error))}</span>`; return; }
+  if(!data.length){ el.textContent = 'No Deals Tracker targets saved yet.'; return; }
+  const lines = new Set(data.map(r => r.kind + '|' + r.line_label)).size;
+  const last = data.reduce((m, r) => (r.updated_at || '') > m ? r.updated_at : m, '');
+  el.innerHTML = `Currently stored: <strong>${lines}</strong> product lines · <strong>${data.length}</strong> weekly rows` +
+    (last ? ` · last saved ${new Date(last).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '');
+}
+
+/* ---------- Actual vs. Target: comparison table ---------- */
+function ltRenderComparisonTable(cmp, weekLabel){
+  const TOTAL_BG = '#FDF0EB';
+  const money = v => fmtMoney(v), units = v => fmtInt(v);
+  let h = `<thead><tr><th>Metric</th><th style="background:${TOTAL_BG};border-bottom:2px solid var(--gold);">To date</th>`;
+  cmp.weeks.forEach(w => { h += `<th>${weekLabel(w)}</th>`; });
+  h += '</tr></thead><tbody>';
+  LT_METRICS.forEach(m => {
+    const f = m.key === 'units' ? units : money;
+    const t = cmp.total[m.key];
+    // Target
+    h += `<tr style="border-top:2px solid var(--border);"><td style="color:var(--text-muted);">${m.label} · Target</td>
+      <td style="background:${TOTAL_BG};">${t.weeksUsed ? f(t.target) : '–'}<div style="font-size:9.5px;color:var(--text-muted);">of ${f(t.fullTarget)} full window</div></td>`;
+    cmp.weeks.forEach(w => { const c = w.cells[m.key]; h += `<td style="color:var(--text-muted);">${c.target > 0 ? f(c.target) : '–'}</td>`; });
+    h += '</tr>';
+    // Actual
+    h += `<tr><td style="font-weight:700;">${m.label} · Actual</td><td style="background:${TOTAL_BG};font-weight:700;">${t.weeksUsed ? f(t.actual) : 'N/A'}</td>`;
+    cmp.weeks.forEach(w => {
+      const c = w.cells[m.key];
+      if(w.state === 'future'){ h += '<td></td>'; return; }
+      if(c.actual == null){ h += '<td>N/A</td>'; return; }
+      h += w.state === 'current'
+        ? `<td style="font-style:italic;" title="Week still in progress — shown, but not scored yet">${f(c.actual)}</td>`
+        : `<td>${f(c.actual)}</td>`;
+    });
+    h += '</tr>';
+    // % of target
+    h += `<tr><td>${m.label} · % of target</td><td style="${ltPctStyle(t.pct) || `background:${TOTAL_BG};`}font-weight:700;">${t.pct == null ? '–' : Math.round(t.pct * 100) + '%'}</td>`;
+    cmp.weeks.forEach(w => {
+      const c = w.cells[m.key];
+      if(w.state === 'future'){ h += '<td></td>'; return; }
+      if(c.pct == null){ h += '<td>–</td>'; return; }
+      const label = Math.round(c.pct * 100) + '%';
+      h += w.state === 'current'
+        ? `<td style="font-style:italic;color:var(--text-muted);" title="Week still in progress — not scored yet">${label}</td>`
+        : `<td style="${ltPctStyle(c.pct)}">${label}</td>`;
+    });
+    h += '</tr>';
+  });
+  return h + '</tbody>';
+}
+async function loadDealsTargetsComparison(product){
+  const token = ++ltCompareToken;
+  const msg = document.getElementById('ltCompareMessage'), table = document.getElementById('ltCompareTable');
+  const src = document.getElementById('ltCompareSource'), legend = document.getElementById('ltCompareLegend');
+  const box = t => `<div style="font-size:12.5px;color:var(--text-muted);padding:10px 12px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;">${t}</div>`;
+  table.innerHTML = ''; src.innerHTML = ''; msg.innerHTML = ''; legend.style.display = 'none';
+
+  if(!product.product_line_code){
+    msg.innerHTML = box('This product has no <strong>Product Line Code</strong> yet, which is how it gets matched to your Deals Tracker targets. Add it in Upload &amp; Manage → Products (use <strong>⋮ → Edit</strong>).');
+    return;
+  }
+  const code = String(product.product_line_code).trim().toUpperCase();
+  const [{ data: rowsForCode, error }, products] = await Promise.all([
+    sb.from('line_targets').select('*').eq('product_line_code', code), fetchProducts(),
+  ]);
+  if(token !== ltCompareToken) return;
+  if(error){ msg.innerHTML = box(escapeHtml(ltSetupMessage(error))); return; }
+
+  // Which tracker line belongs to THIS product? Decided across ALL products with this code, by dates, one line per product.
+  const blocks = ltBlocksFromRows(rowsForCode || []);
+  const assign = ltAssignBlocks(blocks, products);
+  const productOf = asin => products.find(p => p.asin === asin);
+  const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === product.asin);
+
+  if(!mine){
+    if(!blocks.length){
+      msg.innerHTML = box(`No targets for Product Line Code <strong>${escapeHtml(code)}</strong> in the saved Deals Tracker. Upload the tracker in Upload &amp; Manage → Launch &amp; Expansion Targets.`);
+      return;
+    }
+    const tab = b => b.kind === 'launch' ? 'Launch' : 'Expansion';
+    const lines = blocks.map(b => {
+      const info = assign.get(b.kind + '|' + b.label);
+      let why;
+      if(!ltBlockMatchesProduct(b, product)){
+        const mkWrong = b.marketplaces.length && !b.marketplaces.includes(ltNormMarketplace(product.marketplace));
+        why = mkWrong ? `is for ${b.marketplaces.join('/')}, this product is ${product.marketplace || 'a marketplace that isn\'t set'}`
+                      : `is on the ${tab(b)} tab, this product is tagged ${product.tag || 'with no tag'}`;
+      } else {
+        // This product's own date gap, so the reason always shows the evidence for THIS product
+        const gap = product.launch ? Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(product.launch))) : null;
+        const own = gap == null ? '' : ` — targets start ${ltFmtDate(b.firstWeek)}, this product launched ${ltFmtDate(product.launch)} (${gap} days apart)`;
+        if(info.status === 'assigned') why = `was matched to ${productDisplayName(productOf(info.asin))} instead, whose launch date is closer${own}`;
+        else if(info.status === 'date_mismatch') why = `doesn't line up by date${own || ' (this product has no launch date)'}; the limit is ${Math.round(LT_DATE_TOLERANCE_DAYS / 7)} weeks`;
+        else why = ltDescribeAssignment(b, info, productOf, productDisplayName, ltFmtDate).text;
+      }
+      return `<li><strong>${escapeHtml(b.label)}</strong> (${tab(b)} tab) — ${escapeHtml(why)}</li>`;
+    }).join('');
+    msg.innerHTML = box(`None of the tracker lines for code <strong>${escapeHtml(code)}</strong> belong to this product:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul>`);
+    return;
+  }
+
+  const matched = (rowsForCode || []).filter(r => r.kind === mine.kind && r.line_label === mine.label);
+  const { data: actualRows, error: aErr } = await sb.from('sellerboard_rows').select('week,sales,units,net_profit')
+    .eq('asin', product.asin).gte('week', mine.firstWeek).lte('week', matched.map(r => r.week).sort().pop());
+  if(token !== ltCompareToken) return;
+  if(aErr){ msg.innerHTML = box(escapeHtml(aErr.message)); return; }
+
+  const cmp = ltBuildComparison(matched, actualRows || [], new Date().toISOString().slice(0, 10));
+  if(!cmp){ msg.innerHTML = box('The matching tracker line has no targets entered yet.'); return; }
+  const info = assign.get(mine.kind + '|' + mine.label);
+  src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
+    `confirmed by date: targets start ${ltFmtDate(mine.firstWeek)}, this product launched ${product.launch ? ltFmtDate(product.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ''}.`;
+  const weekLabel = w => {
+    const d = new Date(w.week + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const n = product.launch ? weekNumber(product.launch, w.week) : null;
+    return `${n != null ? 'Wk ' + n : ''}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${d}</div>`;
+  };
+  table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
+  legend.style.display = 'block';
+}
+/* LT-GLUE-END */
+
 async function loadTseForecast(){
   const sel = document.getElementById('tseProductSelect');
   if(!sel.value){ document.getElementById('tseEmpty').style.display='block'; document.getElementById('tseBody').style.display='none'; return; }
@@ -4400,46 +4916,11 @@ async function loadTseForecast(){
   document.getElementById('tseEmpty').style.display = product ? 'none' : 'block';
   document.getElementById('tseBody').style.display = product ? 'block' : 'none';
   if(!product) return;
-
-  const [{ weeks, anchor }, { data: weeklyTargetRows }, { data: assumptionsRow }] = await Promise.all([
-    computeWeeks(product, 'ALL'),
-    sb.from('weekly_targets').select('*').eq('asin', product.asin),
-    sb.from('product_assumptions').select('*').eq('asin', product.asin).maybeSingle(),
-  ]);
-
-  const assumptions = assumptionsRow || {};
-  const byWeek = {};
-  (weeklyTargetRows||[]).forEach(r=>{ byWeek[r.week_index] = r; });
-  const week1Row = byWeek[1];
-  const week1SalesPriceGood = week1Row?.sales_price_good ?? null;
-
-  const weeklyDerived = Array.from({length:12}, (_,i)=>{
-    const row = byWeek[i+1];
-    const tiers = {};
-    ['good','better','best'].forEach(tier=>{
-      if(!row){ tiers[tier] = null; return; }
-      const inputs = {
-        avgSalesPrice: row[`sales_price_${tier}`] ?? null,
-        units: row[`units_${tier}`] ?? null,
-        cpc: row[`cpc_${tier}`] ?? null,
-        cvr: row[`cr_${tier}`]!=null ? row[`cr_${tier}`]/100 : null,
-        organicPct: row[`organic_pct_${tier}`]!=null ? row[`organic_pct_${tier}`]/100 : null,
-      };
-      tiers[tier] = computeDerivedSoll(inputs, assumptions, week1SalesPriceGood);
-    });
-    return tiers;
-  });
-
-  const colLabels = weeks.map((_,i)=>{
-    const wkLabel = 'Wk '+(i+1);
-    if(!anchor) return wkLabel;
-    const d = new Date(anchor);
-    d.setDate(d.getDate() + i*7);
-    const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
-  });
-
-  document.getElementById('tseTable').innerHTML = buildActualVsTargetTable(weeks, weeklyDerived, colLabels);
+  try{
+    await loadDealsTargetsComparison(product);
+  }catch(e){
+    document.getElementById('ltCompareMessage').textContent = 'Could not load Deals Tracker targets: ' + (e.message || e);
+  }
 }
 function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
   let html = '<thead><tr><th>Metric</th>';
@@ -4461,7 +4942,7 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
 
     html += `<tr><td>${m.label}</td>`;
     vals.forEach((v,i)=>{
-      const tierData = weeklyDerived[i];
+      const tierData = weeklyDerived[i] || {};
       const thresholds = tierData.good ? { good: tierData.good[m.key], better: tierData.better?.[m.key], best: tierData.best?.[m.key] } : null;
       const goodVal = thresholds ? thresholds.good : null;
       const goodStr = goodVal!=null ? m.fmt(goodVal) : '–';
@@ -4559,6 +5040,17 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
       sel.removeAllRanges();
       sel.addRange(range);
     }
+  });
+})();
+
+document.getElementById('fileLT').addEventListener('change', ltOnFileChosen);
+(function(){
+  const box = document.getElementById('dropLT');
+  box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('drag'); });
+  box.addEventListener('dragleave', ()=> box.classList.remove('drag'));
+  box.addEventListener('drop', e=>{
+    e.preventDefault(); box.classList.remove('drag');
+    if(e.dataTransfer.files.length){ document.getElementById('fileLT').files = e.dataTransfer.files; document.getElementById('fileLT').dispatchEvent(new Event('change')); }
   });
 })();
 
