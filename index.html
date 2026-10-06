@@ -553,7 +553,7 @@
           <div class="meta" id="ltCompareSource" style="margin:-6px 0 12px;"></div>
           <div id="ltCompareMessage"></div>
           <div class="table-wrap"><table class="stretch-table" id="ltCompareTable"></table></div>
-          <p id="ltCompareLegend" style="display:none;font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Each finished week's <strong>% of target</strong> is colored the way your Deals Tracker does it: <span style="background:#F1BF42;color:#1a1a1a;padding:0 5px;border-radius:3px;">gold</span> 100% or more, <span style="background:#58A65C;color:#1a1a1a;padding:0 5px;border-radius:3px;">green</span> 90% or more, <span style="background:#FDF2D0;color:#1a1a1a;padding:0 5px;border-radius:3px;">cream</span> 80% or more, no color below 80%, <span style="background:#A22116;color:#fff;padding:0 5px;border-radius:3px;">dark red</span> at 0% or below. <strong>To date</strong> only counts finished weeks that have data — the week in progress (shown in italics) and future weeks are left out. Actuals are Sellerboard's Total Sales, Units Sold and Net Profit; the tracker's Margin target is a € amount, so it's compared against Net Profit (€).</p>
+          <p id="ltCompareLegend" style="display:none;font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Each finished week's <strong>% of target</strong> is colored the way your Deals Tracker does it: <span style="background:#F1BF42;color:#1a1a1a;padding:0 5px;border-radius:3px;">gold</span> 100% or more, <span style="background:#58A65C;color:#1a1a1a;padding:0 5px;border-radius:3px;">green</span> 90% or more, <span style="background:#FDF2D0;color:#1a1a1a;padding:0 5px;border-radius:3px;">cream</span> 80% or more, no color below 80%, <span style="background:#A22116;color:#fff;padding:0 5px;border-radius:3px;">dark red</span> at 0% or below. The week in progress is shown in italics and isn't scored yet; future weeks show their target only. Actuals are Sellerboard's Total Sales, Units Sold and Net Profit; the tracker's Margin target is a € amount, so it's compared against Net Profit (€).</p>
         </div>
       </div>
     </div>
@@ -4668,16 +4668,7 @@ function ltBuildComparison(targetRows, actualRows, todayIso){
     });
     weeks.push({ week: w, state, cells: cell });
   }
-  // "To date" = fully finished weeks that actually have data, per metric, so a missing upload can't drag the % down
-  const total = {};
-  LT_METRICS.forEach(m => {
-    const used = weeks.filter(x => x.state === 'done' && x.cells[m.key].actual != null);
-    const t = used.reduce((s, x) => s + x.cells[m.key].target, 0);
-    const a = used.reduce((s, x) => s + x.cells[m.key].actual, 0);
-    total[m.key] = { target: t, actual: a, weeksUsed: used.length, pct: t > 0 ? a / t : null,
-                     fullTarget: weeks.reduce((s, x) => s + x.cells[m.key].target, 0) };
-  });
-  return { weeks, total };
+  return { weeks };
 }
 /* LT-CORE-END */
 
@@ -4798,62 +4789,64 @@ async function ltLoadStored(){
 /* ---------- Actual vs. Target: comparison table ---------- */
 function ltRenderComparisonTable(cmp, weekLabel){
   // Laid out like the Deals Tracker: a Target block, an Actual block, then an Actual vs Target % block,
-  // each listing Revenue / Units Sold / Margin, with heavy dividers between the blocks.
-  const TOTAL_BG = '#FDF0EB', BAND = '#F3F3F3', RULE = '3px solid #1f2937', RED = '#C0392B', MUTED = '#9AA0A6';
+  // each listing Revenue / Units Sold / Margin, with heavy dividers between the blocks. Weeks run across.
+  //
+  // Column sizing follows the app's "stretch-table" rule: every column except the LAST shrinks to its content,
+  // and the last column soaks up whatever width is left. So the table ends with an empty spacer column (like the
+  // other tables do) — otherwise the final week would stretch across the whole panel. Week columns share one
+  // minimum width so they line up evenly, and both label columns stay put when the table scrolls sideways.
+  const BAND = '#F3F3F3', RULE = '3px solid #1f2937', RED = '#C0392B', MUTED = '#9AA0A6';
+  const LABEL1_W = 122, LABEL2_W = 84, WK_W = 64;   // compact, so a 12–13 week window fits a normal screen without scrolling
+  const WK = `width:${WK_W}px;min-width:${WK_W}px;padding-left:6px;padding-right:6px;`;
   const fmtFor = m => m.key === 'units' ? (v => fmtInt(v)) : (v => fmtMoney(v));
-  const ncols = 3 + cmp.weeks.length;
-  let h = `<thead><tr><th colspan="2"></th><th style="background:${TOTAL_BG};border-bottom:2px solid var(--gold);">To date</th>`;
-  cmp.weeks.forEach(w => { h += `<th>${weekLabel(w)}</th>`; });
-  h += '</tr></thead><tbody>';
+  const ncols = 3 + cmp.weeks.length;                 // 2 label columns + weeks + the spacer column
+  const spacer = '<td style="background:#fff;"></td>';
+  let h = `<thead><tr><th colspan="2" style="min-width:${LABEL1_W + LABEL2_W}px;"></th>`;
+  cmp.weeks.forEach(w => { h += `<th style="${WK}">${weekLabel(w)}</th>`; });
+  h += '<th></th></tr></thead><tbody>';
 
   const block = (sectionLabel, rowHtml) => {
     LT_METRICS.forEach((m, i) => {
       const edge = i === 0 ? `border-top:${RULE};` : '';
-      h += `<tr><td style="background:${BAND};${edge}text-align:right;color:var(--text-muted);white-space:nowrap;">${sectionLabel}</td>` +
-           `<td style="background:${BAND};${edge}text-align:left;font-weight:600;white-space:nowrap;">${m.label}</td>` + rowHtml(m, edge) + '</tr>';
+      h += `<tr><td style="background:${BAND};${edge}width:${LABEL1_W}px;min-width:${LABEL1_W}px;padding-left:8px;padding-right:8px;font-size:11.5px;text-align:right;color:var(--text-muted);box-shadow:none;">${sectionLabel}</td>` +
+           `<td style="background:${BAND};${edge}position:sticky;left:${LABEL1_W}px;z-index:2;min-width:${LABEL2_W}px;padding-left:8px;padding-right:8px;text-align:left;font-weight:600;box-shadow:2px 0 4px -2px rgba(15,23,42,0.12);">${m.label}</td>` +
+           rowHtml(m, edge) + spacer + '</tr>';
     });
     h += `<tr><td colspan="${ncols}" style="height:10px;padding:0;border:none;background:#fff;"></td></tr>`;
   };
 
   // ----- Target
   block('Target', (m, edge) => {
-    const f = fmtFor(m), t = cmp.total[m.key];
-    let r = `<td style="background:${TOTAL_BG};${edge}">${t.weeksUsed ? f(t.target) : '-'}<div style="font-size:9.5px;color:var(--text-muted);">of ${f(t.fullTarget)} full window</div></td>`;
-    cmp.weeks.forEach(w => {
+    const f = fmtFor(m);
+    return cmp.weeks.map(w => {
       const v = w.cells[m.key].target;
-      r += `<td style="background:${BAND};${edge}${v > 0 ? '' : `color:${MUTED};`}">${f(v)}</td>`;   // a week with no target shows greyed €0, as in the tracker
-    });
-    return r;
+      return `<td style="${WK}background:${BAND};${edge}${v > 0 ? '' : `color:${MUTED};`}">${f(v)}</td>`;   // a week with no target shows greyed €0, as in the tracker
+    }).join('');
   });
   // ----- Actual
   block('Actual', (m, edge) => {
-    const f = fmtFor(m), t = cmp.total[m.key];
-    let r = `<td style="background:${TOTAL_BG};${edge}font-weight:700;${t.weeksUsed && t.actual < 0 ? `color:${RED};` : ''}">${t.weeksUsed ? f(t.actual) : 'N/A'}</td>`;
-    cmp.weeks.forEach(w => {
+    const f = fmtFor(m);
+    return cmp.weeks.map(w => {
       const c = w.cells[m.key];
-      if(w.state === 'future'){ r += `<td style="background:${BAND};${edge}"></td>`; return; }
-      if(c.actual == null){ r += `<td style="background:${BAND};${edge}">N/A</td>`; return; }
+      if(w.state === 'future') return `<td style="${WK}background:${BAND};${edge}"></td>`;
+      if(c.actual == null) return `<td style="${WK}background:${BAND};${edge}">N/A</td>`;
       const neg = c.actual < 0 ? `color:${RED};` : '';
-      r += w.state === 'current'
-        ? `<td style="background:${BAND};${edge}${neg}font-style:italic;" title="Week still in progress — shown, but not scored yet">${f(c.actual)}</td>`
-        : `<td style="background:${BAND};${edge}${neg}">${f(c.actual)}</td>`;
-    });
-    return r;
+      return w.state === 'current'
+        ? `<td style="${WK}background:${BAND};${edge}${neg}font-style:italic;" title="Week still in progress — shown, but not scored yet">${f(c.actual)}</td>`
+        : `<td style="${WK}background:${BAND};${edge}${neg}">${f(c.actual)}</td>`;
+    }).join('');
   });
   // ----- Actual vs Target %
   block('Actual vs Target%', (m, edge) => {
-    const t = cmp.total[m.key];
-    let r = `<td style="${ltPctStyle(t.pct) || `background:${TOTAL_BG};`}${edge}font-weight:700;">${t.pct == null ? '-' : Math.round(t.pct * 100) + '%'}</td>`;
-    cmp.weeks.forEach(w => {
+    return cmp.weeks.map(w => {
       const c = w.cells[m.key];
-      if(w.state === 'future'){ r += `<td style="background:${BAND};${edge}"></td>`; return; }
-      if(c.pct == null){ r += `<td style="background:${BAND};${edge}">-</td>`; return; }
+      if(w.state === 'future') return `<td style="${WK}background:${BAND};${edge}"></td>`;
+      if(c.pct == null) return `<td style="${WK}background:${BAND};${edge}">-</td>`;
       const label = Math.round(c.pct * 100) + '%';
-      r += w.state === 'current'
-        ? `<td style="background:${BAND};${edge}font-style:italic;color:var(--text-muted);" title="Week still in progress — not scored yet">${label}</td>`
-        : `<td style="${ltPctStyle(c.pct) || `background:${BAND};`}${edge}">${label}</td>`;
-    });
-    return r;
+      return w.state === 'current'
+        ? `<td style="${WK}background:${BAND};${edge}font-style:italic;color:var(--text-muted);" title="Week still in progress — not scored yet">${label}</td>`
+        : `<td style="${WK}${ltPctStyle(c.pct) || `background:${BAND};`}${edge}">${label}</td>`;
+    }).join('');
   });
   return h + '</tbody>';
 }
