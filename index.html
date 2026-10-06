@@ -1040,6 +1040,54 @@ function productLineOnly(product){
   if(!segments.length) return shortenName(product.name) || '';
   return segments.join(' - ');
 }
+// Fills a <select> with products grouped into Launch / Expansion / Post 12-week
+// sections (native <optgroup>s), newest launch first inside each. "Post 12-week"
+// uses the same rule as the rest of the app (week number > 12 from the product's
+// own launch date, regardless of tag); a product with no launch date can't be
+// judged, so it stays in its Launch/Expansion group. Returns the products in the
+// exact order they appear, so callers can pick the true first entry.
+function fillGroupedProductSelect(sel, products){
+  const now = Date.now();
+  const isPast12 = p => {
+    if(!p.launch) return false;
+    const ageDays = Math.floor((now - new Date(p.launch).getTime()) / 86400000);
+    return (Math.floor(ageDays / 7) + 1) > 12;
+  };
+  const newestFirst = (a,b)=>{
+    if(!a.launch && !b.launch) return 0;
+    if(!a.launch) return 1;
+    if(!b.launch) return -1;
+    return new Date(b.launch) - new Date(a.launch);
+  };
+  const buckets = { launch:[], expansion:[], other:[], post12:[] };
+  products.forEach(p=>{
+    if(isPast12(p)) buckets.post12.push(p);
+    else if(p.tag === 'launch') buckets.launch.push(p);
+    else if(p.tag === 'expansion') buckets.expansion.push(p);
+    else buckets.other.push(p);
+  });
+  const groups = [
+    { label:'Launch', items:buckets.launch },
+    { label:'Expansion', items:buckets.expansion },
+    { label:'Other', items:buckets.other },
+    { label:'Post 12-Week', items:buckets.post12 },
+  ];
+  sel.innerHTML = '';
+  const ordered = [];
+  groups.forEach(g=>{
+    if(!g.items.length) return;
+    const og = document.createElement('optgroup');
+    og.label = `${g.label} (${g.items.length})`;
+    g.items.slice().sort(newestFirst).forEach(p=>{
+      const o = document.createElement('option');
+      o.value = p.asin; o.textContent = productDisplayName(p);
+      og.appendChild(o);
+      ordered.push(p);
+    });
+    sel.appendChild(og);
+  });
+  return ordered;
+}
 // Lightweight dependency-free sparkline (plain SVG string, no Chart.js
 // instance) — appropriate for a table with many rows, where instantiating a
 // full chart per row would be needless overhead.
@@ -2296,15 +2344,12 @@ async function populateSelectors(){
   const products = await fetchProducts();
   const sel = document.getElementById('productSelect');
   const current = sel.value;
-  sel.innerHTML = '';
+  fillGroupedProductSelect(sel, products); // Product Detail's dropdown: grouped Launch / Expansion / Post 12-Week
   const tseSel = document.getElementById('tseProductSelect');
   const tseCurrent = tseSel.value;
   tseSel.innerHTML = '';
   products.forEach(p=>{
-    const label = productDisplayName(p);
-    const o = document.createElement('option'); o.value = p.asin; o.textContent = label;
-    sel.appendChild(o);
-    const o2 = document.createElement('option'); o2.value = p.asin; o2.textContent = label;
+    const o2 = document.createElement('option'); o2.value = p.asin; o2.textContent = productDisplayName(p);
     tseSel.appendChild(o2);
   });
   if(products.find(p=>p.asin===current)) sel.value = current;
@@ -3192,24 +3237,15 @@ async function loadDashboard(){
   // the currently selected product doesn't match the filter (e.g. the
   // marketplace was just changed by hand), fall through to the first
   // product that does.
-  const visibleProducts = (mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt))
-    .slice() // sort a copy — fetchProducts()'s own default (by name) is still what the Products table and other consumers use
-    .sort((a,b)=>{
-      if(!a.launch && !b.launch) return 0;
-      if(!a.launch) return 1; // no launch date on file — can't judge recency, so sorts after every dated product
-      if(!b.launch) return -1;
-      return new Date(b.launch) - new Date(a.launch); // newest launch first
-    });
+  const filteredProducts = (mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt));
   const prevSelValue = sel.value;
-  sel.innerHTML = '';
-  visibleProducts.forEach(p=>{
-    const o = document.createElement('option'); o.value = p.asin; o.textContent = productDisplayName(p);
-    sel.appendChild(o);
-  });
+  // Grouped Launch / Expansion / Post 12-Week, newest launch first within each.
+  // fetchProducts()'s own default order (by name) is untouched for other consumers.
+  const visibleProducts = fillGroupedProductSelect(sel, filteredProducts);
   if(visibleProducts.find(p=>p.asin===prevSelValue)){
     sel.value = prevSelValue;
   } else if(visibleProducts.length){
-    sel.value = visibleProducts[0].asin;
+    sel.value = visibleProducts[0].asin; // first entry as it actually appears in the grouped list
     lastLoadedProductAsin = sel.value;
   }
 
