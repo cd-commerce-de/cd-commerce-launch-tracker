@@ -568,14 +568,15 @@
         <div class="toolbar" style="justify-content:flex-start;">
           <button class="btn btn-sm" id="btnForceSync" onclick="forceSellerboardSync()">⟳ Force update now (pulls latest data immediately, instead of waiting for the daily schedule)</button>
         </div>
-        <details style="margin-top:14px;">
-          <summary style="cursor:pointer;font-size:12.5px;color:var(--text-muted);">Manual override — only needed to backfill an old week, or if the automated sync is ever down</summary>
-          <div class="row" style="margin-top:12px;">
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+          <h4 style="margin:0 0 4px;font-size:13px;">Upload previous weeks</h4>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">To backfill older weeks (or if the automatic sync was ever down): in Sellerboard go to <strong>Reports → Dashboard by Product</strong>, pick the date range and export. Use <strong>full Monday–Sunday weeks</strong>. Each file is checked before it's sent, and any week that isn't fully in the file is <strong>left out</strong>, so a partial week can't overwrite good numbers. Weeks already saved for the same products are replaced by the file's numbers.</p>
+          <div class="row">
             <div class="col">
               <div class="upload-box" id="dropSB">
                 <label for="fileSB">Choose Sellerboard "Dashboard by Product" CSV(s)</label>
                 <input type="file" id="fileSB" accept=".csv" multiple>
-                <div class="hint">Reports → Dashboard by Product → select the date range → Export. Same child-ASIN-level format the automated sync uses.</div>
+                <div class="hint">Reports → Dashboard by Product → select the date range → Export. Same child-ASIN-level format the automated sync uses. You can pick several files at once.</div>
                 <div id="sbFileList" style="margin-top:8px;"></div>
                 <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadSB" style="display:none;" onclick="confirmUploadSB()">Upload</button></div>
                 <div class="status-line" id="statusSB"></div>
@@ -583,7 +584,7 @@
               </div>
             </div>
           </div>
-        </details>
+        </div>
       </div>
 
       <div class="panel">
@@ -1295,30 +1296,103 @@ function extractWeekFromSellerfoxFilename(name){
   return `${m[1]}-${m[3]}-${m[2]}`;
 }
 
-/* Selecting a file only stages it — nothing uploads until the Upload button is clicked */
+/* Selecting a file only stages it — nothing uploads until the Upload button is clicked.
+   Each staged file is read in the browser first to see which weeks it covers COMPLETELY (all 7 days, Mon–Sun):
+   the upload replaces a week's saved totals with whatever the file holds, so a week that's only partly in the
+   file (an export starting on a Wednesday, or the week still in progress) would overwrite good numbers with
+   partial ones. Those weeks are left out unless the user explicitly asks to keep them. */
 let sbSelectedFiles = [];
+let sbAnalyses = [];        // one promise per staged file
+let sbInfos = [];           // the resolved result for each, once ready
+let sbKeepPartial = false;
 document.getElementById('fileSB').addEventListener('change', e=>{
   sbSelectedFiles = Array.from(e.target.files);
+  sbInfos = new Array(sbSelectedFiles.length).fill(null);
+  sbAnalyses = sbSelectedFiles.map((f,i)=> sbAnalyzeFile(f).then(info=>{ sbInfos[i] = info; renderSbFileList(); return info; }));
   renderSbFileList();
 });
+function sbFmt(iso){ return new Date(iso+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}); }
+function sbAddDays(iso,n){ const [y,m,d]=iso.split('-').map(Number); return new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10); }
+function sbMonday(iso){ const [y,m,d]=iso.split('-').map(Number); const dow=new Date(Date.UTC(y,m-1,d)).getUTCDay(); return sbAddDays(iso, -(dow===0?6:dow-1)); }
+function sbSplitLine(line, delim){
+  const out=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){ const ch=line[i];
+    if(inQ){ if(ch==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else inQ=false; } else cur+=ch; }
+    else { if(ch==='"') inQ=true; else if(ch===delim){ out.push(cur); cur=''; } else cur+=ch; } }
+  out.push(cur); return out.map(x=>x.trim());
+}
+function sbParseDmy(v){ const m=String(v||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : null; }
+// text of a Sellerboard "Dashboard by Product" export -> which weeks it covers, and how fully
+function sbAnalyzeCsv(text){
+  const lines = text.replace(/^\uFEFF/,'').replace(/\r/g,'').split('\n');
+  const hi = lines.findIndex(l=>l.trim().length);
+  if(hi<0) return { ok:false, reason:'The file is empty' };
+  const semis=(lines[hi].match(/;/g)||[]).length, commas=(lines[hi].match(/,/g)||[]).length;
+  const delim = semis>=commas ? ';' : ',';
+  const dateCol = sbSplitLine(lines[hi],delim).findIndex(h=>h.toLowerCase()==='date');
+  if(dateCol<0) return { ok:false, reason:'No "Date" column found' };
+  const lineWeek = new Array(lines.length).fill(null), days = new Set();
+  for(let i=hi+1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    const iso = sbParseDmy(sbSplitLine(lines[i],delim)[dateCol]);
+    if(iso){ days.add(iso); lineWeek[i] = sbMonday(iso); }
+  }
+  if(!days.size) return { ok:false, reason:'No readable dates (expected DD/MM/YYYY)' };
+  const byWeek = {}; days.forEach(d=>{ (byWeek[sbMonday(d)] = byWeek[sbMonday(d)] || new Set()).add(d); });
+  const weeks = Object.keys(byWeek).sort().map(w=>({ week:w, days:byWeek[w].size, complete:byWeek[w].size===7 }));
+  const sorted=[...days].sort();
+  return { ok:true, lines, headerIdx:hi, lineWeek, weeks, firstDay:sorted[0], lastDay:sorted[sorted.length-1] };
+}
+function sbAnalyzeFile(file){
+  return file.text().then(sbAnalyzeCsv).catch(()=>({ ok:false, reason:"The file couldn't be read" }));
+}
+// the file actually sent: unchanged if every week is complete (or the user chose to keep partials), otherwise only the complete weeks' rows
+function sbBuildUploadFile(file, info){
+  if(!info || !info.ok || sbKeepPartial || info.weeks.every(w=>w.complete)) return file;
+  const keep = new Set(info.weeks.filter(w=>w.complete).map(w=>w.week));
+  const out = [info.lines[info.headerIdx]];
+  for(let i=info.headerIdx+1;i<info.lines.length;i++){ if(info.lineWeek[i] && keep.has(info.lineWeek[i])) out.push(info.lines[i]); }
+  return new File([out.join('\n')], file.name, { type:'text/csv' });
+}
+function sbIncompleteList(info){
+  return info.weeks.filter(w=>!w.complete).map(w=>`week of ${sbFmt(w.week)} (${w.days} of 7 days)`);
+}
 function renderSbFileList(){
   const container = document.getElementById('sbFileList');
   const btn = document.getElementById('btnUploadSB');
   if(!sbSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
   // No per-file date/marketplace/tag inputs needed — this file has its own
   // Date and Marketplace columns per row, and tag comes from the ASIN
-  // Mapping tab, so every week present in the file is picked up automatically.
-  container.innerHTML = sbSelectedFiles.map((file,i)=>`
-    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
-      <button class="btn btn-sm" onclick="removeSbFile(${i})" style="padding:1px 7px;">✕</button>
-      <span id="sbFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
-    </div>`).join('');
+  // Mapping tab, so every complete week present in the file is picked up automatically.
+  let anyIncomplete = false;
+  container.innerHTML = sbSelectedFiles.map((file,i)=>{
+    const info = sbInfos[i];
+    let note;
+    if(!info) note = '<span style="color:var(--text-muted);">Checking which weeks this file covers…</span>';
+    else if(!info.ok) note = `<span style="color:#92400E;">Couldn't check this file's weeks (${escapeHtml(info.reason)}) — it will be sent as-is.</span>`;
+    else {
+      const done = info.weeks.filter(w=>w.complete), part = info.weeks.filter(w=>!w.complete);
+      if(part.length) anyIncomplete = true;
+      note = done.length
+        ? `<span style="color:#166534;">✓ ${done.length} complete week${done.length>1?'s':''}: ${sbFmt(done[0].week)} → ${sbFmt(sbAddDays(done[done.length-1].week,6))}</span>`
+        : `<span style="color:var(--red);">No complete week in this file (${sbFmt(info.firstDay)} → ${sbFmt(info.lastDay)}) — nothing would be saved.</span>`;
+      if(part.length) note += `<div style="color:#92400E;">${sbKeepPartial ? 'Will be saved even though incomplete' : 'Left out (not fully in the file)'}: ${sbIncompleteList(info).join(', ')}</div>`;
+    }
+    return `<div style="font-size:11px;padding:4px 0;text-align:left;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <button class="btn btn-sm" onclick="removeSbFile(${i})" style="padding:1px 7px;">✕</button>
+        <span id="sbFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+      </div>
+      <div style="margin-top:2px;">${note}</div></div>`;
+  }).join('') + (anyIncomplete ? `<label style="display:flex;gap:6px;align-items:flex-start;font-size:11px;font-weight:400;color:var(--text-muted);text-align:left;margin-top:6px;cursor:pointer;">
+      <input type="checkbox" ${sbKeepPartial?'checked':''} onchange="sbKeepPartial=this.checked; renderSbFileList();" style="margin-top:2px;">
+      <span>Save the incomplete weeks too — <strong>not recommended</strong>: it replaces that week's saved totals with partial numbers.</span></label>` : '');
   btn.style.display = 'inline-block';
   btn.textContent = `Upload ${sbSelectedFiles.length} file${sbSelectedFiles.length>1?'s':''}`;
 }
 function removeSbFile(i){
-  sbSelectedFiles.splice(i,1);
+  sbSelectedFiles.splice(i,1); sbAnalyses.splice(i,1); sbInfos.splice(i,1);
   renderSbFileList();
 }
 async function confirmUploadSB(){
@@ -1330,13 +1404,22 @@ async function confirmUploadSB(){
   const failMessages = [];
   const allSummaryRows = [];
   const allWeeksCovered = new Set();
+  const skippedWeeks = [];   // weeks left out because they weren't fully in their file
+  let skippedFiles = 0;      // files with no complete week at all
+  await Promise.all(sbAnalyses);
 
   for(let i=0;i<sbSelectedFiles.length;i++){
     const file = sbSelectedFiles[i];
     const statusEl = document.getElementById('sbFileStatus'+i);
     setStatus('statusSB', 'busy', `Uploading ${i+1} of ${sbSelectedFiles.length}: ${file.name}…`);
+    const info = sbInfos[i];
+    const upFile = sbBuildUploadFile(file, info);
+    if(info && info.ok && !sbKeepPartial){
+      sbIncompleteList(info).forEach(x=>skippedWeeks.push(x));
+      if(!info.weeks.some(w=>w.complete)){ skippedFiles++; statusEl.textContent = '–'; continue; }   // nothing complete to save from this file
+    }
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append('file', upFile);
     try{
       const res = await fetch(`${EDGE_BASE}/upload-sellerboard-weekly`, {
         method: 'POST',
@@ -1364,10 +1447,13 @@ async function confirmUploadSB(){
   }
 
   btn.disabled = false;
-  if(failCount === 0){
+  const skippedNote = skippedWeeks.length ? `. Left out because they weren't fully in the file: ${[...new Set(skippedWeeks)].join(', ')}` : '';
+  if(failCount === 0 && successCount === 0){
+    setStatus('statusSB', 'err', `Nothing was uploaded — ${sbSelectedFiles.length > 1 ? 'none of these files has' : "this file doesn't have"} a complete Monday–Sunday week${skippedNote}. Export full weeks from Sellerboard and try again.`);
+  } else if(failCount === 0){
     const skippedUnknown = totalSkippedUnknown ? `, ${totalSkippedUnknown} ASIN(s) not in the mapping (skipped)` : '';
     const weeksList = [...allWeeksCovered].sort().join(', ');
-    setStatus('statusSB', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows, ${totalChildRows} child rows, from ${totalMatchedChildRows} matched child ASINs${skippedUnknown}. Weeks covered: ${weeksList||'none'}`);
+    setStatus('statusSB', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${totalRows} parent rows, ${totalChildRows} child rows, from ${totalMatchedChildRows} matched child ASINs${skippedUnknown}. Weeks covered: ${weeksList||'none'}${skippedNote}`);
     sbSelectedFiles = [];
     document.getElementById('fileSB').value = '';
     renderSbFileList();
