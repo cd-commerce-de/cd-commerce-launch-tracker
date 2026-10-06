@@ -455,6 +455,7 @@
             <h3 id="productInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
             <div style="font-size:12.5px;color:var(--text-muted);" id="productInfoAsinLine"></div>
             <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="productInfoLaunchLine"></div>
+            <div style="font-size:12.5px;margin-top:6px;" id="productInfoAmazonLink"></div>
           </div>
           <div class="filter-bar" style="margin:0 0 0 auto;">
             <div class="filter-field"><label>Product</label><select id="productSelect" onchange="loadDashboard()"></select></div>
@@ -1013,16 +1014,21 @@ function shortenName(name){
   }
   return s;
 }
-// Standardized display name: ASIN - Product Line Code - Product Line.
+// Standardized display name: ASIN - Product Line Code - Marketplace - Product Line.
 // Falls back gracefully to the raw listing name if those two fields haven't
 // been filled in yet for a product, so it's never just a bare ASIN.
 function productDisplayName(product){
   if(!product) return '';
+  // Order: ASIN - Product Line Code - Marketplace - Product Line
+  // e.g. B0HKK7CRRZ - ATM - DE - Air Track Mat. Marketplace is skipped if the
+  // product doesn't have one set, rather than leaving an empty segment.
   const segments = [product.asin];
   if(product.product_line_code) segments.push(product.product_line_code);
+  if(product.marketplace) segments.push(String(product.marketplace).toUpperCase());
   if(product.product_line) segments.push(product.product_line);
-  if(segments.length === 1) segments.push(shortenName(product.name) || '');
-  return segments.join(' - ');
+  const hasDescriptor = !!(product.product_line_code || product.product_line);
+  if(!hasDescriptor) segments.push(shortenName(product.name) || '');
+  return segments.filter(Boolean).join(' - ');
 }
 // Same as productDisplayName but without the ASIN — for tables (like All
 // Products) that show ASIN in its own separate column.
@@ -2797,6 +2803,16 @@ async function loadTagDashboard(tag){
   tagDashboardCache[tag] = { allTagProducts, allSbRows, allSfRows, allTargets, allNotes, allPortfolioNotes };
   renderTagDashboard(tag);
 }
+// Marketplace code -> Amazon storefront domain, for building product page links.
+const AMAZON_DOMAINS = {
+  DE:'amazon.de', UK:'amazon.co.uk', GB:'amazon.co.uk', FR:'amazon.fr', ES:'amazon.es', IT:'amazon.it',
+  NL:'amazon.nl', SE:'amazon.se', PL:'amazon.pl', BE:'amazon.com.be', US:'amazon.com', CA:'amazon.ca',
+  MX:'amazon.com.mx', JP:'amazon.co.jp', IN:'amazon.in', AU:'amazon.com.au', TR:'amazon.com.tr',
+  AE:'amazon.ae', SA:'amazon.sa', EG:'amazon.eg', SG:'amazon.sg', BR:'amazon.com.br',
+};
+function amazonDomainFor(marketplace){
+  return AMAZON_DOMAINS[String(marketplace||'').trim().toUpperCase()] || null;
+}
 function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
   return [
     {label:'Marketplace', value: product.marketplace || '–'},
@@ -3232,6 +3248,29 @@ async function loadDashboard(){
   document.getElementById('productInfoName').innerHTML = `${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}`;
   document.getElementById('productInfoAsinLine').innerHTML = `ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}`;
   document.getElementById('productInfoLaunchLine').innerHTML = `Date Launched: <strong>${dateLaunchedStr}</strong>`;
+
+  // Amazon product page link: uses one of this product's registered child ASINs
+  // (the parent ASIN itself isn't reliably a live page). Prefers a child
+  // registered under the marketplace currently being viewed, then the product's
+  // own marketplace, then whatever's registered — and builds the domain from
+  // THAT child's own marketplace so the ASIN and storefront always agree.
+  const linkEl = document.getElementById('productInfoAmazonLink');
+  linkEl.innerHTML = '';
+  try{
+    const { data: childMap } = await sb.from('child_asin_mapping').select('child_asin, marketplace').eq('parent_asin', product.asin);
+    const wanted = (mkt && mkt !== 'ALL') ? mkt : product.marketplace;
+    const rows = childMap || [];
+    const pick = rows.find(r=>r.marketplace && wanted && r.marketplace.toUpperCase()===String(wanted).toUpperCase())
+              || rows.find(r=>r.marketplace)
+              || rows[0];
+    if(pick){
+      const domain = amazonDomainFor(pick.marketplace || product.marketplace);
+      if(domain){
+        const url = `https://www.${domain}/dp/${encodeURIComponent(pick.child_asin)}`;
+        linkEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--gold-dark);font-weight:600;text-decoration:none;">View on ${domain} ↗</a> <span style="color:var(--text-muted);font-size:11.5px;">(child ASIN ${escapeHtml(pick.child_asin)})</span>`;
+      }
+    }
+  }catch(_e){ /* link is a convenience — never let it break the page */ }
   document.getElementById('productInfoMetaGrid').innerHTML = metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('');
 
   const banner = document.getElementById('noLaunchBanner');
