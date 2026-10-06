@@ -4797,42 +4797,63 @@ async function ltLoadStored(){
 
 /* ---------- Actual vs. Target: comparison table ---------- */
 function ltRenderComparisonTable(cmp, weekLabel){
-  const TOTAL_BG = '#FDF0EB';
-  const money = v => fmtMoney(v), units = v => fmtInt(v);
-  let h = `<thead><tr><th>Metric</th><th style="background:${TOTAL_BG};border-bottom:2px solid var(--gold);">To date</th>`;
+  // Laid out like the Deals Tracker: a Target block, an Actual block, then an Actual vs Target % block,
+  // each listing Revenue / Units Sold / Margin, with heavy dividers between the blocks.
+  const TOTAL_BG = '#FDF0EB', BAND = '#F3F3F3', RULE = '3px solid #1f2937', RED = '#C0392B', MUTED = '#9AA0A6';
+  const fmtFor = m => m.key === 'units' ? (v => fmtInt(v)) : (v => fmtMoney(v));
+  const ncols = 3 + cmp.weeks.length;
+  let h = `<thead><tr><th colspan="2"></th><th style="background:${TOTAL_BG};border-bottom:2px solid var(--gold);">To date</th>`;
   cmp.weeks.forEach(w => { h += `<th>${weekLabel(w)}</th>`; });
   h += '</tr></thead><tbody>';
-  LT_METRICS.forEach(m => {
-    const f = m.key === 'units' ? units : money;
+
+  const block = (sectionLabel, rowHtml) => {
+    LT_METRICS.forEach((m, i) => {
+      const edge = i === 0 ? `border-top:${RULE};` : '';
+      h += `<tr><td style="background:${BAND};${edge}text-align:right;color:var(--text-muted);white-space:nowrap;">${sectionLabel}</td>` +
+           `<td style="background:${BAND};${edge}text-align:left;font-weight:600;white-space:nowrap;">${m.label}</td>` + rowHtml(m, edge) + '</tr>';
+    });
+    h += `<tr><td colspan="${ncols}" style="height:10px;padding:0;border:none;background:#fff;"></td></tr>`;
+  };
+
+  // ----- Target
+  block('Target', (m, edge) => {
+    const f = fmtFor(m), t = cmp.total[m.key];
+    let r = `<td style="background:${TOTAL_BG};${edge}">${t.weeksUsed ? f(t.target) : '-'}<div style="font-size:9.5px;color:var(--text-muted);">of ${f(t.fullTarget)} full window</div></td>`;
+    cmp.weeks.forEach(w => {
+      const v = w.cells[m.key].target;
+      r += `<td style="background:${BAND};${edge}${v > 0 ? '' : `color:${MUTED};`}">${f(v)}</td>`;   // a week with no target shows greyed €0, as in the tracker
+    });
+    return r;
+  });
+  // ----- Actual
+  block('Actual', (m, edge) => {
+    const f = fmtFor(m), t = cmp.total[m.key];
+    let r = `<td style="background:${TOTAL_BG};${edge}font-weight:700;${t.weeksUsed && t.actual < 0 ? `color:${RED};` : ''}">${t.weeksUsed ? f(t.actual) : 'N/A'}</td>`;
+    cmp.weeks.forEach(w => {
+      const c = w.cells[m.key];
+      if(w.state === 'future'){ r += `<td style="background:${BAND};${edge}"></td>`; return; }
+      if(c.actual == null){ r += `<td style="background:${BAND};${edge}">N/A</td>`; return; }
+      const neg = c.actual < 0 ? `color:${RED};` : '';
+      r += w.state === 'current'
+        ? `<td style="background:${BAND};${edge}${neg}font-style:italic;" title="Week still in progress — shown, but not scored yet">${f(c.actual)}</td>`
+        : `<td style="background:${BAND};${edge}${neg}">${f(c.actual)}</td>`;
+    });
+    return r;
+  });
+  // ----- Actual vs Target %
+  block('Actual vs Target%', (m, edge) => {
     const t = cmp.total[m.key];
-    // Target
-    h += `<tr style="border-top:2px solid var(--border);"><td style="color:var(--text-muted);">${m.label} · Target</td>
-      <td style="background:${TOTAL_BG};">${t.weeksUsed ? f(t.target) : '–'}<div style="font-size:9.5px;color:var(--text-muted);">of ${f(t.fullTarget)} full window</div></td>`;
-    cmp.weeks.forEach(w => { const c = w.cells[m.key]; h += `<td style="color:var(--text-muted);">${c.target > 0 ? f(c.target) : '–'}</td>`; });
-    h += '</tr>';
-    // Actual
-    h += `<tr><td style="font-weight:700;">${m.label} · Actual</td><td style="background:${TOTAL_BG};font-weight:700;">${t.weeksUsed ? f(t.actual) : 'N/A'}</td>`;
+    let r = `<td style="${ltPctStyle(t.pct) || `background:${TOTAL_BG};`}${edge}font-weight:700;">${t.pct == null ? '-' : Math.round(t.pct * 100) + '%'}</td>`;
     cmp.weeks.forEach(w => {
       const c = w.cells[m.key];
-      if(w.state === 'future'){ h += '<td></td>'; return; }
-      if(c.actual == null){ h += '<td>N/A</td>'; return; }
-      h += w.state === 'current'
-        ? `<td style="font-style:italic;" title="Week still in progress — shown, but not scored yet">${f(c.actual)}</td>`
-        : `<td>${f(c.actual)}</td>`;
-    });
-    h += '</tr>';
-    // % of target
-    h += `<tr><td>${m.label} · % of target</td><td style="${ltPctStyle(t.pct) || `background:${TOTAL_BG};`}font-weight:700;">${t.pct == null ? '–' : Math.round(t.pct * 100) + '%'}</td>`;
-    cmp.weeks.forEach(w => {
-      const c = w.cells[m.key];
-      if(w.state === 'future'){ h += '<td></td>'; return; }
-      if(c.pct == null){ h += '<td>–</td>'; return; }
+      if(w.state === 'future'){ r += `<td style="background:${BAND};${edge}"></td>`; return; }
+      if(c.pct == null){ r += `<td style="background:${BAND};${edge}">-</td>`; return; }
       const label = Math.round(c.pct * 100) + '%';
-      h += w.state === 'current'
-        ? `<td style="font-style:italic;color:var(--text-muted);" title="Week still in progress — not scored yet">${label}</td>`
-        : `<td style="${ltPctStyle(c.pct)}">${label}</td>`;
+      r += w.state === 'current'
+        ? `<td style="background:${BAND};${edge}font-style:italic;color:var(--text-muted);" title="Week still in progress — not scored yet">${label}</td>`
+        : `<td style="${ltPctStyle(c.pct) || `background:${BAND};`}${edge}">${label}</td>`;
     });
-    h += '</tr>';
+    return r;
   });
   return h + '</tbody>';
 }
