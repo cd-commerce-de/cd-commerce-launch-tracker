@@ -539,9 +539,19 @@
         <div class="meta">Every week's actual Revenue, Units Sold and Margin from your Sellerboard data, compared against the weekly targets in your Deals Tracker.</div>
       </div>
       <div class="panel">
-        <div class="filter-bar">
-          <div class="filter-field"><label>Product</label><select id="tseProductSelect" onchange="loadTseForecast()"></select></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:14px;">
+          <div id="tseInfoDescription" style="display:none;">
+            <h3 id="tseInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
+            <div style="font-size:12.5px;color:var(--text-muted);" id="tseInfoAsinLine"></div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="tseInfoLaunchLine"></div>
+            <div style="font-size:12.5px;margin-top:6px;" id="tseInfoAmazonLink"></div>
+          </div>
+          <div class="filter-bar" style="margin:0 0 0 auto;">
+            <div class="filter-field"><label>Product</label><select id="tseProductSelect" onchange="loadTseForecast()"></select></div>
+            <div class="filter-field"><label>Marketplace</label><select id="tseMarketplaceSelect" onchange="loadTseForecast()"><option value="ALL">All</option></select></div>
+          </div>
         </div>
+        <div id="tseInfoMetaGrid" style="display:none;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 16px;padding:12px 14px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border);"></div>
       </div>
       <div id="tseEmpty" class="panel empty-state" style="display:none;">
         <div class="big">No products yet</div>
@@ -2449,15 +2459,7 @@ async function populateSelectors(){
   const sel = document.getElementById('productSelect');
   const current = sel.value;
   fillGroupedProductSelect(sel, products); // Product Detail's dropdown: grouped Launch / Expansion / Post 12-Week
-  const tseSel = document.getElementById('tseProductSelect');
-  const tseCurrent = tseSel.value;
-  tseSel.innerHTML = '';
-  products.forEach(p=>{
-    const o2 = document.createElement('option'); o2.value = p.asin; o2.textContent = productDisplayName(p);
-    tseSel.appendChild(o2);
-  });
   if(products.find(p=>p.asin===current)) sel.value = current;
-  if(products.find(p=>p.asin===tseCurrent)) tseSel.value = tseCurrent;
   await renderProductsTable();
 }
 
@@ -3294,6 +3296,61 @@ function toggleAnalysisCharts(tag){
 }
 
 let lastLoadedProductAsin = undefined; // undefined = nothing loaded yet this session
+// Fills a product description panel (image + name, ASIN + week-of-12, launch date, Amazon link, details grid).
+// Used by Product Detail (prefix 'productInfo') and Actual vs. Target (prefix 'tseInfo') so both always show the same thing.
+// `anchor` = Monday of the launch week (or of the earliest data week when no launch date is set).
+async function renderProductInfoPanel(prefix, product, mkt, anchor){
+  // Same product-info block the dashboard's per-product panels used to show
+  // (name, image, ASIN, launch date, age, marketplace, brand, product line)
+  // — brought to the top of Product Detail instead, same computation.
+  let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
+  if(anchor){
+    ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
+    currentWeekNum = Math.floor(ageDays / 7) + 1;
+    ageWeeks = +(ageDays / 7).toFixed(1);
+    ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
+  }
+  const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
+  const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
+  document.getElementById(prefix+'Description').style.display = 'block';
+  document.getElementById(prefix+'MetaGrid').style.display = 'grid';
+  document.getElementById(prefix+'Name').innerHTML = `${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}`;
+  document.getElementById(prefix+'AsinLine').innerHTML = `ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}`;
+  document.getElementById(prefix+'LaunchLine').innerHTML = `Date Launched: <strong>${dateLaunchedStr}</strong>`;
+
+  // Amazon product page link: uses one of this product's registered child ASINs
+  // (the parent ASIN itself isn't reliably a live page). Prefers a child
+  // registered under the marketplace currently being viewed, then the product's
+  // own marketplace, then whatever's registered — and builds the domain from
+  // THAT child's own marketplace so the ASIN and storefront always agree.
+  const linkEl = document.getElementById(prefix+'AmazonLink');
+  linkEl.innerHTML = '';
+  try{
+    const { data: childMap } = await sb.from('child_asin_mapping').select('child_asin, marketplace').eq('parent_asin', product.asin);
+    const wanted = (mkt && mkt !== 'ALL') ? mkt : product.marketplace;
+    const rows = childMap || [];
+    const pick = rows.find(r=>r.marketplace && wanted && r.marketplace.toUpperCase()===String(wanted).toUpperCase())
+              || rows.find(r=>r.marketplace)
+              || rows[0];
+    if(pick){
+      const domain = amazonDomainFor(pick.marketplace || product.marketplace);
+      if(domain){
+        const url = `https://www.${domain}/dp/${encodeURIComponent(pick.child_asin)}`;
+        linkEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--gold-dark);font-weight:600;text-decoration:none;">View on ${domain} ↗</a> <span style="color:var(--text-muted);font-size:11.5px;">(child ASIN ${escapeHtml(pick.child_asin)})</span>`;
+      }
+    }
+  }catch(_e){ /* link is a convenience — never let it break the page */ }
+  document.getElementById(prefix+'MetaGrid').innerHTML = metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('');
+}
+// Same anchor rule Product Detail uses, for tabs that don't load the weekly data themselves.
+async function productAnchor(product){
+  if(product.launch) return mondayOf(product.launch);
+  const first = async table => { const { data } = await sb.from(table).select('week').eq('asin', product.asin).order('week',{ascending:true}).limit(1); return data && data[0] ? data[0].week : null; };
+  const [a, c] = await Promise.all([first('sellerboard_rows'), first('sellerfox_rows')]);
+  const earliest = [a, c].filter(Boolean).sort()[0];
+  return earliest ? mondayOf(earliest) : null;
+}
+
 async function loadDashboard(){
   const sel = document.getElementById('productSelect');
   const mktSel = document.getElementById('marketplaceSelect');
@@ -3371,47 +3428,7 @@ async function loadDashboard(){
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
   const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(product, mkt, true);
 
-  // Same product-info block the dashboard's per-product panels used to show
-  // (name, image, ASIN, launch date, age, marketplace, brand, product line)
-  // — brought to the top of Product Detail instead, same computation.
-  let ageDays = null, ageWeeks = null, ageLabel = '', currentWeekNum = null;
-  if(anchor){
-    ageDays = Math.floor((new Date() - new Date(anchor)) / 86400000);
-    currentWeekNum = Math.floor(ageDays / 7) + 1;
-    ageWeeks = +(ageDays / 7).toFixed(1);
-    ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
-  }
-  const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
-  const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
-  document.getElementById('productInfoDescription').style.display = 'block';
-  document.getElementById('productInfoMetaGrid').style.display = 'grid';
-  document.getElementById('productInfoName').innerHTML = `${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}`;
-  document.getElementById('productInfoAsinLine').innerHTML = `ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}`;
-  document.getElementById('productInfoLaunchLine').innerHTML = `Date Launched: <strong>${dateLaunchedStr}</strong>`;
-
-  // Amazon product page link: uses one of this product's registered child ASINs
-  // (the parent ASIN itself isn't reliably a live page). Prefers a child
-  // registered under the marketplace currently being viewed, then the product's
-  // own marketplace, then whatever's registered — and builds the domain from
-  // THAT child's own marketplace so the ASIN and storefront always agree.
-  const linkEl = document.getElementById('productInfoAmazonLink');
-  linkEl.innerHTML = '';
-  try{
-    const { data: childMap } = await sb.from('child_asin_mapping').select('child_asin, marketplace').eq('parent_asin', product.asin);
-    const wanted = (mkt && mkt !== 'ALL') ? mkt : product.marketplace;
-    const rows = childMap || [];
-    const pick = rows.find(r=>r.marketplace && wanted && r.marketplace.toUpperCase()===String(wanted).toUpperCase())
-              || rows.find(r=>r.marketplace)
-              || rows[0];
-    if(pick){
-      const domain = amazonDomainFor(pick.marketplace || product.marketplace);
-      if(domain){
-        const url = `https://www.${domain}/dp/${encodeURIComponent(pick.child_asin)}`;
-        linkEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--gold-dark);font-weight:600;text-decoration:none;">View on ${domain} ↗</a> <span style="color:var(--text-muted);font-size:11.5px;">(child ASIN ${escapeHtml(pick.child_asin)})</span>`;
-      }
-    }
-  }catch(_e){ /* link is a convenience — never let it break the page */ }
-  document.getElementById('productInfoMetaGrid').innerHTML = metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('');
+  await renderProductInfoPanel('productInfo', product, mkt, anchor);
 
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
@@ -5008,18 +5025,41 @@ async function loadDealsTargetsComparison(product){
 }
 /* LT-GLUE-END */
 
+let tseSeeded = false;   // the tab starts from Product Detail's selection the first time it's opened, then keeps its own
 async function loadTseForecast(){
   const sel = document.getElementById('tseProductSelect');
-  if(!sel.value){ document.getElementById('tseEmpty').style.display='block'; document.getElementById('tseBody').style.display='none'; return; }
-  const products = await fetchProducts();
-  const product = products.find(p=>p.asin===sel.value);
+  const mktSel = document.getElementById('tseMarketplaceSelect');
+  const [products, marketplaces] = await Promise.all([fetchProducts(), getMarketplaces()]);
+
+  let wantAsin = sel.value, wantMkt = mktSel.value || 'ALL';
+  if(!tseSeeded){
+    tseSeeded = true;
+    const pdAsin = document.getElementById('productSelect').value, pdMkt = document.getElementById('marketplaceSelect').value || 'ALL';
+    if(pdAsin && products.find(p=>p.asin===pdAsin)){ wantAsin = pdAsin; wantMkt = pdMkt; }
+  }
+  mktSel.innerHTML = '<option value="ALL">All</option>';
+  marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
+  mktSel.value = [...mktSel.options].some(o=>o.value===wantMkt) ? wantMkt : 'ALL';
+  const mkt = mktSel.value;
+
+  // The marketplace filters the product list (same as Product Detail), grouped Launch / Expansion / Post 12-Week.
+  const visible = fillGroupedProductSelect(sel, mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt));
+  if(visible.find(p=>p.asin===wantAsin)) sel.value = wantAsin;
+  else if(visible.length) sel.value = visible[0].asin;
+
+  const product = visible.find(p=>p.asin===sel.value);
   document.getElementById('tseEmpty').style.display = product ? 'none' : 'block';
   document.getElementById('tseBody').style.display = product ? 'block' : 'none';
-  if(!product) return;
+  if(!product){
+    document.getElementById('tseInfoDescription').style.display = 'none';
+    document.getElementById('tseInfoMetaGrid').style.display = 'none';
+    return;
+  }
   try{
+    await renderProductInfoPanel('tseInfo', product, mkt, await productAnchor(product));
     await loadDealsTargetsComparison(product);
   }catch(e){
-    document.getElementById('ltCompareMessage').textContent = 'Could not load Deals Tracker targets: ' + (e.message || e);
+    document.getElementById('ltCompareMessage').textContent = 'Could not load this tab: ' + (e.message || e);
   }
 }
 function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
