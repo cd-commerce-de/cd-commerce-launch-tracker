@@ -784,6 +784,18 @@
         <div class="meta">Register which child ASINs belong to which parent product. This is now the sole source of truth every upload relies on — an ASIN not registered here is never auto-added by any weekly file.</div>
       </div>
       <div class="panel">
+        <h3>Import mappings from a file</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Load a whole parent → child ASIN list at once. Columns: <strong>Parent ASIN</strong>, <strong>ASIN</strong> (the child) and <strong>SKU</strong> — a <strong>Marketplace</strong> column is optional; without it the marketplace is read from the end of the SKU (e.g. <code>VZW01-FR</code> → FR). Accepts .tsv, .csv or .xlsx. The file is compared with what's already saved and every change is listed first — <strong>nothing is saved until you click Apply</strong>. Products that don't exist yet are created, using the name, brand and tag of an existing product with the same line code.</p>
+        <div class="upload-box" id="dropMI">
+          <label for="fileMI">Choose mapping file (.tsv, .csv or .xlsx)</label>
+          <input type="file" id="fileMI" accept=".tsv,.csv,.txt,.xlsx">
+          <div id="miPreview" style="margin-top:12px;text-align:left;"></div>
+          <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnApplyMI" style="display:none;" onclick="miApply()">Apply</button></div>
+          <div class="status-line" id="statusMI"></div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>Add a mapping</h3>
         <div class="row" style="align-items:flex-end;">
           <div class="col">
@@ -2079,6 +2091,341 @@ async function removeProduct(asin){
 }
 
 /* ---------------- ASIN Mapping tab ---------------- */
+/* MI-CORE-START
+   Mapping import (ASIN Mapping tab): read a Parent ASIN / child ASIN / SKU file, then work out exactly what would change
+   compared with what is already saved. Pure logic — no page or database access — so it can be tested on its own. */
+
+const MI_MARKETPLACES = new Set(['DE','UK','GB','FR','ES','IT','NL','SE','PL','BE','US','CA','MX','JP','IN','AU','TR','AE','SA','EG','SG','BR']);
+function miNormMk(m){ const u = String(m == null ? '' : m).trim().toUpperCase(); return u === 'GB' ? 'UK' : u; }
+function miSplitLine(line, delim){
+  const out = []; let cur = '', inQ = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(inQ){ if(ch === '"'){ if(line[i + 1] === '"'){ cur += '"'; i++; } else inQ = false; } else cur += ch; }
+    else { if(ch === '"') inQ = true; else if(ch === delim){ out.push(cur); cur = ''; } else cur += ch; }
+  }
+  out.push(cur); return out.map(x => x.trim());
+}
+// "VZW01-FR" -> FR, "LMT01-SS-ES" -> ES; null when the SKU doesn't end in a marketplace (e.g. "WGH25-PB-FBM")
+function miMarketplaceFromSku(sku){
+  const parts = String(sku || '').trim().toUpperCase().split('-');
+  if(parts.length < 2) return null;
+  const last = parts[parts.length - 1];
+  return MI_MARKETPLACES.has(last) ? miNormMk(last) : null;
+}
+// Possible product line codes behind a SKU: "VZW01-FR" -> ["VZW01","VZW"]; "FRM02-IT" -> ["FRM02","FRM"]
+function miLineCodeCandidates(sku){
+  const first = String(sku || '').trim().toUpperCase().split('-')[0];
+  if(!first) return [];
+  const stripped = first.replace(/\d+$/, '');
+  return stripped && stripped !== first ? [first, stripped] : [first];
+}
+
+// text of a TSV/CSV export -> { rows, problems }.  Columns: Parent ASIN, ASIN (child), SKU, optional Marketplace.
+function miParseTable(text){
+  const out = { rows: [], problems: [], usedMarketplaceColumn: false };
+  const lines = String(text == null ? '' : text).replace(/^\uFEFF/, '').replace(/\r/g, '').split('\n');
+  const hi = lines.findIndex(l => l.trim().length);
+  if(hi < 0){ out.problems.push({ line: 0, text: 'The file is empty.' }); return out; }
+  const h = lines[hi];
+  const counts = { '\t': (h.match(/\t/g) || []).length, ';': (h.match(/;/g) || []).length, ',': (h.match(/,/g) || []).length };
+  const delim = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  if(!counts[delim]){ out.problems.push({ line: hi + 1, text: "Couldn't find columns in the first line — expected Parent ASIN, ASIN and SKU separated by tabs, commas or semicolons." }); return out; }
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const heads = miSplitLine(h, delim).map(norm);
+  const find = (...names) => heads.findIndex(x => names.includes(x));
+  const iParent = find('parentasin', 'parent');
+  const iChild = find('childasin', 'asin', 'child');
+  const iSku = find('sku', 'merchantsku', 'sellersku');
+  const iMk = find('marketplace', 'market', 'country');
+  if(iParent < 0 || iChild < 0 || iParent === iChild){
+    out.problems.push({ line: hi + 1, text: 'Expected a "Parent ASIN" column and an "ASIN" (child) column in the first line.' }); return out;
+  }
+  out.usedMarketplaceColumn = iMk >= 0;
+  const isAsin = v => /^[A-Z0-9]{10}$/.test(v);
+  for(let i = hi + 1; i < lines.length; i++){
+    if(!lines[i].trim()) continue;
+    const c = miSplitLine(lines[i], delim);
+    const parent = String(c[iParent] || '').toUpperCase(), child = String(c[iChild] || '').toUpperCase();
+    const sku = iSku >= 0 ? String(c[iSku] || '').trim() : '';
+    const n = i + 1;
+    if(!isAsin(parent)){ out.problems.push({ line: n, text: `Parent ASIN "${c[iParent] || ''}" isn't a 10-character ASIN — row skipped.` }); continue; }
+    if(!isAsin(child)){ out.problems.push({ line: n, text: `Child ASIN "${c[iChild] || ''}" isn't a 10-character ASIN — row skipped.` }); continue; }
+    const marketplace = iMk >= 0 && String(c[iMk] || '').trim() ? miNormMk(c[iMk]) : miMarketplaceFromSku(sku);
+    if(!marketplace){ out.problems.push({ line: n, text: `Can't tell the marketplace for ${child}: SKU "${sku}" doesn't end in a country code${iMk >= 0 ? ' and the Marketplace column is empty' : ' and the file has no Marketplace column'} — row skipped.` }); continue; }
+    out.rows.push({ line: n, parent, child, sku, marketplace });
+  }
+  if(!out.rows.length && !out.problems.length) out.problems.push({ line: 0, text: 'No data rows found under the header.' });
+  return out;
+}
+
+// rows: parsed file rows.  products / mappings: what is saved today (products table, child_asin_mapping table).
+function miBuildPlan(rows, products, mappings){
+  const key = (c, m) => `${c}::${m}`;
+  const plan = { parents: [], items: [], problems: [], stale: [], warnings: [], counts: {} };
+
+  // one entry per (child, marketplace); the same pair under two different parents can't be resolved, so it's skipped
+  const byKey = new Map(), conflicted = new Map();
+  rows.forEach(r => {
+    const k = key(r.child, r.marketplace), prev = byKey.get(k);
+    if(!prev){ byKey.set(k, { ...r }); return; }
+    if(prev.parent !== r.parent){ (conflicted.get(k) || conflicted.set(k, new Set([prev.parent])).get(k)).add(r.parent); }
+    else if(!prev.sku && r.sku) prev.sku = r.sku;
+  });
+  conflicted.forEach((parents, k) => {
+    const r = byKey.get(k); byKey.delete(k);
+    plan.problems.push({ line: r.line, text: `${r.child} in ${r.marketplace} is listed under different parents in the file (${[...parents].join(' and ')}) — skipped.` });
+  });
+  const uniq = [...byKey.values()];
+
+  const dbMap = new Map();
+  (mappings || []).forEach(m => dbMap.set(key(m.child_asin, miNormMk(m.marketplace)), m));
+  const productByAsin = new Map((products || []).map(p => [p.asin, p]));
+
+  uniq.forEach(r => {
+    const db = dbMap.get(key(r.child, r.marketplace));
+    let status = 'new', from = null;
+    if(db){
+      if(db.parent_asin !== r.parent){ status = 'moved'; from = db.parent_asin; }
+      else if(r.sku && String(db.sku || '') !== r.sku) status = 'sku';
+      else status = 'unchanged';
+    }
+    plan.items.push({ ...r, status, from });
+  });
+
+  // parents, in the order they appear in the file
+  const order = [...new Set(uniq.map(r => r.parent))];
+  order.forEach(asin => {
+    const mine = plan.items.filter(i => i.parent === asin);
+    const mks = [...new Set(mine.map(i => i.marketplace))];
+    const derived = mks.length === 1 ? mks[0] : null;
+    const product = productByAsin.get(asin) || null;
+    const entry = { asin, marketplaces: mks, derivedMarketplace: derived, product, action: product ? 'exists' : 'create',
+      marketplaceChange: null, newProduct: null, notes: [],
+      counts: { total: mine.length, new: 0, moved: 0, sku: 0, unchanged: 0 } };
+    mine.forEach(i => { entry.counts[i.status]++; });
+    if(mks.length > 1) entry.notes.push(`Appears in ${mks.join(', ')} — it stays one product, and its marketplace is left as it is.`);
+    if(product && derived && miNormMk(product.marketplace) !== derived) entry.marketplaceChange = { from: product.marketplace || null, to: derived };
+    if(!product){
+      // copy the shared details (name, brand, tag, product line) from an existing product with the same line code
+      const cands = [...new Set(mine.flatMap(i => miLineCodeCandidates(i.sku)))];
+      let sib = null;
+      for(const c of cands){ sib = (products || []).find(p => String(p.product_line_code || '').toUpperCase() === c); if(sib) break; }
+      const code = sib ? sib.product_line_code : (cands[cands.length - 1] || null);
+      entry.newProduct = {
+        asin, name: sib ? sib.name : (code || asin), tag: sib ? (sib.tag || 'expansion') : 'expansion', brand: sib ? (sib.brand || null) : null,
+        marketplace: derived, launch: null, product_line_code: code, product_line: sib ? (sib.product_line || null) : null, assumed: !sib,
+      };
+    }
+    plan.parents.push(entry);
+  });
+
+  // saved child rows of these parents that the file doesn't mention
+  const fileKeys = new Set(uniq.map(r => key(r.child, r.marketplace)));
+  const inFile = new Set(order);
+  (mappings || []).forEach(m => {
+    if(inFile.has(m.parent_asin) && !fileKeys.has(key(m.child_asin, miNormMk(m.marketplace)))) plan.stale.push({ child_asin: m.child_asin, marketplace: m.marketplace == null ? null : m.marketplace, parent_asin: m.parent_asin });
+  });
+
+  // a product outside the file that would lose every child ASIN
+  const movedFrom = {};
+  plan.items.filter(i => i.status === 'moved').forEach(i => { movedFrom[i.from] = (movedFrom[i.from] || 0) + 1; });
+  Object.keys(movedFrom).forEach(p => {
+    if(inFile.has(p)) return;
+    const left = (mappings || []).filter(m => m.parent_asin === p).length - movedFrom[p];
+    if(left <= 0) plan.warnings.push(`${p}${productByAsin.get(p) ? ' (' + productByAsin.get(p).name + ')' : ''} would be left with no child ASINs.`);
+  });
+
+  const c = plan.counts;
+  c.newProducts = plan.parents.filter(p => p.action === 'create').length;
+  c.marketplaceFixes = plan.parents.filter(p => p.marketplaceChange).length;
+  ['new', 'moved', 'sku', 'unchanged'].forEach(s => { c[s] = plan.items.filter(i => i.status === s).length; });
+  c.changes = c.newProducts + c.marketplaceFixes + c.new + c.moved + c.sku;
+  return plan;
+}
+/* MI-CORE-END */
+/* MI-GLUE-START — Mapping import (ASIN Mapping tab): file chooser, preview, apply */
+let miState = null;   // { rows, fileProblems, saved:{products,mappings}, plan }
+
+async function miLoadSaved(){
+  const [{ data: products, error: e1 }, { data: mappings, error: e2 }] = await Promise.all([
+    sb.from('products').select('*'),
+    sb.from('child_asin_mapping').select('*'),
+  ]);
+  if(e1 || e2) throw new Error((e1 || e2).message);
+  return { products: products || [], mappings: mappings || [] };
+}
+async function miFileToText(file){
+  if(/\.xlsx?$/i.test(file.name)){
+    if(typeof XLSX === 'undefined') throw new Error('The spreadsheet reader failed to load — check your connection and refresh the page.');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+      .map(r => r.map(c => String(c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+  }
+  return await file.text();
+}
+
+function miRenderPreview(state, banner){
+  const { plan, saved, fileProblems } = state;
+  const c = plan.counts;
+  const nameOf = asin => { const p = saved.products.find(x => x.asin === asin); return p ? `${asin} (${p.name || 'unnamed'}${p.marketplace ? ', ' + p.marketplace : ''})` : asin; };
+  const amber = t => `<span style="color:#92400E;">${t}</span>`;
+  let h = banner || '';
+
+  const intro = `${state.rows.length} child ASIN row${state.rows.length === 1 ? '' : 's'} for ${plan.parents.length} parent product${plan.parents.length === 1 ? '' : 's'}.`;
+  h += c.changes === 0 && plan.items.length
+    ? `<p style="font-size:12.5px;color:#166534;margin:0 0 10px;"><strong>✓ Already up to date.</strong> ${intro} The tool already matches this file — nothing to change.</p>`
+    : `<p style="font-size:12.5px;margin:0 0 10px;"><strong>${intro}</strong> This would: ` + [
+        c.newProducts ? `create <strong>${c.newProducts}</strong> product${c.newProducts > 1 ? 's' : ''}` : '',
+        c.marketplaceFixes ? `correct the marketplace on <strong>${c.marketplaceFixes}</strong>` : '',
+        c.new ? `add <strong>${c.new}</strong> child ASIN${c.new > 1 ? 's' : ''}` : '',
+        c.moved ? `<strong style="color:#92400E;">move ${c.moved}</strong> child ASIN${c.moved > 1 ? 's' : ''} to a different parent` : '',
+        c.sku ? `update <strong>${c.sku}</strong> SKU${c.sku > 1 ? 's' : ''}` : '',
+      ].filter(Boolean).join(', ') + `. ${c.unchanged} already match.</p>`;
+
+  if(plan.parents.length){
+    h += `<div class="table-wrap"><table class="stretch-table"><thead><tr>
+      <th style="text-align:left;">Parent ASIN</th><th>Marketplace</th><th style="text-align:left;">Product</th><th>Child rows</th><th>New</th><th>Moved</th><th>SKU</th><th>Same</th><th></th></tr></thead><tbody>` +
+      plan.parents.map(p => {
+        let prod;
+        if(p.action === 'create'){
+          const n = p.newProduct;
+          prod = `<strong style="color:#166534;">NEW</strong> — will be created as “${escapeHtml(n.name)}” (${escapeHtml(n.tag)})` +
+                 `<div style="font-size:10.5px;">${amber('launch date not set' + (n.assumed ? ' · no matching product to copy from, so name/tag are guesses' : ''))}</div>`;
+        } else {
+          prod = escapeHtml(productDisplayName(p.product));
+          if(p.marketplaceChange) prod += `<div style="font-size:10.5px;">${amber(`marketplace ${escapeHtml(p.marketplaceChange.from || 'blank')} → <strong>${escapeHtml(p.marketplaceChange.to)}</strong>`)}</div>`;
+        }
+        p.notes.forEach(n => { prod += `<div style="font-size:10.5px;">${amber(escapeHtml(n))}</div>`; });
+        return `<tr><td style="text-align:left;"><strong>${escapeHtml(p.asin)}</strong></td><td>${escapeHtml(p.marketplaces.join(', '))}</td><td style="text-align:left;font-size:11.5px;">${prod}</td>
+          <td>${p.counts.total}</td><td>${p.counts.new || '–'}</td><td>${p.counts.moved ? `<strong style="color:#92400E;">${p.counts.moved}</strong>` : '–'}</td><td>${p.counts.sku || '–'}</td><td>${p.counts.unchanged || '–'}</td><td></td></tr>`;
+      }).join('') + '</tbody></table></div>';
+  }
+
+  const moved = plan.items.filter(i => i.status === 'moved');
+  if(moved.length){
+    h += `<details open style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#92400E;"><strong>${moved.length} child ASIN${moved.length > 1 ? 's' : ''} currently registered to a different parent — they would be moved</strong></summary>
+      <ul style="font-size:11.5px;margin:6px 0 0 18px;padding:0;">` +
+      moved.map(i => `<li>${escapeHtml(i.child)} (${escapeHtml(i.marketplace)}): ${escapeHtml(nameOf(i.from))} → <strong>${escapeHtml(nameOf(i.parent))}</strong></li>`).join('') + `</ul>
+      <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Weeks already uploaded stay attributed to the old parent until you re-upload them (Upload &amp; Manage → Upload previous weeks).</p></details>`;
+  }
+  if(plan.warnings.length) h += `<p style="font-size:11.5px;color:#92400E;margin:10px 0 0;">⚠ ${plan.warnings.map(escapeHtml).join('<br>⚠ ')}</p>`;
+  if(plan.stale.length){
+    h += `<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">${plan.stale.length} saved child row${plan.stale.length > 1 ? 's' : ''} of these parents ${plan.stale.length > 1 ? "aren't" : "isn't"} in the file — kept unless you tick the box</summary>
+      <ul style="font-size:11.5px;margin:6px 0 0 18px;padding:0;">` +
+      plan.stale.map(s => `<li>${escapeHtml(s.child_asin)} (${escapeHtml(s.marketplace || 'no marketplace')}) under ${escapeHtml(s.parent_asin)}</li>`).join('') + `</ul>
+      <label style="display:flex;gap:6px;align-items:center;font-size:11.5px;font-weight:400;color:var(--text-muted);margin-top:6px;cursor:pointer;">
+        <input type="checkbox" id="miRemoveStale"> Also remove ${plan.stale.length === 1 ? 'this row' : 'these ' + plan.stale.length + ' rows'}</label></details>`;
+  }
+  const problems = [...fileProblems, ...plan.problems];
+  if(problems.length) h += `<details open style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--red);"><strong>${problems.length} row${problems.length > 1 ? 's' : ''} skipped</strong></summary>
+      <ul style="font-size:11.5px;margin:6px 0 0 18px;padding:0;">${problems.slice(0, 25).map(p => `<li>${p.line ? 'Line ' + p.line + ': ' : ''}${escapeHtml(p.text)}</li>`).join('')}${problems.length > 25 ? `<li>…and ${problems.length - 25} more</li>` : ''}</ul></details>`;
+  document.getElementById('miPreview').innerHTML = h;
+  const btn = document.getElementById('btnApplyMI');
+  btn.style.display = c.changes > 0 ? 'inline-block' : 'none';
+  btn.textContent = `Apply ${c.changes} change${c.changes === 1 ? '' : 's'}`;
+}
+
+async function miOnFileChosen(){
+  const f = document.getElementById('fileMI').files[0];
+  const prev = document.getElementById('miPreview'), btn = document.getElementById('btnApplyMI');
+  miState = null; btn.style.display = 'none'; prev.innerHTML = '';
+  if(!f){ setStatus('statusMI', '', ''); return; }
+  setStatus('statusMI', 'busy', 'Reading the file and comparing it with what\'s saved…');
+  try{
+    const parsed = miParseTable(await miFileToText(f));
+    if(!parsed.rows.length){
+      prev.innerHTML = `<ul style="font-size:12px;color:var(--red);margin:0 0 0 18px;padding:0;">${parsed.problems.map(p => `<li>${p.line ? 'Line ' + p.line + ': ' : ''}${escapeHtml(p.text)}</li>`).join('')}</ul>`;
+      setStatus('statusMI', 'err', 'Nothing usable in that file.'); return;
+    }
+    const saved = await miLoadSaved();
+    miState = { rows: parsed.rows, fileProblems: parsed.problems, saved, plan: miBuildPlan(parsed.rows, saved.products, saved.mappings) };
+    miRenderPreview(miState);
+    setStatus('statusMI', 'ok', miState.plan.counts.changes ? 'Review the changes above, then click Apply. Nothing is saved until you do.' : 'Nothing to change.');
+  }catch(err){
+    setStatus('statusMI', 'err', 'Could not read that file: ' + (err.message || err));
+  }
+}
+
+async function miApply(){
+  if(!miState || !miState.plan.counts.changes) return;
+  const { plan, saved } = miState;
+  const removeStale = !!(document.getElementById('miRemoveStale') && document.getElementById('miRemoveStale').checked);
+  const btn = document.getElementById('btnApplyMI'); btn.disabled = true;
+  setStatus('statusMI', 'busy', 'Applying…');
+  const done = []; let step = '';
+  try{
+    // 1) products that don't exist yet
+    const toCreate = plan.parents.filter(p => p.action === 'create').map(p => { const { assumed, ...rec } = p.newProduct; return rec; });
+    if(toCreate.length){
+      step = 'Creating products';
+      const { error } = await sb.from('products').insert(toCreate);
+      if(error) throw new Error(error.message);
+      done.push(`${toCreate.length} product${toCreate.length > 1 ? 's' : ''} created`);
+    }
+    // 2) marketplace corrections on existing products
+    const fixes = plan.parents.filter(p => p.marketplaceChange);
+    for(const p of fixes){
+      step = `Correcting the marketplace on ${p.asin}`;
+      const { error } = await sb.from('products').update({ marketplace: p.marketplaceChange.to }).eq('asin', p.asin);
+      if(error) throw new Error(error.message);
+    }
+    if(fixes.length) done.push(`marketplace corrected on ${fixes.length}`);
+    // 3) child ASIN mapping (only rows that are new / moved / have a new SKU)
+    const infoOf = asin => {
+      const p = saved.products.find(x => x.asin === asin);
+      if(p) return { name: p.name || null, tag: p.tag || null };
+      const np = plan.parents.find(x => x.asin === asin && x.newProduct);
+      return np ? { name: np.newProduct.name, tag: np.newProduct.tag } : { name: null, tag: null };
+    };
+    const recs = plan.items.filter(i => i.status !== 'unchanged').map(i => ({
+      child_asin: i.child, marketplace: i.marketplace, parent_asin: i.parent, sku: i.sku || null, ...infoOf(i.parent),
+    }));
+    for(let k = 0; k < recs.length; k += 100){
+      step = 'Saving child ASIN mappings';
+      const { error } = await sb.from('child_asin_mapping').upsert(recs.slice(k, k + 100), { onConflict: 'child_asin,marketplace' });
+      if(error) throw new Error(error.message);
+    }
+    if(recs.length) done.push(`${recs.length} child ASIN row${recs.length > 1 ? 's' : ''} saved`);
+    // 4) optional: saved rows of these parents that the file doesn't mention
+    if(removeStale){
+      for(const s of plan.stale){
+        step = 'Removing rows that are not in the file';
+        let q = sb.from('child_asin_mapping').delete().eq('child_asin', s.child_asin).eq('parent_asin', s.parent_asin);
+        q = s.marketplace == null ? q.is('marketplace', null) : q.eq('marketplace', s.marketplace);
+        const { error } = await q;
+        if(error) throw new Error(error.message);
+      }
+      done.push(`${plan.stale.length} row${plan.stale.length > 1 ? 's' : ''} removed`);
+    }
+  }catch(err){
+    // Show what is actually saved now, so the preview — and the next Apply — only cover what's still left to do.
+    try{
+      marketplacesCache = null;
+      miState.saved = await miLoadSaved();
+      miState.plan = miBuildPlan(miState.rows, miState.saved.products, miState.saved.mappings);
+      miRenderPreview(miState);
+    }catch(_e){ /* leave the preview as it was */ }
+    setStatus('statusMI', 'err', `${step || 'Applying'} failed: ${err.message || err}.${done.length ? ' Already done before that: ' + done.join(', ') + ' — the list below now shows only what is left; clicking Apply again does just that.' : ' Nothing was changed.'}`);
+    btn.disabled = false; return;
+  }
+  // re-read what's saved and show the file against it again — it should now say "up to date"
+  marketplacesCache = null;
+  miState.saved = await miLoadSaved();
+  miState.plan = miBuildPlan(miState.rows, miState.saved.products, miState.saved.mappings);
+  const needDates = plan.parents.filter(p => p.action === 'create').map(p => p.asin);
+  const moved = plan.counts.moved;
+  miRenderPreview(miState,
+    `<div style="font-size:12.5px;padding:10px 12px;border-radius:8px;background:#F0FDF4;border:1px solid #BBF7D0;margin-bottom:12px;"><strong style="color:#166534;">✓ Done:</strong> ${done.join(', ')}.` +
+    (needDates.length ? `<br><span style="color:#92400E;">Next: set a <strong>launch date</strong> on the new product${needDates.length > 1 ? 's' : ''} (${needDates.map(escapeHtml).join(', ')}) in Upload &amp; Manage → Products (⋮ → Edit).</span>` : '') +
+    (moved ? `<br><span style="color:#92400E;">${moved} child ASIN${moved > 1 ? 's were' : ' was'} moved to a different parent — re-upload the affected weeks (Upload &amp; Manage → Upload previous weeks) so past numbers follow.</span>` : '') + '</div>');
+  setStatus('statusMI', 'ok', 'Applied. ' + done.join(', ') + '.');
+  btn.disabled = false;
+  try{ await loadAsinMapping(); await populateSelectors(); }catch(_e){ /* the lists refresh next time they're opened */ }
+}
+/* MI-GLUE-END */
+
 async function loadAsinMapping(){
   const [{ data: products }, { data: mappings }] = await Promise.all([
     sb.from('products').select('*').order('name'),
@@ -2313,6 +2660,39 @@ async function submitAddProduct(){
   }
 
   setStatus('statusAddProduct', 'busy', 'Saving…');
+
+  // Adding / duplicating must create something genuinely NEW. Two things would otherwise go wrong, so check up front
+  // (nothing is written until both pass):
+  //  1) a Parent ASIN can only be one product — saving an existing one fails with a raw database error;
+  //  2) a child ASIN can only belong to one product per marketplace — the mapping save would silently RE-ASSIGN a
+  //     child that's already registered to another product, taking it away from that product.
+  if(addProductMode !== 'edit'){
+    const childAsinList = [...new Set(childRows.map(c=>c.asin))];
+    const [{ data: existingProduct }, { data: mappedElsewhere }] = await Promise.all([
+      sb.from('products').select('asin,name,marketplace,tag').eq('asin', asin).maybeSingle(),
+      childAsinList.length ? sb.from('child_asin_mapping').select('child_asin,marketplace,parent_asin').in('child_asin', childAsinList) : Promise.resolve({ data: [] }),
+    ]);
+    if(existingProduct){
+      const bits = [existingProduct.name, existingProduct.marketplace, existingProduct.tag].filter(Boolean).join(', ');
+      setStatus('statusAddProduct', 'err',
+        `A product with Parent ASIN ${asin} already exists (${bits}), and each Parent ASIN can only be one product — so it can't be saved again. ` +
+        `Enter the new group's own Parent ASIN. If ${asin} really is the parent in another marketplace too, add that marketplace's child ASINs to the existing product instead (⋮ → Edit).`);
+      return;
+    }
+    const clashes = (mappedElsewhere || []).filter(m =>
+      m.parent_asin !== asin && childRows.some(c => c.asin === m.child_asin && c.marketplace === String(m.marketplace || '').toUpperCase()));
+    if(clashes.length){
+      const parents = [...new Set(clashes.map(c=>c.parent_asin))];
+      const { data: parentRows } = await sb.from('products').select('asin,name').in('asin', parents);
+      const nameOf = a => { const r = (parentRows || []).find(x=>x.asin === a); return r && r.name ? `${a} (${r.name})` : a; };
+      const list = clashes.slice(0, 4).map(c => `${c.child_asin} in ${String(c.marketplace || '').toUpperCase()} → ${nameOf(c.parent_asin)}`).join('; ') + (clashes.length > 4 ? `; and ${clashes.length - 4} more` : '');
+      setStatus('statusAddProduct', 'err',
+        `Nothing was saved. ${clashes.length === 1 ? 'This child ASIN is' : 'These child ASINs are'} already registered to another product, and saving would take ${clashes.length === 1 ? 'it' : 'them'} away from it: ${list}. ` +
+        `Replace ${clashes.length === 1 ? 'it' : 'them'} with the new group's real child ASINs (or remove the row${clashes.length === 1 ? '' : 's'}) and save again.`);
+      return;
+    }
+  }
+
   const tag = document.getElementById('apTag').value;
   const record = {
     asin, name, tag,
@@ -5184,6 +5564,16 @@ function buildActualVsTargetTable(weeks, weeklyDerived, colLabels){
 })();
 
 document.getElementById('fileLT').addEventListener('change', ltOnFileChosen);
+document.getElementById('fileMI').addEventListener('change', miOnFileChosen);
+(function(){
+  const box = document.getElementById('dropMI');
+  box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('drag'); });
+  box.addEventListener('dragleave', ()=> box.classList.remove('drag'));
+  box.addEventListener('drop', e=>{
+    e.preventDefault(); box.classList.remove('drag');
+    if(e.dataTransfer.files.length){ document.getElementById('fileMI').files = e.dataTransfer.files; document.getElementById('fileMI').dispatchEvent(new Event('change')); }
+  });
+})();
 (function(){
   const box = document.getElementById('dropLT');
   box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('drag'); });
