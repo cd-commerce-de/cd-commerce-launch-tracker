@@ -2969,12 +2969,20 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
 }
 async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   if(!product) return computeWeeksFromRows(null, [], []);
-  let sbQuery = sb.from('sellerboard_rows').select('*').eq('asin', product.asin);
-  if(marketplaceFilter !== 'ALL') sbQuery = sbQuery.eq('marketplace', marketplaceFilter);
-  let sfQuery = sb.from('sellerfox_rows').select('*').eq('asin', product.asin);
-  if(marketplaceFilter !== 'ALL') sfQuery = sfQuery.eq('marketplace', marketplaceFilter);
-  const [{ data: sbRows }, { data: sfRows }] = await Promise.all([sbQuery, sfQuery]);
-  return computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12);
+  const [{ data: sbAll }, { data: sfAll }] = await Promise.all([
+    sb.from('sellerboard_rows').select('*').eq('asin', product.asin),
+    sb.from('sellerfox_rows').select('*').eq('asin', product.asin),
+  ]);
+  // The marketplace filter is applied HERE rather than in the query, because the weekly rows written by the Sellerboard sync/upload carry
+  // no marketplace value at all (they belong to the product, and a product has one marketplace). Filtering them with
+  // .eq('marketplace', 'DE') matched nothing and made every week vanish.
+  //  - Weekly (Sellerboard) rows: all of them when the filter is the product's own marketplace (always the case in the UI, since the product
+  //    list is already narrowed to that marketplace); otherwise only rows with no label or a matching one.
+  //  - Sellerfox rows are genuinely per-marketplace: keep matching or unlabelled ones, drop the other marketplaces'.
+  const own = !product.marketplace || marketplaceFilter === product.marketplace;
+  const keepSb = r => marketplaceFilter === 'ALL' || own || !r.marketplace || r.marketplace === marketplaceFilter;
+  const keepSf = r => marketplaceFilter === 'ALL' || !r.marketplace || r.marketplace === marketplaceFilter;
+  return computeWeeksFromRows(product, (sbAll || []).filter(keepSb), (sfAll || []).filter(keepSf), extendBeyond12);
 }
 function finalizeWeek(w){
   if(!w.hasData){
@@ -3737,24 +3745,10 @@ async function loadDashboard(){
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
 
   if(productJustChanged && requestedProduct && requestedProduct.marketplace && marketplaces.includes(requestedProduct.marketplace)){
-    // The previous safety check here only verified "does at least one row
-    // exist under this marketplace" — too weak. A product whose weeks are
-    // recorded under INCONSISTENT marketplace values (confirmed to happen
-    // elsewhere in this data) could pass that check on the strength of just
-    // one or two matching weeks, while the filter it then applied silently
-    // hid every other week — exactly what produced an all-N/A scorecard for
-    // a product that demonstrably has full history. Now it only trusts the
-    // product's own marketplace field if it accounts for EVERY row this
-    // ASIN has — any mismatch at all falls back to "All", which is always
-    // safe and was the behavior before this auto-select feature existed.
-    const { data: allRows } = await sb.from('sellerboard_rows').select('marketplace').eq('asin', requestedProduct.asin);
-    const totalRows = allRows ? allRows.length : 0;
-    const matchingRows = allRows ? allRows.filter(r=>r.marketplace===requestedProduct.marketplace).length : 0;
-    if(totalRows > 0 && matchingRows === totalRows){
-      mktSel.value = requestedProduct.marketplace;
-    } else if([...mktSel.options].some(o=>o.value===curMkt)){
-      mktSel.value = curMkt;
-    }
+    // Choosing a product switches the Marketplace dropdown to that product's own marketplace. (An earlier version only did this if every
+    // stored row carried the same marketplace label — but the Sellerboard-sourced weekly rows carry none, so it never fired and the
+    // dropdown stayed on "All". Rows are no longer filtered by that label for a product's own marketplace, so no such guard is needed.)
+    mktSel.value = requestedProduct.marketplace;
   } else if([...mktSel.options].some(o=>o.value===curMkt)){
     mktSel.value = curMkt;
   }
@@ -3773,7 +3767,11 @@ async function loadDashboard(){
   if(visibleProducts.find(p=>p.asin===prevSelValue)){
     sel.value = prevSelValue;
   } else if(visibleProducts.length){
-    sel.value = visibleProducts[0].asin; // first entry as it actually appears in the grouped list
+    // The selected product isn't sold in the chosen marketplace: prefer the same product line there (Air Track Mat UK -> Air Track Mat DE),
+    // and only otherwise the first entry as it actually appears in the grouped list.
+    const sameLine = (requestedProduct && requestedProduct.product_line_code)
+      ? visibleProducts.find(p=>p.product_line_code === requestedProduct.product_line_code) : null;
+    sel.value = (sameLine || visibleProducts[0]).asin;
     lastLoadedProductAsin = sel.value;
   }
 
