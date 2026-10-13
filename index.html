@@ -785,7 +785,7 @@
       </div>
       <div class="panel">
         <h3>Import mappings from a file</h3>
-        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Load a whole parent → child ASIN list at once. Columns: <strong>Parent ASIN</strong>, <strong>ASIN</strong> (the child) and <strong>SKU</strong> — a <strong>Marketplace</strong> column is optional; without it the marketplace is read from the end of the SKU (e.g. <code>VZW01-FR</code> → FR). Accepts .tsv, .csv or .xlsx. The file is compared with what's already saved and every change is listed first — <strong>nothing is saved until you click Apply</strong>. Products that don't exist yet are created, using the name, brand and tag of an existing product with the same line code.</p>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Load a whole parent → child ASIN list at once. Columns: <strong>Parent ASIN</strong>, <strong>ASIN</strong> (the child) and <strong>SKU</strong> — a <strong>Marketplace</strong> column is optional; without it the marketplace is read from the end of the SKU (e.g. <code>VZW01-FR</code> → FR). Accepts .tsv, .csv or .xlsx. The file is compared with what's already saved and every change is listed first — <strong>nothing is saved until you click Apply</strong>. The import only adds or updates: <strong>it never removes a mapping</strong>, including ones the file doesn't mention. Products that don't exist yet are created, using the name, brand and tag of an existing product with the same line code.</p>
         <div class="upload-box" id="dropMI">
           <label for="fileMI">Choose mapping file (.tsv, .csv or .xlsx)</label>
           <input type="file" id="fileMI" accept=".tsv,.csv,.txt,.xlsx">
@@ -904,7 +904,7 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
-              <tr><td>Global Reviews</td><td>Keepa API — all-time rating and review count for the listing</td><td><em>No total shown</em> — a current snapshot, not a weekly-summable figure</td><td>Different from New Reviews above: New Reviews is just this week's new arrivals; Global Reviews is the listing's entire history. Displayed as e.g. "4.4 stars (775)". May be a frozen historical count rather than live-updating, since Amazon stopped providing review-count updates through Keepa in April 2025. Never written for a backfilled past week, since Keepa can only report "right now."</td></tr>
+              <tr><td>Global Reviews</td><td>Your weekly SellerSprite review uploads — every review recorded for the product, all marketplaces combined</td><td><em>No total shown</em> — each week shows the running total up to that week</td><td>The count is the sum of New Reviews (the row above) from the first week with review data up to that week, so it grows over time; the rating is the average of those reviews, weighted by how many each week had. A week without an upload carries the previous total forward; weeks before the first upload are blank. It counts what your uploads captured, so it can be lower than the number shown on Amazon if earlier weeks were never uploaded. Displayed as e.g. "4.4 stars (775)". It no longer uses Keepa, whose review counts stopped updating in April 2025.</td></tr>
               <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
@@ -1031,10 +1031,26 @@ function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; 
 // plain number, since this one metric genuinely needs two values together.
 function fmtGlobalReviews(v){
   if(!v || (v.rating==null && v.count==null)) return '–';
+  if(v.rating==null && v.count===0) return '0 reviews';
   const parts = [];
   if(v.rating!=null) parts.push(v.rating.toFixed(1)+' stars');
   if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
   return parts.join(' ') || '–';
+}
+// Global Reviews = the RUNNING TOTAL of every review recorded for the product up to that week, all marketplaces combined
+// (the weekly review uploads already roll each product's children, in every marketplace, into one product-level row).
+// The rating is the average of all those reviews, weighted by how many each week had. A week with no review upload carries the
+// previous total forward; weeks before the first upload stay empty. Computed here, so it needs no extra sync and no extra upload.
+function addRunningReviewTotals(weeks){
+  let count = 0, rated = 0, points = 0, started = false;
+  weeks.forEach(w=>{
+    if(w.newReviews != null){
+      started = true; count += w.newReviews;
+      if(w.ratingPoints != null){ points += w.ratingPoints; rated += w.newReviews; }
+    }
+    w.globalReviews = started ? { rating: rated ? +(points / rated).toFixed(1) : null, count } : null;
+  });
+  return weeks;
 }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
@@ -2244,7 +2260,8 @@ function miBuildPlan(rows, products, mappings){
   return plan;
 }
 /* MI-CORE-END */
-/* MI-GLUE-START — Mapping import (ASIN Mapping tab): file chooser, preview, apply */
+/* MI-GLUE-START — Mapping import (ASIN Mapping tab): file chooser, preview, apply.
+   This import only ever ADDS or UPDATES — it never deletes a mapping, whether or not the file mentions it. */
 let miState = null;   // { rows, fileProblems, saved:{products,mappings}, plan }
 
 async function miLoadSaved(){
@@ -2312,11 +2329,9 @@ function miRenderPreview(state, banner){
   }
   if(plan.warnings.length) h += `<p style="font-size:11.5px;color:#92400E;margin:10px 0 0;">⚠ ${plan.warnings.map(escapeHtml).join('<br>⚠ ')}</p>`;
   if(plan.stale.length){
-    h += `<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">${plan.stale.length} saved child row${plan.stale.length > 1 ? 's' : ''} of these parents ${plan.stale.length > 1 ? "aren't" : "isn't"} in the file — kept unless you tick the box</summary>
+    h += `<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">${plan.stale.length} saved child row${plan.stale.length > 1 ? 's' : ''} of these parents ${plan.stale.length > 1 ? "aren't" : "isn't"} in the file — left exactly as ${plan.stale.length > 1 ? 'they are' : 'it is'} (the import never removes anything)</summary>
       <ul style="font-size:11.5px;margin:6px 0 0 18px;padding:0;">` +
-      plan.stale.map(s => `<li>${escapeHtml(s.child_asin)} (${escapeHtml(s.marketplace || 'no marketplace')}) under ${escapeHtml(s.parent_asin)}</li>`).join('') + `</ul>
-      <label style="display:flex;gap:6px;align-items:center;font-size:11.5px;font-weight:400;color:var(--text-muted);margin-top:6px;cursor:pointer;">
-        <input type="checkbox" id="miRemoveStale"> Also remove ${plan.stale.length === 1 ? 'this row' : 'these ' + plan.stale.length + ' rows'}</label></details>`;
+      plan.stale.map(s => `<li>${escapeHtml(s.child_asin)} (${escapeHtml(s.marketplace || 'no marketplace')}) under ${escapeHtml(s.parent_asin)}</li>`).join('') + `</ul></details>`;
   }
   const problems = [...fileProblems, ...plan.problems];
   if(problems.length) h += `<details open style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--red);"><strong>${problems.length} row${problems.length > 1 ? 's' : ''} skipped</strong></summary>
@@ -2351,7 +2366,6 @@ async function miOnFileChosen(){
 async function miApply(){
   if(!miState || !miState.plan.counts.changes) return;
   const { plan, saved } = miState;
-  const removeStale = !!(document.getElementById('miRemoveStale') && document.getElementById('miRemoveStale').checked);
   const btn = document.getElementById('btnApplyMI'); btn.disabled = true;
   setStatus('statusMI', 'busy', 'Applying…');
   const done = []; let step = '';
@@ -2388,17 +2402,6 @@ async function miApply(){
       if(error) throw new Error(error.message);
     }
     if(recs.length) done.push(`${recs.length} child ASIN row${recs.length > 1 ? 's' : ''} saved`);
-    // 4) optional: saved rows of these parents that the file doesn't mention
-    if(removeStale){
-      for(const s of plan.stale){
-        step = 'Removing rows that are not in the file';
-        let q = sb.from('child_asin_mapping').delete().eq('child_asin', s.child_asin).eq('parent_asin', s.parent_asin);
-        q = s.marketplace == null ? q.is('marketplace', null) : q.eq('marketplace', s.marketplace);
-        const { error } = await q;
-        if(error) throw new Error(error.message);
-      }
-      done.push(`${plan.stale.length} row${plan.stale.length > 1 ? 's' : ''} removed`);
-    }
   }catch(err){
     // Show what is actually saved now, so the preview — and the next Apply — only cover what's still left to do.
     try{
@@ -2978,7 +2981,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
-  return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor, hasWeekZero };
+  return { weeks: addRunningReviewTotals(weeks.map(finalizeWeek)), anchor, autoAnchor, hasWeekZero };
 }
 async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   if(!product) return computeWeeksFromRows(null, [], []);
@@ -4074,7 +4077,7 @@ const METRICS = [
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
   {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true,
-    description:"All-time rating and review count for this listing, from Keepa — distinct from New Reviews above, which is just this week's new arrivals (SellerSprite). Amazon stopped providing review-count updates through Keepa as of April 2025, so this figure may be a frozen historical snapshot rather than the current live count."},
+    description:"Running total of all reviews recorded for this product up to that week, every marketplace combined, with their average rating (e.g. 4.4 stars (775)). Built from your weekly review uploads, so it counts the reviews those uploads captured — it can be lower than the live number on Amazon if earlier weeks were never uploaded."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -4117,6 +4120,7 @@ function weekDelta(vals, i, lowerIsBetter){
   if(i===0) return '';
   const cur = vals[i], prev = vals[i-1];
   if(cur==null || prev==null || prev===0) return '';
+  if(typeof cur !== 'number' || typeof prev !== 'number') return '';   // only plain numbers can be compared (e.g. not the Global Reviews rating+count pair)
   const pct = ((cur-prev)/Math.abs(prev))*100;
   if(Math.abs(pct) < 0.05) return `<div style="font-size:7.5px;color:var(--text-muted);margin-top:3px;">▬ 0%</div>`;
   const isGood = lowerIsBetter ? pct<0 : pct>0;
@@ -4493,7 +4497,8 @@ function renderTagAnalysisTable(p, perProduct){
     </tr>`;
   });
   html += '</tbody>';
-  document.getElementById(p+'AnalysisTable').innerHTML = html;
+  const tableEl = document.getElementById(p+'AnalysisTable');
+  if(tableEl) tableEl.innerHTML = html;   // the per-product breakdown table was removed from the page; the data above is still kept for the charts
 }
 
 function renderChildSkus(childRows, parentAnchor){
