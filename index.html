@@ -904,7 +904,7 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
-              <tr><td>Global Reviews</td><td>Your weekly SellerSprite review uploads — every review recorded for the product, all marketplaces combined</td><td><em>No total shown</em> — each week shows the running total up to that week</td><td>The count is the sum of New Reviews (the row above) from the first week with review data up to that week, so it grows over time; the rating is the average of those reviews, weighted by how many each week had. A week without an upload carries the previous total forward; weeks before the first upload are blank. It counts what your uploads captured, so it can be lower than the number shown on Amazon if earlier weeks were never uploaded. Displayed as e.g. "4.4 stars (775)". It no longer uses Keepa, whose review counts stopped updating in April 2025.</td></tr>
+              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 stars (790)"; a week before Keepa has any data stays blank. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
               <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
@@ -1031,26 +1031,10 @@ function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; 
 // plain number, since this one metric genuinely needs two values together.
 function fmtGlobalReviews(v){
   if(!v || (v.rating==null && v.count==null)) return '–';
-  if(v.rating==null && v.count===0) return '0 reviews';
   const parts = [];
   if(v.rating!=null) parts.push(v.rating.toFixed(1)+' stars');
   if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
   return parts.join(' ') || '–';
-}
-// Global Reviews = the RUNNING TOTAL of every review recorded for the product up to that week, all marketplaces combined
-// (the weekly review uploads already roll each product's children, in every marketplace, into one product-level row).
-// The rating is the average of all those reviews, weighted by how many each week had. A week with no review upload carries the
-// previous total forward; weeks before the first upload stay empty. Computed here, so it needs no extra sync and no extra upload.
-function addRunningReviewTotals(weeks){
-  let count = 0, rated = 0, points = 0, started = false;
-  weeks.forEach(w=>{
-    if(w.newReviews != null){
-      started = true; count += w.newReviews;
-      if(w.ratingPoints != null){ points += w.ratingPoints; rated += w.newReviews; }
-    }
-    w.globalReviews = started ? { rating: rated ? +(points / rated).toFixed(1) : null, count } : null;
-  });
-  return weeks;
 }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
@@ -2981,7 +2965,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(w.bsr===null && r.bsr) w.bsr = r.bsr;
   });
 
-  return { weeks: addRunningReviewTotals(weeks.map(finalizeWeek)), anchor, autoAnchor, hasWeekZero };
+  return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor, hasWeekZero };
 }
 async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   if(!product) return computeWeeksFromRows(null, [], []);
@@ -4077,7 +4061,7 @@ const METRICS = [
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
   {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true,
-    description:"Running total of all reviews recorded for this product up to that week, every marketplace combined, with their average rating (e.g. 4.4 stars (775)). Built from your weekly review uploads, so it counts the reviews those uploads captured — it can be lower than the live number on Amazon if earlier weeks were never uploaded."},
+    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 stars (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -4747,7 +4731,7 @@ async function loadKpSyncStatus(){
   el.style.background = data.success ? '#F0FDF4' : '#FEF2F2';
   el.style.color = data.success ? '#166534' : '#991B1B';
   el.style.border = `1px solid ${data.success ? '#BBF7D0' : '#FECACA'}`;
-  el.innerHTML = `<strong>Last automated Keepa BSR sync</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
+  el.innerHTML = `<strong>Last automated Keepa sync (BSR + ratings)</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
 }
 async function forceKeepaSync(){
   const btn = document.getElementById('btnForceKpSync');
@@ -4772,7 +4756,11 @@ async function forceKeepaSync(){
     } else {
       const unsupported = (data.unsupportedMarketplace||[]).length;
       const unsupportedLine = unsupported ? `\n\n⚠ ${unsupported} child ASIN(s) skipped — Keepa doesn't track their marketplace (NL/SE/PL/BE).` : '';
-      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (queried ${data.asinsQueried||0} child ASINs, ${data.asinsMatched||0} had a usable BSR this week).${unsupportedLine}`);
+      const rt = data.ratings;
+      const ratingsLine = rt ? `\n\nRatings: Keepa had data for ${rt.productsWithData} of ${rt.productsChecked} products (${rt.weeksWritten} weeks saved).` +
+        ((rt.noData||[]).length ? `\n⚠ No Keepa rating data for: ${rt.noData.join(', ')}` : '') +
+        ((rt.noChildAsin||[]).length ? `\n⚠ No child ASIN in a Keepa-supported marketplace for: ${rt.noChildAsin.join(', ')}` : '') : '';
+      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (queried ${data.asinsQueried||0} child ASINs, ${data.asinsMatched||0} had a usable BSR this week).${ratingsLine}${unsupportedLine}`);
     }
   }catch(err){
     alert('Could not reach the sync function: ' + err.message);
