@@ -733,7 +733,8 @@
             <div class="upload-box" id="dropRV">
               <label for="fileRV"><span class="step-badge">2</span>Choose Reviews XLSX/CSV(s)</label>
               <input type="file" id="fileRV" accept=".xlsx,.xls,.csv" multiple>
-              <div class="hint">For each file, choose the <strong>weeks</strong> you want updated from it — one date, a from–to range, or a quick pick like "Last 4 weeks". Any date inside a week counts (it is moved to that week's Monday), and each week uses only the reviews dated inside its own Monday–Sunday. The same file can fill as many weeks as you like. Rows with no ASIN filled in are skipped (not attributed to any product). Counts new reviews and averages the rating per week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s). The Marketplace field is pre-filled from the filename when possible — check it's correct if this ASIN is shared across marketplaces pointing to different parents.</div>
+              <div class="hint">For each file, choose the <strong>weeks</strong> you want updated from it, then click Upload.
+                <details style="margin-top:6px;text-align:left;"><summary style="cursor:pointer;text-align:center;">More details</summary><div style="margin-top:6px;">One date, a from–to range, or a quick pick like "Last 4 weeks". Any date inside a week counts (it is moved to that week's Monday), and each week uses only the reviews dated inside its own Monday–Sunday. The same file can fill as many weeks as you like. Rows with no ASIN filled in are skipped (not attributed to any product). Counts new reviews and averages the rating per week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s). The Marketplace field is pre-filled from the filename when possible — check it's correct if this ASIN is shared across marketplaces pointing to different parents.</div></details></div>
               <div id="rvFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadRV" style="display:none;" onclick="confirmUploadRV()">Upload</button></div>
               <div class="status-line" id="statusRV"></div>
@@ -1957,6 +1958,7 @@ function rvAddWeeks(i, isoList){
   rvWeeksByFile.set(file, [...set].sort());
   renderRvFileList();
 }
+function rvToggleRange(i){ const el = document.getElementById('rvRange'+i); if(el) el.style.display = el.style.display === 'none' ? 'flex' : 'none'; }
 function rvAddOne(i){ const v = document.getElementById('rvAddDate'+i).value; if(v) rvAddWeeks(i, [v]); }
 function rvAddRange(i){
   const from = document.getElementById('rvFrom'+i).value, to = document.getElementById('rvTo'+i).value;
@@ -1988,19 +1990,23 @@ function renderRvFileList(){
         <button class="btn btn-sm" onclick="removeRvFile(${i})" style="padding:1px 7px;" title="Remove this file">✕</button>
         <span id="rvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--text-muted);">
-        <span>Weeks to update:</span>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;color:var(--text-muted);">
+        <span style="font-weight:600;">Weeks to update:</span>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},1)" style="padding:1px 9px;">Last week</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},4)" style="padding:1px 9px;">Last 4</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},8)" style="padding:1px 9px;">Last 8</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},12)" style="padding:1px 9px;">Last 12</button>
+        ${weeks.length ? `<button class="btn btn-sm" onclick="rvClearWeeks(${i})" style="padding:1px 9px;">Clear</button>` : ''}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--text-muted);">
+        <span>or pick a date:</span>
         <input type="date" id="rvAddDate${i}" style="${small}" title="Any date in the week — it is moved to that week's Monday">
-        <button class="btn btn-sm" onclick="rvAddOne(${i})" style="padding:1px 8px;">Add week</button>
-        <span>·</span><span>range</span>
-        <input type="date" id="rvFrom${i}" style="${small}" title="First week of the range"><span>→</span><input type="date" id="rvTo${i}" style="${small}" title="Last week of the range">
-        <button class="btn btn-sm" onclick="rvAddRange(${i})" style="padding:1px 8px;">Add range</button>
-        <span>·</span>
-        <button class="btn btn-sm" onclick="rvAddLast(${i},1)" style="padding:1px 7px;">Last week</button>
-        <button class="btn btn-sm" onclick="rvAddLast(${i},4)" style="padding:1px 7px;">Last 4</button>
-        <button class="btn btn-sm" onclick="rvAddLast(${i},8)" style="padding:1px 7px;">Last 8</button>
-        <button class="btn btn-sm" onclick="rvAddLast(${i},12)" style="padding:1px 7px;">Last 12</button>
-        ${weeks.length ? `<button class="btn btn-sm" onclick="rvClearWeeks(${i})" style="padding:1px 7px;">Clear</button>` : ''}
+        <button class="btn btn-sm" onclick="rvAddOne(${i})" style="padding:1px 9px;">Add week</button>
+        <a href="#" onclick="rvToggleRange(${i}); return false;" style="margin-left:8px;color:var(--gold-dark);font-weight:600;">Add a range…</a>
+      </div>
+      <div id="rvRange${i}" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--text-muted);">
+        <span>every week from</span><input type="date" id="rvFrom${i}" style="${small}" title="First week of the range"><span>to</span><input type="date" id="rvTo${i}" style="${small}" title="Last week of the range">
+        <button class="btn btn-sm" onclick="rvAddRange(${i})" style="padding:1px 9px;">Add range</button>
       </div>
       <div id="rvChips${i}" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center;">${chips}${weeks.length ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">${weeks.length} week${weeks.length > 1 ? 's' : ''}</span>` : ''}</div>
     </div>`;
