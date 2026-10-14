@@ -156,7 +156,7 @@
      position:fixed, so it always escapes that clipping and is always fully
      visible on hover, regardless of scroll position. */
   .global-note-tooltip{display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(15,23,42,0.22);font-size:12.5px;line-height:1.5;white-space:normal;min-width:220px;max-width:320px;color:var(--text-dark);text-align:left;}
-  .global-note-tooltip-text{user-select:text;}
+  .global-note-tooltip-text{user-select:text;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;max-height:55vh;overflow-y:auto;}   /* pre-wrap = show the note exactly as it was typed (line breaks, blank lines, indentation) */
   .global-note-tooltip-copy{display:block;margin-top:8px;font-size:11px;padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:#F8FAFC;color:var(--text-muted);cursor:pointer;}
   .global-note-tooltip-copy:hover{background:#F1F5F9;color:var(--text-dark);}
   .modal-overlay{display:none;position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.5);align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;}
@@ -3586,7 +3586,7 @@ function renderTagDashboard(tag){
     ohtml += `<tr><td style="font-weight:700;">Notes</td>`;
     sortedCalWeeks.forEach(wk=>{
       const existing = portfolioNotesMap[wk] || '';
-      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
+      const preview = existing ? notePreviewText(existing) : '+ Note';
       ohtml += `<td style="background:#fff;cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openPortfolioNoteModal('${p}','${wk}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
       </td>`;
@@ -4244,7 +4244,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
       if(!wd){ html += `<td style="background:${bg};">–</td>`; return; }
       const existing = (notesMap && notesMap[wd]) ? notesMap[wd] : '';
-      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Note';
+      const preview = existing ? notePreviewText(existing) : '+ Note';
       html += `<td style="background:${bg};cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openNoteModal('${asin}','${wd}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
       </td>`;
@@ -4258,7 +4258,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
       if(!wd){ html += `<td style="background:${bg};">–</td>`; return; }
       const existing = priceNotesMap[wd] ? priceNotesMap[wd] : '';
-      const preview = existing ? (existing.length>13 ? existing.slice(0,13)+'…' : existing) : '+ Price note';
+      const preview = existing ? notePreviewText(existing) : '+ Price note';
       html += `<td style="background:${bg};cursor:pointer;position:relative;" class="note-cell" data-note="${escapeHtml(existing)}" onclick="openPriceNoteModal('${asin}','${wd}',this)">
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
       </td>`;
@@ -4270,7 +4270,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
 }
 async function saveWeekNote(asin, week, note){
   if(note && note.trim()){
-    await sb.from('week_notes').upsert({ asin, week, note: note.trim() }, { onConflict: 'asin,week' });
+    await sb.from('week_notes').upsert({ asin, week, note }, { onConflict: 'asin,week' });
   } else {
     await sb.from('week_notes').delete().eq('asin', asin).eq('week', week);
   }
@@ -4279,6 +4279,12 @@ function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 let noteModalCell = null, noteModalAsin = null, noteModalWeek = null, noteModalMode = 'product', noteModalTag = null;
+// The short preview shown inside a Notes cell: whitespace collapsed to single spaces and cut at 13 characters. It is only a label — the stored note and the
+// hover tooltip keep the text exactly as it was typed.
+function notePreviewText(text){
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  return t.length > 13 ? t.slice(0, 13) + '…' : t;
+}
 function openNoteModal(asin, week, cellEl){
   noteModalMode = 'product';
   noteModalCell = cellEl; noteModalAsin = asin; noteModalWeek = week;
@@ -4321,23 +4327,23 @@ async function saveNoteModal(){
   else if(noteModalMode === 'price') await savePriceNote(noteModalAsin, noteModalWeek, text);
   else await saveWeekNote(noteModalAsin, noteModalWeek, text);
   btn.disabled = false;
-  const trimmed = text.trim();
-  noteModalCell.dataset.note = trimmed;
+  const hasText = !!text.trim();                       // a note that is only spaces / blank lines counts as empty
+  noteModalCell.dataset.note = hasText ? text : '';     // ...otherwise it is kept exactly as typed
   const preview = noteModalCell.querySelector('div');
-  preview.textContent = trimmed ? (trimmed.length>13 ? trimmed.slice(0,13)+'…' : trimmed) : (noteModalMode === 'price' ? '+ Price note' : '+ Note');
-  preview.style.color = trimmed ? 'var(--text-dark)' : 'var(--text-muted)';
+  preview.textContent = hasText ? notePreviewText(text) : (noteModalMode === 'price' ? '+ Price note' : '+ Note');
+  preview.style.color = hasText ? 'var(--text-dark)' : 'var(--text-muted)';
   closeNoteModal();
 }
 async function savePriceNote(asin, week, note){
   if(note && note.trim()){
-    await sb.from('price_notes').upsert({ asin, week, note: note.trim() }, { onConflict: 'asin,week' });
+    await sb.from('price_notes').upsert({ asin, week, note }, { onConflict: 'asin,week' });
   } else {
     await sb.from('price_notes').delete().eq('asin', asin).eq('week', week);
   }
 }
 async function savePortfolioWeekNote(tag, week, note){
   if(note && note.trim()){
-    await sb.from('portfolio_notes').upsert({ tag, week, note: note.trim() }, { onConflict: 'tag,week' });
+    await sb.from('portfolio_notes').upsert({ tag, week, note }, { onConflict: 'tag,week' });
   } else {
     await sb.from('portfolio_notes').delete().eq('tag', tag).eq('week', week);
   }
