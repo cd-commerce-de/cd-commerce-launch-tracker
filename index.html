@@ -909,7 +909,7 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
-              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 stars (790)"; a week before Keepa has any data stays blank. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
+              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 stars (790)"; a week before Keepa has any data stays blank. Each week shows the value as of the END of that week, so it will not match today's live number — the newest value is shown in the product panel as <strong>Amazon Rating</strong>, dated by when Keepa last refreshed it. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
               <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
@@ -3354,7 +3354,15 @@ function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
     {label:'Date Launched', value: dateLaunchedStr},
     {label:'Age (Days)', value: ageDays!=null ? ageDays : '–'},
     {label:'Age (Weeks)', value: ageWeeks!=null ? ageWeeks : '–'},
+    ...(product.amazon_rating_count != null ? [{ label:'Amazon Rating', value: amazonRatingText(product) }] : []),
   ];
+}
+// The newest rating + count the Keepa sync saved on the product, e.g. "4.4 stars (790)", with the date Keepa itself last refreshed it — so a number that
+// lags the live listing is visible. (The Global Reviews row in the scorecard holds the value as of the END of each completed week instead.)
+function amazonRatingText(product){
+  const r = product.amazon_rating != null ? Number(product.amazon_rating).toFixed(1) + ' stars ' : '';
+  const d = product.amazon_rating_as_of ? new Date(product.amazon_rating_as_of + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
+  return `${r}(${Number(product.amazon_rating_count).toLocaleString('en-US')})` + (d ? ` <span style="font-weight:400;font-size:10.5px;color:var(--text-muted);">Keepa, ${d}</span>` : '');
 }
 function renderTagDashboard(tag){
   const cache = tagDashboardCache[tag];
@@ -4064,7 +4072,7 @@ const METRICS = [
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
   {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true,
-    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 stars (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history."},
+    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 stars (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -4807,7 +4815,19 @@ async function forceKeepaSync(){
       const ratingsLine = rt ? `\n\nRatings: Keepa had data for ${rt.productsWithData} of ${rt.productsChecked} products (${rt.weeksWritten} weeks saved).` +
         ((rt.noData||[]).length ? `\n⚠ No Keepa rating data for: ${rt.noData.join(', ')}` : '') +
         ((rt.noChildAsin||[]).length ? `\n⚠ No child ASIN in a Keepa-supported marketplace for: ${rt.noChildAsin.join(', ')}` : '') : '';
-      alert(`Sync succeeded — BSR saved for ${data.parentsUpdated||0} product${(data.parentsUpdated||0)===1?'':'s'}, ${data.bsrWeeksWritten||0} week${(data.bsrWeeksWritten||0)===1?'':'s'} in total, up to the week of ${data.week||'?'} (queried ${data.asinsQueried||0} child ASINs, ${data.asinsMatched||0} had a usable BSR).${ratingsLine}${unsupportedLine}`);
+      // What Keepa actually returned per product: the NEWEST value, next to the value saved for the last completed week (the scorecard column),
+      // which child it came from, and when Keepa last refreshed it. A gap between these and the live listing is Keepa lag, not a bug in the tool.
+      let latestLines = '';
+      if(rt && (rt.details||[]).length){
+        const names = {};
+        try{ const { data: prods } = await sb.from('products').select('*'); (prods||[]).forEach(pr=>{ names[pr.asin] = productDisplayName(pr); }); }catch(_e){}
+        const fd = iso => iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
+        const fv = (r, c) => c == null ? '–' : (r != null ? r.toFixed(1) + '★ ' : '') + '(' + Number(c).toLocaleString('en-US') + ')';
+        const rows = rt.details.map(d => `• ${names[d.asin]||d.asin}: newest ${fv(d.latestRating, d.latestCount)} — Keepa refreshed ${fd(d.keepaUpdated)||'(date unknown)'}, count last changed ${fd(d.lastPointDate)||'–'}${d.latestChild?`, via ${d.latestChild}`:''} · week ${d.latestWeek||'?'} column: ${fv(d.rating, d.count)}`);
+        latestLines = '\n\nLatest values Keepa returned:\n' + rows.slice(0, 25).join('\n') + (rows.length > 25 ? `\n…and ${rows.length - 25} more` : '');
+      }
+      if(rt && rt.latestError) latestLines += `\n\n⚠ The newest rating could not be saved on the products (${rt.latestError}) — run add_latest_rating_columns.sql.`;
+      alert(`Sync succeeded — BSR saved for ${data.parentsUpdated||0} product${(data.parentsUpdated||0)===1?'':'s'}, ${data.bsrWeeksWritten||0} week${(data.bsrWeeksWritten||0)===1?'':'s'} in total, up to the week of ${data.week||'?'} (queried ${data.asinsQueried||0} child ASINs, ${data.asinsMatched||0} had a usable BSR).${ratingsLine}${latestLines}${unsupportedLine}`);
     }
   }catch(err){
     alert('Could not reach the sync function: ' + err.message);
