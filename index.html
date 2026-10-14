@@ -70,6 +70,14 @@
   .filter-bar{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;}
   .filter-field label{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
 
+  /* Launch switcher (Product Detail / Actual vs. Target): one pill per launch of a relaunched product */
+  .launch-pill{border:1px solid var(--border);background:#fff;border-radius:999px;padding:3px 12px;font:inherit;font-size:12px;cursor:pointer;color:var(--text-dark);margin-right:6px;}
+  .launch-pill:hover{background:#F8FAFC;}
+  .launch-pill.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600;}
+  #compareLaunchesTable{table-layout:fixed;}
+  #compareLaunchesTable th:first-child,#compareLaunchesTable td:first-child{width:215px;}
+  #compareLaunchesTable th:last-child,#compareLaunchesTable td:last-child{width:88px;}
+  .launch-row input{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;}
   /* Actual vs. Target "Products" picker (tick several products) */
   .ms-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:230px;max-width:340px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font:inherit;font-size:13px;cursor:pointer;text-align:left;color:var(--text-dark);}
   .ms-btn #tseProductBtnText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -283,6 +291,12 @@
       </div>
     </div>
     <div style="margin-top:18px;">
+      <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Relaunches</label>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">The Launch Date above is the <strong>original</strong> launch. Add each relaunch with its own date — the newest one becomes the product's current launch (what the dashboards count from), and Product Detail lets you switch between launches.</div>
+      <div id="apLaunchRows"></div>
+      <button type="button" class="btn btn-sm" onclick="addLaunchRow()">+ Add relaunch</button>
+    </div>
+    <div style="margin-top:18px;">
       <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:6px;">Child ASIN(s)</label>
       <div id="apChildRows"></div>
       <button type="button" class="btn btn-sm" onclick="addChildAsinRow()">+ Add another child ASIN</button>
@@ -471,6 +485,7 @@
             <h3 id="productInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
             <div style="font-size:12.5px;color:var(--text-muted);" id="productInfoAsinLine"></div>
             <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="productInfoLaunchLine"></div>
+          <div id="productInfoLaunchSwitch" style="display:none;margin-top:8px;"></div>
             <div style="font-size:12.5px;margin-top:6px;" id="productInfoAmazonLink"></div>
           </div>
           <div class="filter-bar" style="margin:0 0 0 auto;">
@@ -496,6 +511,14 @@
             <div style="width:70px;height:10px;border-radius:4px;background:linear-gradient(90deg,#fff,#D97757);border:1px solid var(--border);"></div>
             <span>Shaded cells compare that row's own weeks to each other — darkest is that row's highest value, white is its lowest. It's a within-row scale, not a good/bad signal.</span>
           </div>
+        </div>
+
+        <div class="panel" id="compareLaunchesPanel" style="display:none;">
+          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">Compare launches
+            <select id="cmpMetric" onchange="cmpChangeMetric()" style="font-size:12px;"></select></h3>
+          <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 10px;">Every launch is lined up by its own week number — Week 1 of the relaunch against Week 1 of the original, and so on. A partial Week 0 is left out so the comparison stays like for like.</p>
+          <div class="chart-box"><canvas id="chartCompare"></canvas></div>
+          <div class="table-wrap" style="margin-top:10px;"><table class="stretch-table" id="compareLaunchesTable"></table></div>
         </div>
 
         <div class="panel">
@@ -559,6 +582,7 @@
             <h3 id="tseInfoName" style="margin:0 0 4px;display:flex;align-items:center;"></h3>
             <div style="font-size:12.5px;color:var(--text-muted);" id="tseInfoAsinLine"></div>
             <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;" id="tseInfoLaunchLine"></div>
+          <div id="tseInfoLaunchSwitch" style="display:none;margin-top:8px;"></div>
             <div style="font-size:12.5px;margin-top:6px;" id="tseInfoAmazonLink"></div>
           </div>
           <div class="filter-bar" style="margin:0 0 0 auto;">
@@ -1281,12 +1305,13 @@ function downloadTemplate(kind){
 async function exportBackup(){
   const { data: products } = await sb.from('products').select('*');
   const allAsins = (products||[]).map(p=>p.asin);
-  const [sellerboard, sellerfox, { data: targets }] = await Promise.all([
+  const [sellerboard, sellerfox, { data: targets }, { data: product_launches }] = await Promise.all([
     fetchAllRows('sellerboard_rows', allAsins),
     fetchAllRows('sellerfox_rows', allAsins),
     sb.from('targets').select('*'),
+    sb.from('product_launches').select('*'),        // every launch of a relaunched product (empty if that table isn't created yet)
   ]);
-  downloadBlob(JSON.stringify({ products, sellerboard, sellerfox, targets }, null, 2), 'launch_tracker_backup.json', 'application/json');
+  downloadBlob(JSON.stringify({ products, sellerboard, sellerfox, targets, product_launches: product_launches || [] }, null, 2), 'launch_tracker_backup.json', 'application/json');
 }
 
 function setStatus(id, kind, msg){
@@ -2081,6 +2106,7 @@ document.getElementById('fileBackup').addEventListener('change', async e=>{
     if(json.sellerboard?.length) await sb.from('sellerboard_rows').upsert(json.sellerboard, { onConflict: 'asin,week' });
     if(json.sellerfox?.length) await sb.from('sellerfox_rows').upsert(json.sellerfox, { onConflict: 'asin,week' });
     if(json.targets?.length) await sb.from('targets').upsert(json.targets, { onConflict: 'asin' });
+    if(json.product_launches?.length) await sb.from('product_launches').upsert(json.product_launches, { onConflict: 'asin,launch_date' });
     alert('Backup restored.'); await refreshAllViews();
   }catch(err){ alert('Invalid backup file: ' + err.message); }
 });
@@ -2100,6 +2126,73 @@ async function fetchProducts(){
   const { data, error } = await sb.from('products').select('*').order('name');
   if(error){ console.error(error); return []; }
   return data;
+}
+
+/* ---------- Launches: a product can be RELAUNCHED ----------
+   product_launches holds every launch of a product (the original, then each relaunch); products.launch is always the CURRENT (newest) one, which the dashboards
+   count from. Weekly data is stored per product + week, so nothing is duplicated — a launch only decides where Week 0/1 starts and where a view stops.
+   If the table doesn't exist yet, or a product has no rows, it simply has ONE launch: products.launch. */
+let launchTableMissing = false;
+async function fetchLaunchMap(){
+  const { data, error } = await sb.from('product_launches').select('*').order('launch_date');
+  if(error){ launchTableMissing = true; return {}; }
+  launchTableMissing = false;
+  const map = {};
+  (data || []).forEach(r => { (map[r.asin] = map[r.asin] || []).push({ date: String(r.launch_date).slice(0, 10), label: r.label || 'Relaunch' }); });
+  return map;
+}
+function launchesOf(product, map){
+  const list = ((map && map[product.asin]) || []).map(x => ({ ...x }));
+  const cur = product.launch ? String(product.launch).slice(0, 10) : null;
+  if(cur && !list.some(x => x.date === cur)) list.push({ date: cur, label: list.length ? 'Relaunch' : 'Original' });    // products.launch is always the current launch
+  return list.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+}
+// What a launch-aware view is showing. One launch -> nothing special. Several -> either ONE launch (numbered from its own Week 0/1, and, if a later launch
+// exists, stopping the week before it) or ALL TIME. The newest launch is the default.
+function resolveLaunchView(launches, selection){
+  if(launches.length < 2) return { mode: 'single' };
+  if(selection === 'all') return { mode: 'all', launches };
+  let idx = launches.findIndex(l => l.date === selection);
+  if(idx < 0) idx = launches.length - 1;
+  const next = launches[idx + 1];
+  return { mode: 'launch', index: idx, launch: launches[idx], launches, isLatest: !next, endBefore: next ? mondayOf(next.date) : null };
+}
+function viewProductFor(product, view){
+  if(view.mode === 'launch') return { ...product, launch: view.launch.date };
+  if(view.mode === 'all') return { ...product, launch: view.launches[0].date };
+  return product;
+}
+function launchFmt(iso){ return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); }
+function isoPlusDays(iso, n){ const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+// For a week (its Monday) in an ALL-TIME view: which launch it belongs to and its week number within that launch, by the same rule as a single launch
+// (a launch that isn't on a Monday gets a partial Week 0, the following Monday is Week 1).
+function launchOfWeek(iso, launches){
+  let idx = 0;
+  launches.forEach((l, i) => { if(mondayOf(l.date) <= iso) idx = i; });
+  const L = launches[idx], a = mondayOf(L.date), zero = a !== L.date;
+  const diff = Math.round((new Date(iso + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 604800000);
+  return { index: idx, launch: L, n: diff + (zero ? 0 : 1), first: iso === a };
+}
+const pdLaunchSel = {};       // asin -> launch date | 'all'  (Product Detail's choice; defaults to the newest launch)
+function pdPickLaunch(asin, key){ pdLaunchSel[asin] = key; loadDashboard(); }
+function renderLaunchSwitch(containerId, view, pickFn, asin, includeAll){
+  const el = document.getElementById(containerId); if(!el) return;
+  if(view.mode === 'single'){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const btn = (key, text, active) => `<button type="button" class="launch-pill${active ? ' active' : ''}" data-launch="${key}" aria-pressed="${active}" onclick="${pickFn}('${asin}','${key}')">${text}</button>`;
+  el.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase;margin-right:8px;">Launch</span>` +
+    view.launches.map(l => btn(l.date, `${escapeHtml(l.label)} · ${launchFmt(l.date)}`, view.mode === 'launch' && view.launch.date === l.date)).join('') +
+    (includeAll ? btn('all', 'All time', view.mode === 'all') : '');
+  el.style.display = 'block';
+}
+// Text labels for the weeks (charts): "Wk 3" normally; in All time, per launch: "Original Wk 12", "Relaunch Wk 0".
+function pdWeekLabels(weeks, anchor, hasWeekZero, view){
+  return weeks.map((_, i) => {
+    if(view && view.mode === 'all' && anchor){
+      const w = launchOfWeek(isoPlusDays(anchor, 7 * i), view.launches);
+      return `${w.launch.label.split(/\s+/)[0].slice(0, 5)} Wk ${w.n}`;
+    }
+    return hasWeekZero ? (i === 0 ? 'Wk 0' : 'Wk ' + i) : 'Wk ' + (i + 1);
+  });
 }
 
 // Supabase caps a single request at 1000 rows by default — for tables that
@@ -2123,6 +2216,7 @@ async function fetchAllRows(table, values, column='asin'){
 
 async function renderProductsTable(){
   const products = await fetchProducts();
+  const launchMap = await fetchLaunchMap();
   const body = document.getElementById('productsBody'); body.innerHTML = '';
   products.forEach((p)=>{
     const tr = document.createElement('tr');
@@ -2147,7 +2241,7 @@ async function renderProductsTable(){
         ${BRAND_OPTIONS.map(b=>`<option value="${escapeHtml(b)}" ${p.brand===b?'selected':''}>${escapeHtml(b)}</option>`).join('')}
       </select></td>
       <td><input value="${p.marketplace||''}" onchange="updateProduct('${p.asin}','marketplace',this.value)"></td>
-      <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)"></td>
+      <td><input type="date" value="${p.launch||''}" onchange="updateProduct('${p.asin}','launch',this.value)">${(() => { const ls = launchesOf(p, launchMap); return ls.length > 1 ? `<div class="relaunch-note" style="font-size:10px;color:#B45309;margin-top:2px;white-space:nowrap;" title="Current launch shown. Original: ${launchFmt(ls[0].date)}">relaunched ×${ls.length - 1} · original ${launchFmt(ls[0].date)}</div>` : ''; })()}</td>
       <td><input value="${p.product_line_code||''}" onchange="updateProduct('${p.asin}','product_line_code',this.value)" style="width:90px;"></td>
       <td><input value="${p.product_line||''}" onchange="updateProduct('${p.asin}','product_line',this.value)" style="width:120px;"></td>
       <td style="position:relative;">
@@ -2189,12 +2283,25 @@ async function addProductRow(){
   await renderProductsTable(); await refreshAllViews();
 }
 async function updateProduct(asin, field, val){
+  if(field === 'launch'){
+    // products.launch is the CURRENT launch, so correcting it here must move the newest launch record as well — otherwise the fix would look like one more launch.
+    const { data: recs, error: lErr } = await sb.from('product_launches').select('*').eq('asin', asin);
+    if(!lErr && recs && recs.length){
+      const newest = [...recs].sort((a, b) => String(a.launch_date) < String(b.launch_date) ? -1 : 1).pop();
+      const newDate = (val == null || val === '') ? null : val;
+      if(newDate && String(newest.launch_date).slice(0, 10) !== newDate){
+        await sb.from('product_launches').delete().eq('asin', asin).eq('launch_date', newest.launch_date);
+        await sb.from('product_launches').insert({ asin, launch_date: newDate, label: newest.label });
+      }
+    }
+  }
   await sb.from('products').update({ [field]: (val==null || val==='') ? null : val }).eq('asin', asin);
   if(field === 'marketplace') marketplacesCache = null;
   await refreshAllViews();
 }
 async function removeProduct(asin){
   await sb.from('products').delete().eq('asin', asin);
+  await sb.from('product_launches').delete().eq('asin', asin);      // its launch history goes with it (an error just means the table isn't created)
   await renderProductsTable(); await refreshAllViews();
 }
 
@@ -2646,6 +2753,16 @@ function fillChildAsinRow(container, prefill){
     <button type="button" class="btn btn-sm" onclick="document.getElementById('${id}').remove()" title="Remove this row">✕</button>`;
   container.appendChild(row);
 }
+function addLaunchRow(prefill){
+  const row = document.createElement('div');
+  row.className = 'launch-row';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center;';
+  row.innerHTML = `<input type="date" class="ap-launch-date" style="flex:0 0 165px;" title="Relaunch date">
+    <input class="ap-launch-label" placeholder="Label (e.g. Relaunch)" style="flex:1;">
+    <button type="button" class="btn btn-sm" title="Remove this relaunch" onclick="this.closest('.launch-row').remove()">✕</button>`;
+  if(prefill){ row.querySelector('.ap-launch-date').value = prefill.date || ''; row.querySelector('.ap-launch-label').value = prefill.label || ''; }
+  document.getElementById('apLaunchRows').appendChild(row);
+}
 async function openAddProductModal(tag, mode, sourceAsin){
   mode = mode || 'new';
   addProductMode = mode;
@@ -2663,6 +2780,7 @@ async function openAddProductModal(tag, mode, sourceAsin){
   const asinInput = document.getElementById('apAsin');
   document.getElementById('apChildRows').innerHTML = '';
   childAsinRowCounter = 0;
+  document.getElementById('apLaunchRows').innerHTML = '';
 
   if(mode === 'edit' || mode === 'duplicate'){
     const [{ data: source }, { data: existingChildren }] = await Promise.all([
@@ -2686,7 +2804,10 @@ async function openAddProductModal(tag, mode, sourceAsin){
       asinInput.disabled = true;
       asinInput.title = 'The Parent ASIN can\'t be changed here — delete and re-add the product to change it.';
       document.getElementById('apMarketplace').value = source.marketplace || '';
-      document.getElementById('apLaunch').value = source.launch || '';
+      // The Launch Date field is the ORIGINAL launch; every later launch is a relaunch row (products.launch itself is the newest).
+      const ls = launchesOf(source, await fetchLaunchMap());
+      document.getElementById('apLaunch').value = ls.length ? ls[0].date : (source.launch || '');
+      ls.slice(1).forEach(l => addLaunchRow({ date: l.date, label: l.label }));
       (existingChildren||[]).forEach(c=>fillChildAsinRow(document.getElementById('apChildRows'), { asin: c.child_asin, marketplace: c.marketplace, sku: c.sku }));
     } else {
       // Duplicate: name/tag/brand/product line carry over since a new
@@ -2753,6 +2874,23 @@ async function submitAddProduct(){
     setStatus('statusAddProduct', 'err', 'Every child ASIN row needs both an ASIN and a Marketplace.');
     return;
   }
+
+  // Launches: the Launch Date field is the original; each relaunch row is a later launch.
+  const originalLaunch = document.getElementById('apLaunch').value || null;
+  const relaunchRows = [...document.querySelectorAll('#apLaunchRows .launch-row')].map(r => ({
+    date: r.querySelector('.ap-launch-date').value, label: r.querySelector('.ap-launch-label').value.trim(),
+  })).filter(r => r.date || r.label);
+  if(relaunchRows.length){
+    if(!originalLaunch){ setStatus('statusAddProduct', 'err', 'Set the original Launch Date above before adding a relaunch.'); return; }
+    if(relaunchRows.some(r => !r.date)){ setStatus('statusAddProduct', 'err', 'Every relaunch needs a date.'); return; }
+    if(relaunchRows.some(r => r.date <= originalLaunch)){ setStatus('statusAddProduct', 'err', 'A relaunch must be dated after the original launch.'); return; }
+    if(new Set(relaunchRows.map(r => r.date)).size !== relaunchRows.length){ setStatus('statusAddProduct', 'err', 'Two relaunches have the same date.'); return; }
+    // the history lives in its own table: check it exists BEFORE anything is written, so a missing table can never leave a half-saved product
+    const { error: tableErr } = await sb.from('product_launches').select('asin').limit(1);
+    if(tableErr){ setStatus('statusAddProduct', 'err', 'Relaunches need the product_launches table — run add_product_launches_table.sql in Supabase (SQL Editor), then save again. Nothing was saved.'); return; }
+  }
+  const launchList = originalLaunch ? [{ date: originalLaunch, label: 'Original' },
+    ...[...relaunchRows].sort((a, b) => a.date < b.date ? -1 : 1).map((r, i) => ({ date: r.date, label: r.label || (i === 0 ? 'Relaunch' : 'Relaunch ' + (i + 1)) }))] : [];
 
   setStatus('statusAddProduct', 'busy', 'Saving…');
 
@@ -2840,6 +2978,19 @@ async function submitAddProduct(){
       setStatus('statusAddProduct', 'err', `Product was saved, but child ASIN mapping failed: ${mapErr.message}`);
       return;
     }
+  }
+
+  // Launch history. Written AFTER the product itself, and the product's current launch is moved to the newest date only once the history is safely saved,
+  // so a failure here can never lose the original launch date (the product keeps the Launch Date field's value until then).
+  if(launchList.length && (relaunchRows.length || addProductMode === 'edit')){
+    if(addProductMode === 'edit') await sb.from('product_launches').delete().eq('asin', asin);      // an error here only means the table isn't created and there is no history to replace
+    const { error: histErr } = await sb.from('product_launches').insert(launchList.map(l => ({ asin, launch_date: l.date, label: l.label })));
+    if(histErr && relaunchRows.length){
+      setStatus('statusAddProduct', 'err', `The product was saved, but its launch history could not be: ${histErr.message}. Its Launch Date was kept as the original.`);
+      return;
+    }
+    const newest = launchList[launchList.length - 1].date;
+    if(!histErr && newest !== originalLaunch) await sb.from('products').update({ launch: newest }).eq('asin', asin);
   }
 
   setStatus('statusAddProduct', 'ok', 'Saved.');
@@ -2966,7 +3117,7 @@ function weekNumber(launchDate, rowDate){
   return Math.floor(diffDays / 7) + 1;
 }
 
-function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
+function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12, opts){
   const makeEmptyWeek = () => ({
     hasData:false,
     sales:0, salesSeen:false, units:0, unitsSeen:false, refunds:0, refundsSeen:false, refundPctSum:0, refundPctN:0,
@@ -2983,6 +3134,12 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
+  // opts.endBefore (a Monday): an EARLIER launch of a relaunched product stops at the week where the next launch starts — rows from then on belong to that
+  // launch's own numbering, so they are left out here and the week count is capped there.
+  if(opts && opts.endBefore){
+    sbRows = (sbRows || []).filter(r => r.week < opts.endBefore);
+    sfRows = (sfRows || []).filter(r => r.week < opts.endBefore);
+  }
   const allDates = [...(sbRows||[]), ...(sfRows||[])].map(r=>r.week).filter(Boolean);
   const autoAnchor = !product.launch;
   const rawLaunch = product.launch || null;
@@ -3015,6 +3172,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     }
   }
 
+  if(anchor && opts && opts.endBefore) totalWeeks = Math.max(1, Math.min(totalWeeks, weekNumber(anchor, opts.endBefore) - 1));
   const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
   if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor, hasWeekZero: false };
 
@@ -3076,8 +3234,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
 
   return { weeks: weeks.map(finalizeWeek), anchor, autoAnchor, hasWeekZero };
 }
-async function computeWeeks(product, marketplaceFilter, extendBeyond12){
-  if(!product) return computeWeeksFromRows(null, [], []);
+// The product's weekly rows, with the marketplace filter applied (see the comments inside).
+async function fetchWeeklyRows(product, marketplaceFilter){
   const [{ data: sbAll }, { data: sfAll }] = await Promise.all([
     sb.from('sellerboard_rows').select('*').eq('asin', product.asin),
     sb.from('sellerfox_rows').select('*').eq('asin', product.asin),
@@ -3091,8 +3249,14 @@ async function computeWeeks(product, marketplaceFilter, extendBeyond12){
   const own = !product.marketplace || marketplaceFilter === product.marketplace;
   const keepSb = r => marketplaceFilter === 'ALL' || own || !r.marketplace || r.marketplace === marketplaceFilter;
   const keepSf = r => marketplaceFilter === 'ALL' || !r.marketplace || r.marketplace === marketplaceFilter;
-  return computeWeeksFromRows(product, (sbAll || []).filter(keepSb), (sfAll || []).filter(keepSf), extendBeyond12);
+  return { sb: (sbAll || []).filter(keepSb), sf: (sfAll || []).filter(keepSf) };
 }
+async function computeWeeks(product, marketplaceFilter, extendBeyond12, opts){
+  if(!product) return computeWeeksFromRows(null, [], []);
+  const rows = await fetchWeeklyRows(product, marketplaceFilter);
+  return computeWeeksFromRows(product, rows.sb, rows.sf, extendBeyond12, opts);
+}
+
 function finalizeWeek(w){
   if(!w.hasData){
     return {
@@ -3793,7 +3957,7 @@ let lastLoadedProductAsin = undefined; // undefined = nothing loaded yet this se
 // Fills a product description panel (image + name, ASIN + week-of-12, launch date, Amazon link, details grid).
 // Used by Product Detail (prefix 'productInfo') and Actual vs. Target (prefix 'tseInfo') so both always show the same thing.
 // `anchor` = Monday of the launch week (or of the earliest data week when no launch date is set).
-async function renderProductInfoPanel(prefix, product, mkt, anchor){
+async function renderProductInfoPanel(prefix, product, mkt, anchor, extra){
   // Same product-info block the dashboard's per-product panels used to show
   // (name, image, ASIN, launch date, age, marketplace, brand, product line)
   // — brought to the top of Product Detail instead, same computation.
@@ -3803,6 +3967,14 @@ async function renderProductInfoPanel(prefix, product, mkt, anchor){
     currentWeekNum = Math.floor(ageDays / 7) + 1;
     ageWeeks = +(ageDays / 7).toFixed(1);
     ageLabel = currentWeekNum>=1 && currentWeekNum<=12 ? `Week ${currentWeekNum} of 12` : (currentWeekNum>12 ? 'Past Week 12' : '');
+  }
+  // A relaunched product: say which launch this is, and for an earlier one that it stops where the next begins (its "Week X of 12" would be meaningless now).
+  const v = extra && extra.view;
+  if(v && v.mode === 'launch'){
+    ageLabel = v.isLatest ? (ageLabel ? `${v.launch.label} · ${ageLabel}` : v.launch.label)
+                          : `${v.launch.label} · earlier launch, shown up to the week before the ${v.launches[v.index + 1].label}`;
+  } else if(v && v.mode === 'all'){
+    ageLabel = 'All time · every launch, week by week';
   }
   const dateLaunchedStr = product.launch ? new Date(product.launch).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '–';
   const metaFields = buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr);
@@ -3915,9 +4087,16 @@ async function loadDashboard(){
   const notesPromise = sb.from('week_notes').select('*').eq('asin', product.asin);
   const priceNotesPromise = sb.from('price_notes').select('*').eq('asin', product.asin);
   const childrenPromise = sb.from('sellerboard_child_rows').select('*').eq('parent_asin', product.asin);
-  const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(product, mkt, true);
+  // A relaunched product has several launches: show ONE of them as if it were a brand-new launch (its own Week 0/1, stopping the week before the next launch),
+  // or ALL TIME. A product with a single launch behaves exactly as before.
+  const launchMap = await fetchLaunchMap();
+  const launches = launchesOf(product, launchMap);
+  const view = resolveLaunchView(launches, pdLaunchSel[product.asin]);
+  const viewProduct = viewProductFor(product, view);
+  const { weeks, anchor, autoAnchor, hasWeekZero } = await computeWeeks(viewProduct, mkt, true, view.mode === 'launch' && view.endBefore ? { endBefore: view.endBefore } : undefined);
 
-  await renderProductInfoPanel('productInfo', product, mkt, anchor);
+  await renderProductInfoPanel('productInfo', viewProduct, mkt, anchor, { view });
+  renderLaunchSwitch('productInfoLaunchSwitch', view, 'pdPickLaunch', product.asin, true);
 
   const banner = document.getElementById('noLaunchBanner');
   if(autoAnchor && anchor){
@@ -3934,11 +4113,82 @@ async function loadDashboard(){
   (noteRows||[]).forEach(r=>{ notesMap[r.week] = r.note; });
   const priceNotesMap = {};
   (priceNoteRows||[]).forEach(r=>{ priceNotesMap[r.week] = r.note; });
-  const labels = weeks.map((_,i)=> hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1));
+  const labels = pdWeekLabels(weeks, anchor, hasWeekZero, view);
   renderKPIs(weeks, targetRow);
   renderCharts(weeks, labels);
-  renderTable(weeks, targetRow, anchor, product.asin, notesMap, hasWeekZero, priceNotesMap);
+  renderTable(weeks, targetRow, anchor, product.asin, notesMap, hasWeekZero, priceNotesMap, view);
   renderChildSkus(childRows, anchor);
+  await renderCompareLaunches(product, launches, mkt);      // after renderCharts, which clears the charts it is about to draw alongside
+}
+
+/* ---------- Compare launches (relaunched products): Week 1 of each launch lined up against the others ---------- */
+const CMP_METRICS = [
+  { key: 'sales',     label: 'Total Sales (€)',                fmt: v => fmtMoney(v), total: 'sum' },
+  { key: 'units',     label: 'Units Sold',                     fmt: v => fmtInt(v),   total: 'sum' },
+  { key: 'netProfit', label: 'Net Profit (€)',                 fmt: v => fmtMoney(v), total: 'sum' },
+  { key: 'adSpend',   label: 'Ad Spend (€)',                   fmt: v => fmtMoney(v), total: 'sum' },
+  { key: 'sessions',  label: 'Sessions',                       fmt: v => fmtInt(v),   total: 'sum' },
+  { key: 'bsr',       label: 'Highest BSR (lower is better)',  fmt: v => '#' + fmtInt(v), total: 'best', lowerIsBetter: true },
+];
+const CMP_COLORS = ['#0F172A', '#D97757', '#10B981', '#94A3B8', '#8B5CF6'];
+let cmpMetric = 'sales', cmpCache = null;
+async function renderCompareLaunches(product, launches, mkt){
+  const panel = document.getElementById('compareLaunchesPanel');
+  if(launches.length < 2){ panel.style.display = 'none'; cmpCache = null; return; }
+  const rows = await fetchWeeklyRows(product, mkt);
+  const series = launches.map((L, i) => {
+    const next = launches[i + 1];
+    const r = computeWeeksFromRows({ ...product, launch: L.date }, rows.sb, rows.sf, true, next ? { endBefore: mondayOf(next.date) } : undefined);
+    return { launch: L, weeks: (r.hasWeekZero ? r.weeks.slice(1) : r.weeks).slice(0, 12) };   // Week 1 onwards: a partial Week 0 is not comparable
+  });
+  cmpCache = { series };
+  const sel = document.getElementById('cmpMetric');
+  if(!sel.options.length) CMP_METRICS.forEach(m => sel.add(new Option(m.label, m.key)));
+  sel.value = cmpMetric;
+  panel.style.display = 'block';
+  drawCompare();
+}
+function cmpChangeMetric(){ cmpMetric = document.getElementById('cmpMetric').value; drawCompare(); }
+function drawCompare(){
+  if(!cmpCache) return;
+  const m = CMP_METRICS.find(x => x.key === cmpMetric) || CMP_METRICS[0];
+  const { series } = cmpCache;
+  const n = Math.max(...series.map(x => x.weeks.length));
+  const labels = Array.from({ length: n }, (_, i) => 'Wk ' + (i + 1));
+  const val = (s, i) => { const w = s.weeks[i]; const v = w ? w[m.key] : null; return v == null || Number.isNaN(+v) ? null : +v; };
+  const data = series.map(s => Array.from({ length: n }, (_, i) => val(s, i)));
+  const totalOf = arr => { const xs = arr.filter(v => v != null); if(!xs.length) return null; return m.total === 'best' ? Math.min(...xs) : xs.reduce((a, b) => a + b, 0); };
+
+  if(charts.compare){ charts.compare.destroy(); delete charts.compare; }
+  const opts = chartOpts();
+  if(m.lowerIsBetter){ opts.scales = opts.scales || {}; opts.scales.y = { ...(opts.scales.y || {}), reverse: true }; }
+  charts.compare = new Chart(document.getElementById('chartCompare'), {
+    type: 'line',
+    data: { labels, datasets: series.map((s, i) => ({ label: `${s.launch.label} · ${launchFmt(s.launch.date)}`, data: data[i], borderColor: CMP_COLORS[i % CMP_COLORS.length], backgroundColor: CMP_COLORS[i % CMP_COLORS.length], tension: .3, borderWidth: 3, spanGaps: false })) },
+    options: opts,
+  });
+
+  const pct = (a, b) => (a == null || b == null || b === 0) ? null : (a - b) / Math.abs(b);
+  const chip = (d) => {
+    if(d == null) return '<span style="color:var(--text-muted);">–</span>';
+    const better = m.lowerIsBetter ? d < 0 : d > 0;
+    if(Math.abs(d) < 0.005) return '<span style="color:var(--text-muted);">0%</span>';
+    return `<span style="padding:1px 6px;border-radius:5px;font-weight:600;background:${better ? '#DCFCE7' : '#FEE2E2'};color:${better ? '#166534' : '#991B1B'};">${d > 0 ? '+' : '−'}${Math.abs(Math.round(d * 100))}%</span>`;
+  };
+  const th = 'style="text-align:right;padding:6px 8px;font-size:11px;color:var(--text-muted);white-space:nowrap;"';
+  const td = 'style="text-align:right;padding:6px 8px;white-space:nowrap;"';
+  let h = `<thead><tr><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--text-muted);">Launch</th>${labels.map(l => `<th ${th}>${l}</th>`).join('')}<th ${th}>${m.total === 'best' ? 'Best' : 'Total'}</th></tr></thead><tbody>`;
+  series.forEach((s, i) => {
+    h += `<tr data-launch="${s.launch.date}"><td style="text-align:left;padding:6px 8px;font-weight:600;white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CMP_COLORS[i % CMP_COLORS.length]};margin-right:6px;"></span>${escapeHtml(s.launch.label)} <span style="font-weight:400;color:var(--text-muted);font-size:11px;">${launchFmt(s.launch.date)}</span></td>` +
+      data[i].map(v => `<td ${td}>${v == null ? '<span style="color:var(--text-muted);">–</span>' : m.fmt(v)}</td>`).join('') +
+      `<td ${td}><strong>${totalOf(data[i]) == null ? '–' : m.fmt(totalOf(data[i]))}</strong></td></tr>`;
+  });
+  for(let i = 1; i < series.length; i++){
+    h += `<tr data-change="${series[i].launch.date}"><td style="text-align:left;padding:6px 8px;font-size:11.5px;color:var(--text-muted);white-space:nowrap;">${escapeHtml(series[i].launch.label)} vs ${escapeHtml(series[0].launch.label)}</td>` +
+      data[i].map((v, k) => `<td ${td}>${chip(pct(v, data[0][k]))}</td>`).join('') +
+      `<td ${td}>${chip(pct(totalOf(data[i]), totalOf(data[0])))}</td></tr>`;
+  }
+  document.getElementById('compareLaunchesTable').innerHTML = h + '</tbody>';
 }
 
 function sum(arr, key){ return arr.reduce((a,w)=>a+w[key],0); }
@@ -4459,7 +4709,7 @@ function freezeTotalColumn(){
   if(typeof ResizeObserver !== 'undefined'){ freezeObserver = new ResizeObserver(apply); freezeObserver.observe(first); }
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(apply);
 }
-function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceNotesMap){
+function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceNotesMap, view){
   const weekDates = weeks.map((_,i)=>{
     if(!anchor) return null;
     const d = new Date(anchor);
@@ -4467,13 +4717,20 @@ function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceN
     return d.toISOString().slice(0,10);
   });
   const colLabels = weeks.map((_,i)=>{
-    const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
+    let wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
     if(!anchor) return wkLabel;
+    // ALL TIME: every column is numbered within ITS OWN launch and tagged with that launch's name; the first column of each launch has a coloured bar on top.
+    let launchTag = '';
+    if(view && view.mode === 'all'){
+      const lw = launchOfWeek(weekDates[i], view.launches);
+      wkLabel = 'Wk ' + lw.n;
+      launchTag = `${lw.first && lw.index > 0 ? '<div style="height:3px;background:#D97757;margin:-6px -6px 4px;" title="' + escapeHtml(lw.launch.label) + ' starts"></div>' : ''}<div class="lt-launch" title="${escapeHtml(lw.launch.label + ' · ' + launchFmt(lw.launch.date))}" style="font-size:8px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:${lw.index > 0 ? '#B45309' : 'var(--text-muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52px;">${escapeHtml(lw.launch.label)}</div>`;
+    }
     const d = new Date(anchor);
     d.setDate(d.getDate() + i*7);
     const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     // small calendar year-week (e.g. 2026-13) right above the product's own week number
-    return `<div class="yw" style="font-size:8.5px;font-weight:400;color:var(--text-muted);margin-bottom:1px;letter-spacing:.2px;" title="Calendar week ${isoYearWeek(weekDates[i])}">${isoYearWeek(weekDates[i])}</div>${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
+    return `${launchTag}<div class="yw" style="font-size:8.5px;font-weight:400;color:var(--text-muted);margin-bottom:1px;letter-spacing:.2px;" title="Calendar week ${isoYearWeek(weekDates[i])}">${isoYearWeek(weekDates[i])}</div>${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
   document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, null, false, null, priceNotesMap);
   freezeTotalColumn();
@@ -5254,6 +5511,21 @@ function ltDaysBetween(aIso, bIso){
 }
 // blocks: [{kind,label,code,marketplaces,firstWeek}], products: [{asin,product_line_code,marketplace,tag,launch}]
 // -> Map("kind|label" -> { status, asin, days, nearest:{asin,days}|null, tied:[asin] })
+// A tracker line is matched to a LAUNCH, not just a product: a relaunched product has one entry per launch (id "ASIN@launch date"), so its original line and its
+// relaunch line each find their own. A product with a single launch is its own entry with the plain ASIN as id — exactly the old behaviour.
+const ltEntryId = p => p._key || p.asin;
+function ltLaunchEntries(products, launchMap){
+  const out = [];
+  products.forEach(p => {
+    const ls = launchesOf(p, launchMap);
+    if(!ls.length){ out.push({ ...p, _key: p.asin, _multi: false }); return; }      // no launch date: kept, so the "no launch date" explanation still works
+    ls.forEach(l => out.push({ ...p, launch: l.date, _key: ls.length > 1 ? `${p.asin}@${l.date}` : p.asin, _label: l.label, _multi: ls.length > 1, _latest: l.date === ls[ls.length - 1].date }));
+  });
+  return out;
+}
+const ltEntryName = e => productDisplayName(e) + (e && e._multi ? ` — ${e._label}` : '');
+const tseLaunchSel = {};      // asin -> the launch date chosen in Actual vs. Target (defaults to the newest launch)
+function tsePickLaunch(asin, key){ tseLaunchSel[asin] = key; loadTseForecast(); }
 function ltAssignBlocks(blocks, products){
   const key = b => b.kind + '|' + b.label;
   const result = new Map(), pairs = [];
@@ -5264,7 +5536,7 @@ function ltAssignBlocks(blocks, products){
     const cand = products.filter(p => ltBlockMatchesProduct(b, p));
     if(!cand.length){ info.status = 'no_product'; return; }
     const dated = cand.filter(p => p.launch)
-      .map(p => ({ asin: p.asin, days: Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(p.launch))) }))
+      .map(p => ({ asin: ltEntryId(p), days: Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(p.launch))) }))
       .sort((x, y) => x.days - y.days);
     if(!dated.length){ info.status = 'no_launch_date'; return; }
     info.nearest = dated[0];
@@ -5420,15 +5692,16 @@ function ltSetupMessage(err){
 }
 
 /* ---------- Upload & Manage: importer ---------- */
-function ltRenderPreview(parsed, products){
+function ltRenderPreview(parsed, products, launchMap){
   const withT = parsed.blocks.filter(b => b.weeks.length);
   const without = parsed.blocks.filter(b => !b.weeks.length);
-  const assign = ltAssignBlocks(withT, products);
-  const productOf = asin => products.find(p => p.asin === asin);
+  const entries = ltLaunchEntries(products, launchMap || {});
+  const assign = ltAssignBlocks(withT, entries);
+  const productOf = id => entries.find(e => ltEntryId(e) === id);
   let unmatched = 0;
   const rows = withT.map(b => {
     const info = assign.get(b.kind + '|' + b.label);
-    const d = ltDescribeAssignment(b, info, productOf, productDisplayName, ltFmtDate);
+    const d = ltDescribeAssignment(b, info, productOf, ltEntryName, ltFmtDate);
     if(!d.ok) unmatched++;
     const matchHtml = d.ok
       ? `<span style="color:#166534;">✓ ${escapeHtml(d.text)}</span>`
@@ -5462,7 +5735,7 @@ async function ltOnFileChosen(){
     const aoa = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: true }) : null;
     ltParsed = ltParseTargets({ launch: aoa('#Launch Targets'), expansion: aoa('#Expansion Targets') });
     const withT = ltParsed.blocks.filter(b => b.weeks.length);
-    prev.innerHTML = ltRenderPreview(ltParsed, await fetchProducts());
+    prev.innerHTML = ltRenderPreview(ltParsed, await fetchProducts(), await fetchLaunchMap());
     if(!withT.length){ setStatus('statusLT', 'err', 'No targets found. Check this is the Deals Tracker, with the #Launch Targets and #Expansion Targets tabs.'); ltParsed = null; return; }
     saveBtn.style.display = 'inline-block';
     setStatus('statusLT', 'ok', `Read ${withT.length} product lines with targets — review below, then click Save targets.`);
@@ -5584,7 +5857,7 @@ function ltRenderComparisonTable(cmp, weekLabel){
   });
   return h + '</tbody>';
 }
-async function loadDealsTargetsComparison(product){
+async function loadDealsTargetsComparison(product, launchMap){      // `product` carries the chosen launch as its .launch
   const token = ++ltCompareToken;
   const msg = document.getElementById('ltCompareMessage'), table = document.getElementById('ltCompareTable');
   const src = document.getElementById('ltCompareSource'), legend = document.getElementById('ltCompareLegend');
@@ -5596,17 +5869,21 @@ async function loadDealsTargetsComparison(product){
     return;
   }
   const code = String(product.product_line_code).trim().toUpperCase();
-  const [{ data: rowsForCode, error }, products] = await Promise.all([
-    sb.from('line_targets').select('*').eq('product_line_code', code), fetchProducts(),
+  const [{ data: rowsForCode, error }, products, lMap] = await Promise.all([
+    sb.from('line_targets').select('*').eq('product_line_code', code), fetchProducts(), launchMap ? Promise.resolve(launchMap) : fetchLaunchMap(),
   ]);
   if(token !== ltCompareToken) return;
   if(error){ msg.innerHTML = box(escapeHtml(ltSetupMessage(error))); return; }
 
   // Which tracker line belongs to THIS product? Decided across ALL products with this code, by dates, one line per product.
   const blocks = ltBlocksFromRows(rowsForCode || []);
-  const assign = ltAssignBlocks(blocks, products);
-  const productOf = asin => products.find(p => p.asin === asin);
-  const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === product.asin);
+  // Decided across every LAUNCH of every product with this code: the chosen launch of this product gets (at most) one line, by dates.
+  const entries = ltLaunchEntries(products, lMap);
+  const assign = ltAssignBlocks(blocks, entries);
+  const productOf = id => entries.find(e => ltEntryId(e) === id);
+  const myEntry = entries.find(e => e.asin === product.asin && e.launch === product.launch) || entries.find(e => e.asin === product.asin);
+  const myId = ltEntryId(myEntry || product);
+  const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === myId);
 
   if(!mine){
     if(!blocks.length){
@@ -5625,9 +5902,9 @@ async function loadDealsTargetsComparison(product){
         // This product's own date gap, so the reason always shows the evidence for THIS product
         const gap = product.launch ? Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(product.launch))) : null;
         const own = gap == null ? '' : ` — targets start ${ltFmtDate(b.firstWeek)}, this product launched ${ltFmtDate(product.launch)} (${gap} days apart)`;
-        if(info.status === 'assigned') why = `was matched to ${productDisplayName(productOf(info.asin))} instead, whose launch date is closer${own}`;
+        if(info.status === 'assigned') why = `was matched to ${ltEntryName(productOf(info.asin))} instead, whose launch date is closer${own}`;
         else if(info.status === 'date_mismatch') why = `doesn't line up by date${own || ' (this product has no launch date)'}; the limit is ${Math.round(LT_DATE_TOLERANCE_DAYS / 7)} weeks`;
-        else why = ltDescribeAssignment(b, info, productOf, productDisplayName, ltFmtDate).text;
+        else why = ltDescribeAssignment(b, info, productOf, ltEntryName, ltFmtDate).text;
       }
       return `<li><strong>${escapeHtml(b.label)}</strong> (${tab(b)} tab) — ${escapeHtml(why)}</li>`;
     }).join('');
@@ -5672,6 +5949,7 @@ function tseRenderCombinedHeader(selected){
   document.getElementById('tseInfoLaunchLine').innerHTML = launches.length
     ? `Launch dates: <strong>${ltFmtDate(first)}${first !== last ? ' – ' + ltFmtDate(last) : ''}</strong>` : '';
   document.getElementById('tseInfoAmazonLink').innerHTML = '';
+  document.getElementById('tseInfoLaunchSwitch').style.display = 'none';      // several products: each one is totalled on its CURRENT launch
 }
 async function loadCombinedComparison(selected){
   const token = ++ltCompareToken;
@@ -5682,10 +5960,11 @@ async function loadCombinedComparison(selected){
 
   const codeOf = p => String(p.product_line_code || '').trim().toUpperCase();
   const codes = [...new Set(selected.map(codeOf).filter(Boolean))];
-  const [rowsRes, products] = await Promise.all([
+  const [rowsRes, products, lMap] = await Promise.all([
     codes.length ? sb.from('line_targets').select('*').in('product_line_code', codes) : Promise.resolve({ data: [], error: null }),
-    fetchProducts(),
+    fetchProducts(), fetchLaunchMap(),
   ]);
+  const entries = ltLaunchEntries(products, lMap);
   if(token !== ltCompareToken) return;
   if(rowsRes.error){ msg.innerHTML = box(escapeHtml(ltSetupMessage(rowsRes.error))); return; }
 
@@ -5696,10 +5975,12 @@ async function loadCombinedComparison(selected){
     if(!code){ excluded.push({ p, why: 'it has no Product Line Code' }); return; }
     const rows = (rowsRes.data || []).filter(r => r.product_line_code === code);
     if(!rows.length){ excluded.push({ p, why: `there are no saved tracker lines for code ${code}` }); return; }
-    const blocks = ltBlocksFromRows(rows), assign = ltAssignBlocks(blocks, products);
-    const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === p.asin);
+    // a relaunched product is totalled on its CURRENT (newest) launch
+    const mineEntries = entries.filter(e => e.asin === p.asin), entry = mineEntries.find(e => e._latest) || mineEntries[0] || p;
+    const blocks = ltBlocksFromRows(rows), assign = ltAssignBlocks(blocks, entries);
+    const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === ltEntryId(entry));
     if(!mine){ excluded.push({ p, why: `none of the ${code} tracker lines is matched to it (open it on its own to see why)` }); return; }
-    included.push({ product: p, mine, matched: rows.filter(r => r.kind === mine.kind && r.line_label === mine.label) });
+    included.push({ product: p, entry, mine, matched: rows.filter(r => r.kind === mine.kind && r.line_label === mine.label) });
   });
   const excludedHtml = excluded.length
     ? `<div style="margin-top:6px;color:#92400E;">Not included — no matching targets: ${excluded.map(x => `<strong>${escapeHtml(productDisplayName(x.p))}</strong> (${escapeHtml(x.why)})`).join('; ')}.</div>` : '';
@@ -5725,7 +6006,7 @@ async function loadCombinedComparison(selected){
   if(!cmp){ msg.innerHTML = box(`The matched tracker lines have no targets entered yet.${excludedHtml}`); return; }
 
   src.innerHTML = `Combined total of <strong>${included.length}</strong> product${included.length === 1 ? '' : 's'}: ` +
-    included.map(i => `${escapeHtml(productDisplayName(i.product))} (${escapeHtml(i.mine.label)})`).join('; ') + '. ' +
+    included.map(i => `${escapeHtml(ltEntryName(i.entry))} (${escapeHtml(i.mine.label)})`).join('; ') + '. ' +
     `Weeks are calendar weeks. Each week adds up only the products that have <strong>both</strong> a target and actual figures for it, so target and actual always cover the same products — ` +
     `a column marked <strong>n/N</strong> counts only n of the ${included.length}.` + excludedHtml;
   const nameByAsin = Object.fromEntries(included.map(i => [i.product.asin, productDisplayName(i.product)]));
@@ -5798,7 +6079,10 @@ async function loadTseForecast(){
   if(!tseSeeded){
     tseSeeded = true;
     const pdAsin = document.getElementById('productSelect').value, pdMkt = document.getElementById('marketplaceSelect').value || 'ALL';
-    if(pdAsin && products.find(p=>p.asin===pdAsin)){ tseSelection = [pdAsin]; wantMkt = pdMkt; }
+    if(pdAsin && products.find(p=>p.asin===pdAsin)){
+      tseSelection = [pdAsin]; wantMkt = pdMkt;
+      if(pdLaunchSel[pdAsin] && pdLaunchSel[pdAsin] !== 'all') tseLaunchSel[pdAsin] = pdLaunchSel[pdAsin];      // start on the launch you were looking at
+    }
   }
   mktSel.innerHTML = '<option value="ALL">All</option>';
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
@@ -5825,9 +6109,15 @@ async function loadTseForecast(){
     return;
   }
   try{
-    if(selected.length === 1){      // exactly as before: the product's own panel, its own tracker line and week numbers
-      await renderProductInfoPanel('tseInfo', selected[0], mkt, await productAnchor(selected[0]));
-      await loadDealsTargetsComparison(selected[0]);
+    if(selected.length === 1){      // the product's own panel, its own tracker line and week numbers — for the CHOSEN launch if it has been relaunched
+      const lMap = await fetchLaunchMap();
+      const lns = launchesOf(selected[0], lMap);
+      const chosen = tseLaunchSel[selected[0].asin];
+      const view = resolveLaunchView(lns, chosen && chosen !== 'all' ? chosen : undefined);      // never "all time" here: a tracker line belongs to one launch
+      const vp = view.mode === 'launch' ? { ...selected[0], launch: view.launch.date } : selected[0];
+      await renderProductInfoPanel('tseInfo', vp, mkt, await productAnchor(vp), view.mode === 'single' ? undefined : { view });
+      renderLaunchSwitch('tseInfoLaunchSwitch', view, 'tsePickLaunch', selected[0].asin, false);
+      await loadDealsTargetsComparison(vp, lMap);
     } else {                        // several: one combined total
       tseRenderCombinedHeader(selected);
       await loadCombinedComparison(selected);
