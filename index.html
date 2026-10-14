@@ -4309,20 +4309,31 @@ async function savePortfolioWeekNote(tag, week, note){
     await sb.from('portfolio_notes').delete().eq('tag', tag).eq('week', week);
   }
 }
+// Calendar year + week number for a week's Monday, e.g. 2026-13 = the 13th week of 2026. Standard ISO 8601 numbering (weeks start on Monday and
+// week 1 is the week containing the year's first Thursday), so around New Year the year shown is the week's own year: Mon 29 Dec 2025 is 2026-01.
+function isoYearWeek(iso){
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));      // the Thursday of this week decides the year
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
+  return dt.getUTCFullYear() + '-' + String(wk).padStart(2, '0');
+}
 function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceNotesMap){
+  const weekDates = weeks.map((_,i)=>{
+    if(!anchor) return null;
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + i*7);
+    return d.toISOString().slice(0,10);
+  });
   const colLabels = weeks.map((_,i)=>{
     const wkLabel = hasWeekZero ? (i===0 ? 'Wk 0' : 'Wk '+i) : 'Wk '+(i+1);
     if(!anchor) return wkLabel;
     const d = new Date(anchor);
     d.setDate(d.getDate() + i*7);
     const dateStr = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    return `${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
-  });
-  const weekDates = weeks.map((_,i)=>{
-    if(!anchor) return null;
-    const d = new Date(anchor);
-    d.setDate(d.getDate() + i*7);
-    return d.toISOString().slice(0,10);
+    // small calendar year-week (e.g. 2026-13) right above the product's own week number
+    return `<div class="yw" style="font-size:8.5px;font-weight:400;color:var(--text-muted);margin-bottom:1px;letter-spacing:.2px;" title="Calendar week ${isoYearWeek(weekDates[i])}">${isoYearWeek(weekDates[i])}</div>${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
   document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, null, false, null, priceNotesMap);
 }
