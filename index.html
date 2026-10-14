@@ -922,7 +922,7 @@
     <div class="view" id="view-glossary">
       <div class="page-head">
         <h2>Metrics Glossary</h2>
-        <div class="meta">Every metric in this dashboard: where its weekly value comes from, and — separately — exactly how its 12-Wk Total/Avg column is computed. Those two are not always the same method, so each is documented for every metric individually below.</div>
+        <div class="meta">Every metric in this dashboard: where its weekly value comes from, and — separately — exactly how its 12-Wk Total/Avg column (shown in Product Detail; the Launch and Expansion dashboards show the weekly values only) is computed. Those two are not always the same method, so each is documented for every metric individually below.</div>
       </div>
       <div class="panel">
         <h3>Taken directly from the export</h3>
@@ -3805,15 +3805,10 @@ function renderTagDashboard(tag){
   ];
   let ohtml = '<thead><tr><th>Metric</th>';
   colLabelsOverall.forEach(l=> ohtml += `<th>${l}</th>`);
-  ohtml += '<th>12-Week Total</th><th></th></tr></thead><tbody>';
+  ohtml += '<th></th></tr></thead><tbody>';
   if(!sortedCalWeeks.length){
     ohtml += `<tr><td colspan="2" style="color:var(--text-muted);">No calendar weeks with data yet.</td></tr>`;
   }
-  // The Total column is always exactly a 12-week total — capped to the
-  // LAST 12 calendar-week columns shown (most recent) — even though the
-  // table itself can display more than 12 columns when products launched
-  // at staggered times span a longer real-calendar range.
-  const last12WeekTotals = weekTotals.slice(-12);
   overallMetrics.forEach(m=>{
     const vals = weekTotals.map(w=>w[m.key]);
     const numericVals = vals.filter(v=>v!==null && !isNaN(v));
@@ -3823,16 +3818,7 @@ function renderTagDashboard(tag){
       const bg = heatColor(v,min,max);
       ohtml += `<td style="background:${bg};"><div style="display:inline-block;max-width:75px;overflow:hidden;">${m.fmt(v)}${weekDelta(vals,i,m.lowerIsBetter)}</div></td>`;
     });
-    const grandSales = last12WeekTotals.reduce((a,w)=>a+w.sales,0);
-    const grandUnits = last12WeekTotals.reduce((a,w)=>a+w.units,0);
-    const grandAdSpend = last12WeekTotals.reduce((a,w)=>a+w.adSpend,0);
-    const grandRefunds = last12WeekTotals.reduce((a,w)=>a+w.refunds,0);
-    let total;
-    if(m.key==='margin') total = grandSales? last12WeekTotals.reduce((a,w)=>a+w.netProfit,0)/grandSales : 0;
-    else if(m.key==='tacos') total = grandSales? grandAdSpend/grandSales : 0;
-    else if(m.key==='refundPct') total = grandUnits? grandRefunds/grandUnits : 0;
-    else total = vals.slice(-12).reduce((a,v)=>a+v,0);
-    ohtml += `<td class="total-col">${m.fmt(total)}</td><td></td></tr>`;
+    ohtml += `<td></td></tr>`;
   });
   if(sortedCalWeeks.length){
     ohtml += `<tr><td style="font-weight:700;">Notes</td>`;
@@ -3843,7 +3829,7 @@ function renderTagDashboard(tag){
         <div style="display:inline-block;max-width:75px;overflow:hidden;font-size:11px;line-height:1.4;color:${existing?'var(--text-dark)':'var(--text-muted)'};">${escapeHtml(preview)}</div>
       </td>`;
     });
-    ohtml += `<td style="background:#F1F5F9;"></td><td></td></tr>`;
+    ohtml += `<td></td></tr>`;
   }
   ohtml += '</tbody>';
   document.getElementById(p+'DashOverallTable').innerHTML = ohtml;
@@ -3895,7 +3881,7 @@ function renderTagDashboard(tag){
       </div>
       <div class="table-wrap"><table class="stretch-table"></table></div>
     `;
-    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap, null, true);
+    panel.querySelector('table').innerHTML = buildScorecardTable(weeks, targetRow, colLabels, product.asin, weekDates, notesMap, null, true, null, undefined, { hideTotal: true });
     blocksContainer.appendChild(panel);
   });
 
@@ -4484,7 +4470,8 @@ function weekDelta(vals, i, lowerIsBetter){
   const arrow = pct>0 ? '▲' : '▼';
   return `<div style="margin-top:3px;"><span style="display:inline-block;padding:0px 4px;border-radius:100px;background:rgba(255,255,255,0.88);font-size:7.5px;font-weight:700;color:${color};">${arrow} ${Math.abs(pct).toFixed(0)}%</span></div>`;
 }
-function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA, grayFromIndex, priceNotesMap){
+function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, metricList, blankForNA, grayFromIndex, priceNotesMap, opts){
+  const showTotal = !(opts && opts.hideTotal);      // the Launch / Expansion dashboards leave the Total/Avg column out; Product Detail keeps it
   const metrics = metricList || METRICS;
   const t = targets || {};
   const isGray = i => grayFromIndex!=null && i>=grayFromIndex;
@@ -4497,7 +4484,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   // is treated as already-arrived, same as before this existed.
   const todayIso = new Date().toISOString().slice(0,10);
   const isFuture = i => !!(weekDates && weekDates[i] && weekDates[i] > todayIso);
-  let html = `<thead><tr><th>Metric</th><th style="background:${TOTAL_COL_BG};border-bottom:2px solid var(--gold);">${weeks.length}-Wk Total/Avg</th>`;
+  let html = `<thead><tr><th>Metric</th>${showTotal ? `<th style="background:${TOTAL_COL_BG};border-bottom:2px solid var(--gold);">${weeks.length}-Wk Total/Avg</th>` : ''}`;
   colLabels.forEach((l,i)=> html += `<th${isGray(i)?' style="background:#E2E8F0;"':''}>${l}</th>`);
   html += `<th></th></tr></thead><tbody>`;
   metrics.forEach(m=>{
@@ -4539,7 +4526,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     }
 
     const rowAttrs = m.breakdownOf ? ` class="breakdown-row-${m.breakdownOf}" style="display:none;background:#FAFAFA;"` : '';
-    html += `<tr${rowAttrs}><td>${expandToggle}${labelHtml}</td><td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>`;
+    html += `<tr${rowAttrs}><td>${expandToggle}${labelHtml}</td>${showTotal ? `<td class="total-col" style="${totalStyle}${m.categoryKey?'white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;':''}">${displayTotal}</td>` : ''}`;
     vals.forEach((v,i)=>{
       if(isFuture(i)){
         html += `<td style="background:#fff;"><div style="display:inline-block;max-width:75px;overflow:hidden;"></div></td>`;
@@ -4563,7 +4550,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     });
     html += `<td></td></tr>`;
   });
-  html += `<tr><td style="font-weight:700;">KW in Top 10</td><td style="background:${TOTAL_COL_BG};"></td>`;
+  html += `<tr><td style="font-weight:700;">KW in Top 10</td>${showTotal ? `<td style="background:${TOTAL_COL_BG};"></td>` : ''}`;
   weeks.forEach((w,i)=>{
     const bg = isGray(i) ? '#E2E8F0' : '#fff';
     if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
@@ -4576,7 +4563,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
   });
   html += `<td style="background:#F1F5F9;"></td></tr>`;
   if(asin && weekDates){
-    html += `<tr><td style="font-weight:700;">Notes</td><td style="background:${TOTAL_COL_BG};"></td>`;
+    html += `<tr><td style="font-weight:700;">Notes</td>${showTotal ? `<td style="background:${TOTAL_COL_BG};"></td>` : ''}`;
     weekDates.forEach((wd,i)=>{
       const bg = isGray(i) ? '#E2E8F0' : '#fff';
       if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
@@ -4590,7 +4577,7 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
     html += `<td style="background:#F1F5F9;"></td></tr>`;
   }
   if(asin && weekDates && priceNotesMap){
-    html += `<tr><td style="font-weight:700;">Pricing Notes</td><td style="background:${TOTAL_COL_BG};"></td>`;
+    html += `<tr><td style="font-weight:700;">Pricing Notes</td>${showTotal ? `<td style="background:${TOTAL_COL_BG};"></td>` : ''}`;
     weekDates.forEach((wd,i)=>{
       const bg = isGray(i) ? '#E2E8F0' : '#fff';
       if(isFuture(i)){ html += `<td style="background:#fff;"></td>`; return; }
