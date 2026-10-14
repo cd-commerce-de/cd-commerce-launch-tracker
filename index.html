@@ -600,7 +600,7 @@
 
       <div class="panel">
         <h3>Data Rova — automated</h3>
-        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">KW in Top 10 and Visibility pull in automatically every Monday, covering the previous complete week — no upload needed. It covers <strong>every product, whatever its age</strong> (it is no longer limited to the first 12 weeks); only Data Rova projects containing a registered ASIN are queried. Visibility is a current snapshot with no history, so it can only be collected from now on and can't be filled for past weeks. KW in Top 10 can be backfilled for past weeks with the control below.</p>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">KW in Top 10 and Visibility pull in automatically every Monday, covering the previous complete week — no upload needed. It covers <strong>every product, whatever its age</strong> (it is no longer limited to the first 12 weeks); only Data Rova projects containing a registered ASIN are queried. Each run also saves a link to the product's Data Rova page, shown in Product Detail. Visibility is a current snapshot with no history, so it can only be collected from now on and can't be filled for past weeks. KW in Top 10 can be backfilled for past weeks with the control below.</p>
         <div id="drSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
         <div class="toolbar" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;align-items:center;">
           <button class="btn btn-sm" id="btnForceDrSync" onclick="forceDatarovaSync()">⟳ Force update now</button>
@@ -1040,7 +1040,7 @@ function fmtGlobalReviews(v){
   const parts = [];
   if(v.rating!=null) parts.push(v.rating.toFixed(1)+' stars');
   if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
-  return parts.join(' ') || '–';
+  return parts.join('<br>') || '–';      // two short lines ("4.4 stars" over "(790)") so the whole value fits a narrow week column
 }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
@@ -3727,6 +3727,11 @@ async function renderProductInfoPanel(prefix, product, mkt, anchor){
       }
     }
   }catch(_e){ /* link is a convenience — never let it break the page */ }
+  // Link to this product's page in Data Rova — project id + one of its tracked ASINs, both saved on the product by the Data Rova sync.
+  if(product.datarova_project_id && product.datarova_asin){
+    const drUrl = `https://app.datarova.com/projects/${encodeURIComponent(product.datarova_project_id)}/ranks/${encodeURIComponent(product.datarova_asin)}`;
+    linkEl.insertAdjacentHTML('beforeend', `${linkEl.innerHTML ? ' <span style="color:var(--text-muted);">·</span> ' : ''}<a href="${drUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--gold-dark);font-weight:600;text-decoration:none;">View in Data Rova ↗</a>`);
+  }
   document.getElementById(prefix+'MetaGrid').innerHTML = metaFields.map(f=>`<div style="font-size:12px;"><span style="color:var(--text-muted);">${f.label}:</span> <strong>${f.value}</strong></div>`).join('');
 }
 // Same anchor rule Product Detail uses, for tabs that don't load the weekly data themselves.
@@ -4070,7 +4075,7 @@ const METRICS = [
   {key:'subcatBsr', label:'Highest BSR (Subcategory)', fmt:fmtRank, kind:'min', lowerIsBetter:true, categoryKey:'subcatBsrName', noTotal:true},
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
-  {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true,
+  {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true, wrap:true,
     description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 stars (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
@@ -4191,7 +4196,9 @@ function buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMa
       }
       const cellStyle = m.categoryKey
         ? 'display:inline-block;max-width:95px;white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.3;'
-        : 'display:inline-block;max-width:75px;overflow:hidden;';
+        : m.wrap
+          ? 'display:inline-block;max-width:95px;white-space:normal;font-size:10.5px;line-height:1.3;'      // e.g. Global Reviews: shown in full, on two lines
+          : 'display:inline-block;max-width:75px;overflow:hidden;';
       const flagDetail = m.redFlagKey ? weeks[i][m.redFlagKey] : null;
       const tdAttrs = flagDetail ? ` class="note-cell" data-note="${escapeHtml(flagDetail)}" style="background:${bg};cursor:help;"` : ` style="background:${bg};"`;
       const valueStyle = flagDetail ? `${cellStyle}color:var(--red);font-weight:700;` : cellStyle;
@@ -4747,7 +4754,11 @@ async function forceDatarovaSync(){
       alert('Sync failed: ' + (data.error || 'Unknown error'));
     } else {
       const noteLine = data.note ? `\n\n⚠ ${data.note}` : '';
-      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (checked ${data.projectsChecked||0} Data Rova projects, ${data.projectsMatched||0} matched a tracked ASIN).${noteLine}`);
+      const lk = data.links;
+      const linksLine = lk ? `\n\nData Rova links: saved for ${lk.saved} product${lk.saved===1?'':'s'}.` +
+        (lk.error ? `\n⚠ The links could not be saved (${lk.error}) — run add_datarova_link_columns.sql.` : '') +
+        ((lk.noProject||[]).length ? `\n⚠ Not found in any Data Rova project (no link): ${lk.noProject.join(', ')}` : '') : '';
+      alert(`Sync succeeded — ${data.parentsUpdated||0} product rows updated for the week of ${data.week||'?'} (checked ${data.projectsChecked||0} Data Rova projects, ${data.projectsMatched||0} matched a tracked ASIN).${linksLine}${noteLine}`);
     }
   }catch(err){
     alert('Could not reach the sync function: ' + err.message);
