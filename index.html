@@ -709,10 +709,11 @@
             <div class="upload-box" id="dropRV">
               <label for="fileRV"><span class="step-badge">2</span>Choose Reviews XLSX/CSV(s)</label>
               <input type="file" id="fileRV" accept=".xlsx,.xls,.csv" multiple>
-              <div class="hint">Set the week for each file below (its Monday). Rows with no ASIN filled in are skipped (not attributed to any product). Counts new reviews and averages the rating for that week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s). The Marketplace field is pre-filled from the filename when possible — check it's correct if this ASIN is shared across marketplaces pointing to different parents.</div>
+              <div class="hint">For each file, choose the <strong>weeks</strong> you want updated from it — one date, a from–to range, or a quick pick like "Last 4 weeks". Any date inside a week counts (it is moved to that week's Monday), and each week uses only the reviews dated inside its own Monday–Sunday. The same file can fill as many weeks as you like. Rows with no ASIN filled in are skipped (not attributed to any product). Counts new reviews and averages the rating per week — any review rated 3★ or below turns the Average Rating red, with a hover showing which SKU(s). The Marketplace field is pre-filled from the filename when possible — check it's correct if this ASIN is shared across marketplaces pointing to different parents.</div>
               <div id="rvFileList" style="margin-top:8px;"></div>
               <div class="toolbar" style="justify-content:center;"><button class="btn btn-primary btn-sm" id="btnUploadRV" style="display:none;" onclick="confirmUploadRV()">Upload</button></div>
               <div class="status-line" id="statusRV"></div>
+              <div id="rvResults" style="margin-top:8px;text-align:left;"></div>
             </div>
           </div>
         </div>
@@ -1915,20 +1916,73 @@ function guessMarketplaceFromFilename(name){
   for(const p of parts){ if(KNOWN.includes(p)) return p; }
   return '';
 }
+// ---- Reviews upload: several weeks per file ----
+const rvWeeksByFile = new WeakMap();      // File -> the Mondays chosen for it (sorted)
+const rvMarketByFile = new WeakMap();     // File -> the marketplace typed for it (survives re-renders)
+function rvWeeksOf(file){ if(!rvWeeksByFile.has(file)) rvWeeksByFile.set(file, []); return rvWeeksByFile.get(file); }
+function rvIsoAdd(iso, n){ const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function rvMondayOf(iso){ const d = new Date(iso + 'T00:00:00Z'); const w = d.getUTCDay(); return rvIsoAdd(iso, w === 0 ? -6 : 1 - w); }
+function rvLastCompletedMonday(){ return rvIsoAdd(rvMondayOf(new Date().toISOString().slice(0, 10)), -7); }
+function rvFmtWeek(iso){ return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); }
+function rvAddWeeks(i, isoList){
+  const file = rvSelectedFiles[i]; if(!file) return;
+  const set = new Set(rvWeeksOf(file));
+  isoList.forEach(d => { if(/^\d{4}-\d{2}-\d{2}$/.test(d)) set.add(rvMondayOf(d)); });
+  if(set.size > 60){ setStatus('statusRV', 'err', 'At most 60 weeks per file — remove some first.'); return; }
+  rvWeeksByFile.set(file, [...set].sort());
+  renderRvFileList();
+}
+function rvAddOne(i){ const v = document.getElementById('rvAddDate'+i).value; if(v) rvAddWeeks(i, [v]); }
+function rvAddRange(i){
+  const from = document.getElementById('rvFrom'+i).value, to = document.getElementById('rvTo'+i).value;
+  if(!from || !to){ setStatus('statusRV', 'err', 'Pick both a From and a To date for the range.'); return; }
+  let a = rvMondayOf(from), z = rvMondayOf(to);
+  if(a > z) [a, z] = [z, a];
+  const list = []; for(let w = a; w <= z && list.length <= 60; w = rvIsoAdd(w, 7)) list.push(w);
+  rvAddWeeks(i, list);
+}
+function rvAddLast(i, n){ const last = rvLastCompletedMonday(); rvAddWeeks(i, Array.from({ length: n }, (_, k) => rvIsoAdd(last, -7 * k))); }
+function rvRemoveWeek(i, iso){ const f = rvSelectedFiles[i]; if(f){ rvWeeksByFile.set(f, rvWeeksOf(f).filter(w => w !== iso)); renderRvFileList(); } }
+function rvClearWeeks(i){ const f = rvSelectedFiles[i]; if(f){ rvWeeksByFile.set(f, []); renderRvFileList(); } }
 function renderRvFileList(){
   const container = document.getElementById('rvFileList');
   const btn = document.getElementById('btnUploadRV');
   if(!rvSelectedFiles.length){ container.innerHTML = ''; btn.style.display = 'none'; return; }
-  container.innerHTML = rvSelectedFiles.map((file,i)=>`
-    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;text-align:left;">
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
-      <input type="date" id="rvFileWeek${i}" style="min-width:130px;font-size:11px;padding:2px 4px;" title="Monday of the target week">
-      <input type="text" id="rvFileMarketplace${i}" value="${escapeHtml(guessMarketplaceFromFilename(file.name))}" placeholder="Marketplace (if shared ASIN)" style="min-width:150px;font-size:11px;padding:2px 4px;" title="Only needed if a child ASIN in this file is registered under more than one parent across marketplaces">
-      <button class="btn btn-sm" onclick="removeRvFile(${i})" style="padding:1px 7px;">✕</button>
-      <span id="rvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
-    </div>`).join('');
+  const small = 'font-size:11px;padding:2px 4px;';
+  container.innerHTML = rvSelectedFiles.map((file, i) => {
+    if(!rvMarketByFile.has(file)) rvMarketByFile.set(file, guessMarketplaceFromFilename(file.name));
+    const weeks = rvWeeksOf(file);
+    const chips = weeks.length
+      ? weeks.map(w => `<span style="display:inline-flex;align-items:center;gap:4px;background:#F1F5F9;border:1px solid var(--border);border-radius:999px;padding:1px 4px 1px 8px;font-size:11px;white-space:nowrap;" title="Week ${isoYearWeek(w)}">${rvFmtWeek(w)} <span style="color:var(--text-muted);font-size:9.5px;">${isoYearWeek(w)}</span><button type="button" onclick="rvRemoveWeek(${i}, '${w}')" style="border:0;background:none;cursor:pointer;color:var(--text-muted);font-size:13px;line-height:1;padding:0 3px;" aria-label="Remove ${w}">×</button></span>`).join(' ')
+      : '<span style="font-size:11px;color:var(--text-muted);">No weeks chosen yet — add at least one.</span>';
+    return `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border);text-align:left;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <input type="text" id="rvFileMarketplace${i}" value="${escapeHtml(rvMarketByFile.get(file))}" oninput="rvMarketByFile.set(rvSelectedFiles[${i}], this.value)" placeholder="Marketplace (if shared ASIN)" style="min-width:150px;${small}" title="Only needed when this ASIN is registered under different parents in different marketplaces">
+        <button class="btn btn-sm" onclick="removeRvFile(${i})" style="padding:1px 7px;" title="Remove this file">✕</button>
+        <span id="rvFileStatus${i}" style="min-width:14px;font-weight:700;"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--text-muted);">
+        <span>Weeks to update:</span>
+        <input type="date" id="rvAddDate${i}" style="${small}" title="Any date in the week — it is moved to that week's Monday">
+        <button class="btn btn-sm" onclick="rvAddOne(${i})" style="padding:1px 8px;">Add week</button>
+        <span>·</span><span>range</span>
+        <input type="date" id="rvFrom${i}" style="${small}" title="First week of the range"><span>→</span><input type="date" id="rvTo${i}" style="${small}" title="Last week of the range">
+        <button class="btn btn-sm" onclick="rvAddRange(${i})" style="padding:1px 8px;">Add range</button>
+        <span>·</span>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},1)" style="padding:1px 7px;">Last week</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},4)" style="padding:1px 7px;">Last 4</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},8)" style="padding:1px 7px;">Last 8</button>
+        <button class="btn btn-sm" onclick="rvAddLast(${i},12)" style="padding:1px 7px;">Last 12</button>
+        ${weeks.length ? `<button class="btn btn-sm" onclick="rvClearWeeks(${i})" style="padding:1px 7px;">Clear</button>` : ''}
+      </div>
+      <div id="rvChips${i}" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center;">${chips}${weeks.length ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">${weeks.length} week${weeks.length > 1 ? 's' : ''}</span>` : ''}</div>
+    </div>`;
+  }).join('');
   btn.style.display = 'inline-block';
-  btn.textContent = `Upload ${rvSelectedFiles.length} file${rvSelectedFiles.length>1?'s':''}`;
+  const total = rvSelectedFiles.reduce((n, f) => n + rvWeeksOf(f).length, 0);
+  btn.textContent = `Upload ${rvSelectedFiles.length} file${rvSelectedFiles.length > 1 ? 's' : ''}` + (total ? ` · ${total} week${total > 1 ? 's' : ''}` : '');
 }
 function removeRvFile(i){
   rvSelectedFiles.splice(i,1);
@@ -1936,25 +1990,32 @@ function removeRvFile(i){
 }
 async function confirmUploadRV(){
   if(!rvSelectedFiles.length){ setStatus('statusRV', 'err', 'Choose at least one file first.'); return; }
+  const missing = rvSelectedFiles.filter(f => !rvWeeksOf(f).length);
+  if(missing.length){
+    rvSelectedFiles.forEach((f, i) => { const el = document.getElementById('rvFileStatus'+i); if(el && !rvWeeksOf(f).length){ el.textContent = '✗'; el.style.color = 'var(--red)'; } });
+    setStatus('statusRV', 'err', `Choose at least one week for: ${missing.map(f => f.name).join(', ')}`);
+    return;
+  }
+  // updating several weeks replaces what is saved for each of them, so say exactly which before doing it
+  if(rvSelectedFiles.some(f => rvWeeksOf(f).length > 1)){
+    const lines = rvSelectedFiles.map(f => { const w = rvWeeksOf(f); return `• ${f.name}: ${w.length} week${w.length > 1 ? 's' : ''} (${rvFmtWeek(w[0])}${w.length > 1 ? ' → ' + rvFmtWeek(w[w.length-1]) : ''})`; }).join('\n');
+    if(!confirm(`This will update the review numbers for these weeks, replacing what is saved for them:\n\n${lines}\n\nContinue?`)) return;
+  }
   const btn = document.getElementById('btnUploadRV');
   btn.disabled = true;
   let successCount = 0, failCount = 0;
-  const failMessages = [], okMessages = [];
+  const failMessages = [], okMessages = [], resultBlocks = [];
 
   for(let i=0;i<rvSelectedFiles.length;i++){
     const file = rvSelectedFiles[i];
-    const week = document.getElementById('rvFileWeek'+i).value;
+    const weeks = rvWeeksOf(file);
     const statusEl = document.getElementById('rvFileStatus'+i);
-    if(!week){
-      statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-      failCount++; failMessages.push(`${file.name}: set the target week first`);
-      continue;
-    }
-    setStatus('statusRV', 'busy', `Uploading ${i+1} of ${rvSelectedFiles.length}: ${file.name}…`);
+    setStatus('statusRV', 'busy', `Uploading ${i+1} of ${rvSelectedFiles.length}: ${file.name} (${weeks.length} week${weeks.length>1?'s':''})…`);
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('week', week);
-    const marketplace = document.getElementById('rvFileMarketplace'+i).value.trim();
+    fd.append('weeks', JSON.stringify(weeks));
+    fd.append('week', weeks[0]);                 // lets an older, not-yet-redeployed function still do the first week
+    const marketplace = (document.getElementById('rvFileMarketplace'+i).value || '').trim();
     if(marketplace) fd.append('marketplace', marketplace);
     try{
       const res = await fetch(`${EDGE_BASE}/upload-reviews`, {
@@ -1966,10 +2027,19 @@ async function confirmUploadRV(){
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
         failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
+      } else if(!Array.isArray(data.weeks)){
+        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
+        failCount++; failMessages.push(`${file.name}: only the first week was updated — the upload-reviews function is the old version; redeploy it from the latest file to update several weeks at once`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
-        okMessages.push(`${data.rowsLoaded} product(s) updated from ${data.totalReviewsInFile} reviews in file`);
+        okMessages.push(`${data.rowsLoaded} product-week${data.rowsLoaded===1?'':'s'} updated across ${data.weekCount} week${data.weekCount===1?'':'s'} from ${data.totalReviewsInFile} reviews in the file`);
+        const skipped = (data.skippedBeforeLaunch || []);
+        resultBlocks.push(`<div style="font-size:11.5px;margin-bottom:10px;"><div style="font-weight:700;margin-bottom:3px;">${escapeHtml(file.name)}</div>
+          <table style="border-collapse:collapse;font-size:11.5px;"><thead><tr><th style="text-align:left;padding:2px 12px 2px 0;color:var(--text-muted);font-weight:600;">Week</th><th style="text-align:right;padding:2px 12px;color:var(--text-muted);font-weight:600;">Products</th><th style="text-align:right;padding:2px 0 2px 12px;color:var(--text-muted);font-weight:600;">Reviews counted</th></tr></thead><tbody>` +
+          data.weeks.map(w => `<tr><td style="padding:1px 12px 1px 0;">${rvFmtWeek(w.week)} <span style="color:var(--text-muted);font-size:10px;">${isoYearWeek(w.week)}</span></td><td style="text-align:right;padding:1px 12px;">${w.productsUpdated}</td><td style="text-align:right;padding:1px 0 1px 12px;">${w.reviewsCounted}${w.productsUpdated && w.productsWithNoReviews === w.productsUpdated ? ' <span style="color:var(--text-muted);">(none that week)</span>' : ''}${!w.productsUpdated ? ' <span style="color:#92400E;">(before launch — not saved)</span>' : ''}</td></tr>`).join('') +
+          `</tbody></table>
+          <div style="color:var(--text-muted);margin-top:3px;">${data.reviewsInSelectedWeeks} of the file's usable reviews fall inside the weeks you chose${data.reviewsOutsideSelectedWeeks ? `; ${data.reviewsOutsideSelectedWeeks} are dated in other weeks and were not used` : ''}.${skipped.length ? ` ${skipped.length} product-week${skipped.length>1?'s were':' was'} skipped because the week ends before the product launched.` : ''}${data.skippedNoAsin ? ` ${data.skippedNoAsin} row${data.skippedNoAsin>1?'s have':' has'} no ASIN and ${data.skippedNoAsin>1?'were':'was'} skipped.` : ''}</div></div>`);
       }
     }catch(err){
       statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
@@ -1978,6 +2048,7 @@ async function confirmUploadRV(){
   }
 
   btn.disabled = false;
+  document.getElementById('rvResults').innerHTML = resultBlocks.join('');
   if(failCount === 0){
     setStatus('statusRV', 'ok', `${successCount} file${successCount>1?'s':''} uploaded — ${okMessages.join('; ')}`);
     rvSelectedFiles = [];
