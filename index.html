@@ -927,7 +927,7 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
-              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 (790)"; a week before Keepa has any data stays blank. Each week shows the value as of the END of that week, so it will not match today's live number — the newest value is shown in the product panel as <strong>Amazon Rating</strong>, dated by when Keepa last refreshed it. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
+              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 (790)"; a week before Keepa has any data stays blank. Each week shows the value as of the END of that week, so it will not match today's live number — the newest value is shown in the product panel as <strong>Amazon Rating</strong>, dated by when Keepa last refreshed it. If a listing has <strong>separate review sets per variation</strong> (some Amazon listings keep one rating per colour, for example), each set is shown on its own line — rating, count, then the variation name — instead of one total; siblings that merely lag a few days behind each other are treated as one set, and a sibling Keepa hasn't refreshed for over a week is ignored. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
               <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
@@ -1052,12 +1052,24 @@ function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; 
 // Combines rating + count into one display string, e.g. "4.4 (775)" —
 // takes the {rating, count} object set during week finalization, not a
 // plain number, since this one metric genuinely needs two values together.
+function fmtReviewPair(rating, count){
+  const parts = [];
+  if(rating!=null) parts.push(Number(rating).toFixed(1));
+  if(count!=null) parts.push('('+Number(count).toLocaleString('en-US')+')');
+  return parts.join(' ');
+}
+// One review set -> "4.4 (790)". A listing whose variations have SEPARATE reviews has several, shown one under the other, each followed by its variation name:
+//   4.4 (43)
+//   Gris / 1 place
+//   4.7 (33)
+//   Bleu / 1 place
 function fmtGlobalReviews(v){
   if(!v || (v.rating==null && v.count==null)) return '–';
-  const parts = [];
-  if(v.rating!=null) parts.push(v.rating.toFixed(1));
-  if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
-  return parts.join(' ') || '–';      // e.g. "4.4 (790)"
+  if(Array.isArray(v.sets) && v.sets.length >= 2){
+    return v.sets.map(x => `<div style="font-weight:600;white-space:nowrap;margin-top:2px;">${fmtReviewPair(x.rating, x.count)}</div>` +
+      (x.label ? `<div style="font-size:8.5px;font-weight:400;color:var(--text-muted);line-height:1.25;white-space:normal;overflow-wrap:anywhere;max-width:86px;">${escapeHtml(x.label)}</div>` : '')).join('');
+  }
+  return fmtReviewPair(v.rating, v.count) || '–';      // e.g. "4.4 (790)"
 }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
@@ -2896,7 +2908,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     kwTop10:null,
     visibility:0, visibilitySeen:false, bsrCategory:null,
     newReviews:0, newReviewsSeen:false, avgRating:null, lowRatingDetails:null,
-    globalReviewRating:null, globalReviewCount:null,
+    globalReviewRating:null, globalReviewCount:null, globalReviewSets:null,
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
@@ -2971,6 +2983,7 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12){
     if(r.low_rating_details){ w.lowRatingDetails = r.low_rating_details; }
     if(r.global_review_rating!=null){ w.globalReviewRating=+r.global_review_rating; }
     if(r.global_review_count!=null){ w.globalReviewCount=+r.global_review_count; }
+    if(Array.isArray(r.global_review_sets) && r.global_review_sets.length){ w.globalReviewSets=r.global_review_sets; }   // separate review sets per variation (see fmtGlobalReviews)
   });
 
   // Sessions, Impressions, Ad Clicks, and Ad Orders must come directly from
@@ -3021,7 +3034,7 @@ function finalizeWeek(w){
       kwTop10:null,
       visibility:null, bsrCategory:null,
       newReviews:null, avgRating:null, lowRatingDetails:null, ratingPoints:null,
-      globalReviewRating:null, globalReviewCount:null, globalReviews:null,
+      globalReviewRating:null, globalReviewCount:null, globalReviewSets:null, globalReviews:null,
       hasData:false,
     };
   }
@@ -3089,7 +3102,7 @@ function finalizeWeek(w){
     lowRatingDetails: w.lowRatingDetails,
     globalReviewRating: w.globalReviewRating,
     globalReviewCount: w.globalReviewCount,
-    globalReviews: (w.globalReviewRating!=null || w.globalReviewCount!=null) ? { rating: w.globalReviewRating, count: w.globalReviewCount } : null,
+    globalReviews: (w.globalReviewRating!=null || w.globalReviewCount!=null) ? { rating: w.globalReviewRating, count: w.globalReviewCount, sets: w.globalReviewSets } : null,
     ratingPoints: (w.avgRating!=null && w.newReviewsSeen && w.newReviews) ? w.avgRating*w.newReviews : null,
     hasData:true,
   };
@@ -3378,9 +3391,13 @@ function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
 // The newest rating + count the Keepa sync saved on the product, e.g. "4.4 (790)", with the date Keepa itself last refreshed it — so a number that
 // lags the live listing is visible. (The Global Reviews row in the scorecard holds the value as of the END of each completed week instead.)
 function amazonRatingText(product){
-  const r = product.amazon_rating != null ? Number(product.amazon_rating).toFixed(1) + ' ' : '';
   const d = product.amazon_rating_as_of ? new Date(product.amazon_rating_as_of + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
-  return `${r}(${Number(product.amazon_rating_count).toLocaleString('en-US')})` + (d ? ` <span style="font-weight:400;font-size:10.5px;color:var(--text-muted);">Keepa, ${d}</span>` : '');
+  const stamp = d ? ` <span style="font-weight:400;font-size:10.5px;color:var(--text-muted);">Keepa, ${d}</span>` : '';
+  const sets = Array.isArray(product.amazon_rating_sets) ? product.amazon_rating_sets : [];
+  if(sets.length >= 2){      // separate review sets per variation: one per line, with the variation name
+    return sets.map(x => `<div>${fmtReviewPair(x.rating, x.count)}${x.label ? ` <span style="font-weight:400;font-size:11px;color:var(--text-muted);">${escapeHtml(x.label)}</span>` : ''}</div>`).join('') + `<div>${stamp.trim()}</div>`;
+  }
+  return fmtReviewPair(product.amazon_rating, product.amazon_rating_count) + stamp;
 }
 function renderTagDashboard(tag){
   const cache = tagDashboardCache[tag];
@@ -4095,7 +4112,7 @@ const METRICS = [
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
   {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true, wrap:true,
-    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel."},
+    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel. If the listing has separate review sets per variation (for example one per colour), each set is shown on its own line with the variation name, not totalled."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -4872,7 +4889,9 @@ async function forceKeepaSync(){
         try{ const { data: prods } = await sb.from('products').select('*'); (prods||[]).forEach(pr=>{ names[pr.asin] = productDisplayName(pr); }); }catch(_e){}
         const fd = iso => iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
         const fv = (r, c) => c == null ? '–' : (r != null ? r.toFixed(1) + ' ' : '') + '(' + Number(c).toLocaleString('en-US') + ')';
-        const rows = rt.details.map(d => `• ${names[d.asin]||d.asin}: newest ${fv(d.latestRating, d.latestCount)} — Keepa refreshed ${fd(d.keepaUpdated)||'(date unknown)'}, count last changed ${fd(d.lastPointDate)||'–'}${d.latestChild?`, via ${d.latestChild}`:''} · week ${d.latestWeek||'?'} column: ${fv(d.rating, d.count)}`);
+        const rows = rt.details.map(d => `• ${names[d.asin]||d.asin}: newest ${fv(d.latestRating, d.latestCount)} — Keepa refreshed ${fd(d.keepaUpdated)||'(date unknown)'}, count last changed ${fd(d.lastPointDate)||'–'}${d.latestChild?`, via ${d.latestChild}`:''} · week ${d.latestWeek||'?'} column: ${fv(d.rating, d.count)}` +
+          ((d.sets||[]).length >= 2 ? `\n    ↳ ${d.sets.length} separate review sets: ` + d.sets.map(x => `${fv(x.rating, x.count)}${x.label ? ' ' + x.label : ''}`).join('  |  ') : '') +
+          ((d.staleChildren||[]).length ? `\n    ↳ ignored as stale (refreshed long before its siblings): ${d.staleChildren.join(', ')}` : ''));
         latestLines = '\n\nLatest values Keepa returned:\n' + rows.slice(0, 25).join('\n') + (rows.length > 25 ? `\n…and ${rows.length - 25} more` : '');
       }
       if(rt && rt.latestError) latestLines += `\n\n⚠ The newest rating could not be saved on the products (${rt.latestError}) — run add_latest_rating_columns.sql.`;
