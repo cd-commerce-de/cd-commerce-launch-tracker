@@ -69,6 +69,20 @@
 
   .filter-bar{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;}
   .filter-field label{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
+
+  /* Actual vs. Target "Products" picker (tick several products) */
+  .ms-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:230px;max-width:340px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font:inherit;font-size:13px;cursor:pointer;text-align:left;color:var(--text-dark);}
+  .ms-btn #tseProductBtnText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ms-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:40;width:400px;max-width:92vw;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:8px;}
+  .ms-actions{display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 8px;border-bottom:1px solid var(--border);}
+  .ms-actions button{border:1px solid var(--border);background:#F8FAFC;border-radius:6px;padding:3px 8px;font-size:11.5px;cursor:pointer;color:var(--text-dark);}
+  .ms-actions button:hover{background:#EEF2F7;}
+  .ms-list{max-height:340px;overflow:auto;padding-top:4px;}
+  .filter-field .ms-menu label{display:flex;align-items:flex-start;gap:7px;text-transform:none;letter-spacing:0;font-weight:400;font-size:12.5px;color:var(--text-dark);margin:0;cursor:pointer;}
+  .filter-field .ms-menu label.ms-group-h{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:8px 4px 3px;}
+  .filter-field .ms-menu label.ms-item{padding:4px 6px 4px 18px;border-radius:6px;}
+  .filter-field .ms-menu label.ms-item:hover{background:#F1F5F9;}
+  .ms-menu input[type=checkbox]{margin-top:2px;accent-color:var(--gold);}
   select, input[type=text], input[type=date]{
     font-family:var(--font-b);font-size:13.5px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text-dark);min-width:160px;
   }
@@ -548,7 +562,10 @@
             <div style="font-size:12.5px;margin-top:6px;" id="tseInfoAmazonLink"></div>
           </div>
           <div class="filter-bar" style="margin:0 0 0 auto;">
-            <div class="filter-field"><label>Product</label><select id="tseProductSelect" onchange="loadTseForecast()"></select></div>
+            <div class="filter-field" id="tseProductField" style="position:relative;"><label>Products</label>
+              <button type="button" class="ms-btn" id="tseProductBtn" aria-haspopup="true" aria-expanded="false" onclick="tseToggleMenu()"><span id="tseProductBtnText">Select products</span><span style="color:var(--text-muted);">▾</span></button>
+              <div class="ms-menu" id="tseProductMenu" style="display:none;"></div>
+            </div>
             <div class="filter-field"><label>Marketplace</label><select id="tseMarketplaceSelect" onchange="loadTseForecast()"><option value="ALL">All</option></select></div>
           </div>
         </div>
@@ -561,7 +578,7 @@
       <div id="tseBody" style="display:none;">
         <div class="panel" id="ltComparePanel">
           <h3>Deals Tracker targets — Revenue, Units &amp; Margin</h3>
-          <div class="meta" id="ltCompareSource" style="margin:-6px 0 12px;"></div>
+          <div class="meta" id="ltCompareSource" style="margin:-6px 0 12px;font-size:12.5px;line-height:1.5;color:var(--text-muted);"></div>
           <div id="ltCompareMessage"></div>
           <div class="table-wrap"><table class="stretch-table" id="ltCompareTable"></table></div>
           <p id="ltCompareLegend" style="display:none;font-size:11.5px;color:var(--text-muted);margin:10px 0 0;">Each finished week's <strong>% of target</strong> is colored the way your Deals Tracker does it: <span style="background:#F1BF42;color:#1a1a1a;padding:0 5px;border-radius:3px;">gold</span> 100% or more, <span style="background:#58A65C;color:#1a1a1a;padding:0 5px;border-radius:3px;">green</span> 90% or more, <span style="background:#FDF2D0;color:#1a1a1a;padding:0 5px;border-radius:3px;">cream</span> 80% or more, no color below 80%, <span style="background:#A22116;color:#fff;padding:0 5px;border-radius:3px;">dark red</span> at 0% or below. The week in progress is shown in italics and isn't scored yet; future weeks show their target only. Actuals are Sellerboard's Total Sales, Units Sold and Net Profit; the tracker's Margin target is a € amount, so it's compared against Net Profit (€).</p>
@@ -910,7 +927,7 @@
               <tr><td>KW in Top 10</td><td>Data Rova "Ranks by ASIN — Daily" upload</td><td><em>No total shown</em> — separate row, not part of the Total/Avg column loop at all</td><td>The cell shows a count — hover over it to see the actual list of keywords that ranked organically in the top 10 that week (rank 0 = not ranked, excluded)</td></tr>
               <tr><td>New Reviews</td><td>SellerSprite Reviews upload</td><td>Sum</td><td>Count of reviews matched to this product within the set week. Explicitly written as 0 (not left blank) if the product's children appeared in the file but had no reviews that week.</td></tr>
               <tr><td>Average Rating</td><td>SellerSprite Reviews upload — average of that week's matched reviews' star ratings, computed by the importer</td><td>Review-weighted average: Σ(week's avg rating × week's review count) ÷ Σ(review count)</td><td>Turns red with a hover listing the SKU(s) and rating(s) if any review that week was rated 3★ or below. The 12-week total is genuinely weighted by review volume — a 20-review week counts 20× more than a 1-review week, not averaged as if they counted equally.</td></tr>
-              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 stars (790)"; a week before Keepa has any data stays blank. Each week shows the value as of the END of that week, so it will not match today's live number — the newest value is shown in the product panel as <strong>Amazon Rating</strong>, dated by when Keepa last refreshed it. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
+              <tr><td>Global Reviews</td><td>Keepa (automatic, every Monday) — Amazon's displayed rating and rating count for the product's listing</td><td><em>No total shown</em> — each week shows the value as of the end of that week</td><td>Taken from the product's own marketplace, using up to 3 of its child ASINs and the highest count (variations share one rating, and one child can be missing from Keepa). It is never added across marketplaces. Because Keepa keeps a history, earlier weeks since launch fill in on their own, and products older than 12 weeks keep updating. Displayed as e.g. "4.4 (790)"; a week before Keepa has any data stays blank. Each week shows the value as of the END of that week, so it will not match today's live number — the newest value is shown in the product panel as <strong>Amazon Rating</strong>, dated by when Keepa last refreshed it. Not the same as New Reviews, which counts the reviews in your weekly SellerSprite upload.</td></tr>
               <tr><td>Pricing Notes</td><td>Manually entered — click the cell to add a note</td><td><em>No total shown</em> — free text, not a number</td><td>A separate free-text row from the general Notes row, specifically for tracking price changes over time (own database table, so it never collides with general Notes on the same week).</td></tr>
             </tbody>
           </table>
@@ -1032,15 +1049,15 @@ function fmtInt(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return
 function fmtPct(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n*100).toFixed(1)+'%'; }
 function fmtRank(n){ return n?fmtInt(n):'–'; }
 function fmtRating(n){ return (n==null||isNaN(n)) ? '–' : n.toFixed(1)+'★'; }
-// Combines rating + count into one display string, e.g. "4.4 stars (775)" —
+// Combines rating + count into one display string, e.g. "4.4 (775)" —
 // takes the {rating, count} object set during week finalization, not a
 // plain number, since this one metric genuinely needs two values together.
 function fmtGlobalReviews(v){
   if(!v || (v.rating==null && v.count==null)) return '–';
   const parts = [];
-  if(v.rating!=null) parts.push(v.rating.toFixed(1)+' stars');
+  if(v.rating!=null) parts.push(v.rating.toFixed(1));
   if(v.count!=null) parts.push('('+v.count.toLocaleString('en-US')+')');
-  return parts.join('<br>') || '–';      // two short lines ("4.4 stars" over "(790)") so the whole value fits a narrow week column
+  return parts.join(' ') || '–';      // e.g. "4.4 (790)"
 }
 function fmtMoneyNA(n){ return fmtMoney(n, 'N/A'); }
 function fmtIntNA(n){ return fmtInt(n, 'N/A'); }
@@ -1093,7 +1110,8 @@ function productLineOnly(product){
 // own launch date, regardless of tag); a product with no launch date can't be
 // judged, so it stays in its Launch/Expansion group. Returns the products in the
 // exact order they appear, so callers can pick the true first entry.
-function fillGroupedProductSelect(sel, products){
+// Splits a product list into the Launch / Expansion / Other / Post 12-Week groups every product picker uses, each group newest first.
+function groupProductsForSelect(products){
   const now = Date.now();
   const isPast12 = p => {
     if(!p.launch) return false;
@@ -1113,19 +1131,20 @@ function fillGroupedProductSelect(sel, products){
     else if(p.tag === 'expansion') buckets.expansion.push(p);
     else buckets.other.push(p);
   });
-  const groups = [
-    { label:'Launch', items:buckets.launch },
-    { label:'Expansion', items:buckets.expansion },
-    { label:'Other', items:buckets.other },
-    { label:'Post 12-Week', items:buckets.post12 },
-  ];
+  return [
+    { key:'launch', label:'Launch', items:buckets.launch },
+    { key:'expansion', label:'Expansion', items:buckets.expansion },
+    { key:'other', label:'Other', items:buckets.other },
+    { key:'post12', label:'Post 12-Week', items:buckets.post12 },
+  ].filter(g=>g.items.length).map(g=>({ ...g, items:g.items.slice().sort(newestFirst) }));
+}
+function fillGroupedProductSelect(sel, products){
   sel.innerHTML = '';
   const ordered = [];
-  groups.forEach(g=>{
-    if(!g.items.length) return;
+  groupProductsForSelect(products).forEach(g=>{
     const og = document.createElement('optgroup');
     og.label = `${g.label} (${g.items.length})`;
-    g.items.slice().sort(newestFirst).forEach(p=>{
+    g.items.forEach(p=>{
       const o = document.createElement('option');
       o.value = p.asin; o.textContent = productDisplayName(p);
       og.appendChild(o);
@@ -3356,10 +3375,10 @@ function buildMetaFields(product, ageDays, ageWeeks, dateLaunchedStr){
     ...(product.amazon_rating_count != null ? [{ label:'Amazon Rating', value: amazonRatingText(product) }] : []),
   ];
 }
-// The newest rating + count the Keepa sync saved on the product, e.g. "4.4 stars (790)", with the date Keepa itself last refreshed it — so a number that
+// The newest rating + count the Keepa sync saved on the product, e.g. "4.4 (790)", with the date Keepa itself last refreshed it — so a number that
 // lags the live listing is visible. (The Global Reviews row in the scorecard holds the value as of the END of each completed week instead.)
 function amazonRatingText(product){
-  const r = product.amazon_rating != null ? Number(product.amazon_rating).toFixed(1) + ' stars ' : '';
+  const r = product.amazon_rating != null ? Number(product.amazon_rating).toFixed(1) + ' ' : '';
   const d = product.amazon_rating_as_of ? new Date(product.amazon_rating_as_of + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
   return `${r}(${Number(product.amazon_rating_count).toLocaleString('en-US')})` + (d ? ` <span style="font-weight:400;font-size:10.5px;color:var(--text-muted);">Keepa, ${d}</span>` : '');
 }
@@ -4076,7 +4095,7 @@ const METRICS = [
   {key:'newReviews', label:'New Reviews', fmt:fmtInt, kind:'sum'},
   {key:'avgRating', label:'Average Rating', fmt:fmtRating, kind:'calc', ratioOf:{num:'ratingPoints',den:'newReviews'}, redFlagKey:'lowRatingDetails'},
   {key:'globalReviews', label:'Global Reviews', fmt:fmtGlobalReviews, kind:'raw', noTotal:true, wrap:true,
-    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 stars (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel."},
+    description:"Amazon's displayed rating and number of ratings for this product's listing, as of the end of that week (e.g. 4.4 (790)). Read automatically from Keepa for the product's own marketplace — it is not added across marketplaces, so it isn't inflated when a product sells in several. Older weeks fill in from Keepa's history. Each week is the value as of that week's end; the newest value is the Amazon Rating line in the product panel."},
   {key:'visibility', label:'Keyword Visibility (%)', fmt:fmtPct, kind:'calc', noTotal:true,
     description:'Visibility for all keywords on the project for this product. Uses the organic rank and sales for each keyword to show the overall performance.'},
 ];
@@ -4846,7 +4865,7 @@ async function forceKeepaSync(){
         const names = {};
         try{ const { data: prods } = await sb.from('products').select('*'); (prods||[]).forEach(pr=>{ names[pr.asin] = productDisplayName(pr); }); }catch(_e){}
         const fd = iso => iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : null;
-        const fv = (r, c) => c == null ? '–' : (r != null ? r.toFixed(1) + '★ ' : '') + '(' + Number(c).toLocaleString('en-US') + ')';
+        const fv = (r, c) => c == null ? '–' : (r != null ? r.toFixed(1) + ' ' : '') + '(' + Number(c).toLocaleString('en-US') + ')';
         const rows = rt.details.map(d => `• ${names[d.asin]||d.asin}: newest ${fv(d.latestRating, d.latestCount)} — Keepa refreshed ${fd(d.keepaUpdated)||'(date unknown)'}, count last changed ${fd(d.lastPointDate)||'–'}${d.latestChild?`, via ${d.latestChild}`:''} · week ${d.latestWeek||'?'} column: ${fv(d.rating, d.count)}`);
         latestLines = '\n\nLatest values Keepa returned:\n' + rows.slice(0, 25).join('\n') + (rows.length > 25 ? `\n…and ${rows.length - 25} more` : '');
       }
@@ -5237,6 +5256,46 @@ function ltBuildComparison(targetRows, actualRows, todayIso){
   }
   return { weeks };
 }
+// COMBINED view: items = [{ asin, targetRows, actualRows }] for several products -> the same { weeks:[{ week, state, cells }] } shape as above, summed per
+// CALENDAR week (the tracker's targets are dated by calendar week). Like-for-like rule: in a given week a product counts only if it has BOTH a target
+// and an actual figure for it — otherwise a product that hasn't launched yet, whose target window has ended, or whose data is missing for that week would
+// push the percentage up or down. `used` of `of` says how many of the combined products counted in that column. A week nobody has actuals for yet
+// (future, or no data) shows the full target sum and no actual.
+function ltBuildCombined(items, todayIso){
+  const per = items.map(it => {
+    const tBy = {};
+    (it.targetRows || []).forEach(r => {
+      const t = tBy[r.week] || (tBy[r.week] = { revenue: 0, units: 0, margin: 0 });
+      t.revenue += +r.revenue || 0; t.units += +r.units || 0; t.margin += +r.margin || 0;
+    });
+    const aBy = {};
+    (it.actualRows || []).forEach(r => { aBy[r.week] = r; });
+    return { asin: it.asin, tBy, aBy };
+  });
+  const hasTarget = (p, w) => { const t = p.tBy[w]; return !!t && !!(t.revenue || t.units || t.margin); };
+  const withTargets = new Set();
+  per.forEach(p => Object.keys(p.tBy).forEach(w => { if(hasTarget(p, w)) withTargets.add(w); }));
+  const sorted = [...withTargets].sort();
+  if(!sorted.length) return null;
+  const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
+  const weeks = [];
+  for(let w = sorted[0]; w <= sorted[sorted.length - 1]; w = ltAddDays(w, 7)){
+    const state = ltWeekState(w, todayIso);
+    const tgt = per.filter(p => hasTarget(p, w));
+    const cells = {}; let used = tgt.length;
+    LT_METRICS.forEach(m => {
+      const fullTarget = sum(tgt, p => p.tBy[w][m.key]);
+      if(state === 'future'){ cells[m.key] = { target: fullTarget, actual: null, pct: null }; return; }
+      const counted = tgt.filter(p => { const r = p.aBy[w]; return r && r[m.actualKey] != null; });
+      if(!counted.length){ cells[m.key] = { target: fullTarget, actual: null, pct: null }; return; }
+      const target = sum(counted, p => p.tBy[w][m.key]), actual = sum(counted, p => +p.aBy[w][m.actualKey]);
+      cells[m.key] = { target, actual, pct: target > 0 ? actual / target : null };
+      if(m.key === 'revenue') used = counted.length;          // the headline metric decides the n/N tag
+    });
+    weeks.push({ week: w, state, cells, used, of: per.length });
+  }
+  return { weeks };
+}
 /* LT-CORE-END */
 
 /* LT-GLUE-START — Deals Tracker targets: Upload & Manage importer + Actual vs. Target comparison */
@@ -5487,19 +5546,146 @@ async function loadDealsTargetsComparison(product){
   table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
   legend.style.display = 'block';
 }
+
+// ----- several products ticked: a combined header, and the combined Target / Actual / Actual-vs-Target table
+function tseRenderCombinedHeader(selected){
+  document.getElementById('tseInfoDescription').style.display = 'block';
+  document.getElementById('tseInfoMetaGrid').style.display = 'none';
+  document.getElementById('tseInfoName').innerHTML = `Combined — ${selected.length} products`;
+  const names = selected.map(p => escapeHtml(productDisplayName(p)));
+  document.getElementById('tseInfoAsinLine').innerHTML =
+    `<span title="${names.join(' | ')}">${names.slice(0, 6).join(' · ')}${names.length > 6 ? ` · +${names.length - 6} more` : ''}</span>`;
+  const launches = selected.map(p => p.launch).filter(Boolean).sort();
+  const first = launches[0], last = launches[launches.length - 1];
+  document.getElementById('tseInfoLaunchLine').innerHTML = launches.length
+    ? `Launch dates: <strong>${ltFmtDate(first)}${first !== last ? ' – ' + ltFmtDate(last) : ''}</strong>` : '';
+  document.getElementById('tseInfoAmazonLink').innerHTML = '';
+}
+async function loadCombinedComparison(selected){
+  const token = ++ltCompareToken;
+  const msg = document.getElementById('ltCompareMessage'), table = document.getElementById('ltCompareTable');
+  const src = document.getElementById('ltCompareSource'), legend = document.getElementById('ltCompareLegend');
+  const box = t => `<div style="font-size:12.5px;color:var(--text-muted);padding:10px 12px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;">${t}</div>`;
+  table.innerHTML = ''; src.innerHTML = ''; msg.innerHTML = ''; legend.style.display = 'none';
+
+  const codeOf = p => String(p.product_line_code || '').trim().toUpperCase();
+  const codes = [...new Set(selected.map(codeOf).filter(Boolean))];
+  const [rowsRes, products] = await Promise.all([
+    codes.length ? sb.from('line_targets').select('*').in('product_line_code', codes) : Promise.resolve({ data: [], error: null }),
+    fetchProducts(),
+  ]);
+  if(token !== ltCompareToken) return;
+  if(rowsRes.error){ msg.innerHTML = box(escapeHtml(ltSetupMessage(rowsRes.error))); return; }
+
+  // Each product gets its own tracker line exactly as when viewed alone (decided by dates across ALL products with that code).
+  const included = [], excluded = [];
+  selected.forEach(p => {
+    const code = codeOf(p);
+    if(!code){ excluded.push({ p, why: 'it has no Product Line Code' }); return; }
+    const rows = (rowsRes.data || []).filter(r => r.product_line_code === code);
+    if(!rows.length){ excluded.push({ p, why: `there are no saved tracker lines for code ${code}` }); return; }
+    const blocks = ltBlocksFromRows(rows), assign = ltAssignBlocks(blocks, products);
+    const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === p.asin);
+    if(!mine){ excluded.push({ p, why: `none of the ${code} tracker lines is matched to it (open it on its own to see why)` }); return; }
+    included.push({ product: p, mine, matched: rows.filter(r => r.kind === mine.kind && r.line_label === mine.label) });
+  });
+  const excludedHtml = excluded.length
+    ? `<div style="margin-top:6px;color:#92400E;">Not included — no matching targets: ${excluded.map(x => `<strong>${escapeHtml(productDisplayName(x.p))}</strong> (${escapeHtml(x.why)})`).join('; ')}.</div>` : '';
+  if(!included.length){
+    msg.innerHTML = box(`None of the ${selected.length} selected products has a Deals Tracker line matched to it, so there is nothing to total.${excludedHtml}`);
+    return;
+  }
+
+  const asins = included.map(i => i.product.asin);
+  const minWeek = included.map(i => i.mine.firstWeek).sort()[0];
+  const maxWeek = included.flatMap(i => i.matched.map(r => r.week)).sort().pop();
+  const actual = [];
+  for(let from = 0; ; from += 1000){        // page through, so no week is silently lost past the 1000-row limit
+    const { data, error } = await sb.from('sellerboard_rows').select('asin,week,sales,units,net_profit')
+      .in('asin', asins).gte('week', minWeek).lte('week', maxWeek).range(from, from + 999);
+    if(token !== ltCompareToken) return;
+    if(error){ msg.innerHTML = box(escapeHtml(error.message)); return; }
+    actual.push(...(data || []));
+    if(!data || data.length < 1000) break;
+  }
+  const cmp = ltBuildCombined(included.map(i => ({ asin: i.product.asin, targetRows: i.matched, actualRows: actual.filter(r => r.asin === i.product.asin) })),
+                              new Date().toISOString().slice(0, 10));
+  if(!cmp){ msg.innerHTML = box(`The matched tracker lines have no targets entered yet.${excludedHtml}`); return; }
+
+  src.innerHTML = `Combined total of <strong>${included.length}</strong> product${included.length === 1 ? '' : 's'}: ` +
+    included.map(i => `${escapeHtml(productDisplayName(i.product))} (${escapeHtml(i.mine.label)})`).join('; ') + '. ' +
+    `Weeks are calendar weeks. Each week adds up only the products that have <strong>both</strong> a target and actual figures for it, so target and actual always cover the same products — ` +
+    `a column marked <strong>n/N</strong> counts only n of the ${included.length}.` + excludedHtml;
+  const weekLabel = w => {
+    const d = new Date(w.week + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const tag = w.used < w.of
+      ? `<div title="${w.used} of the ${w.of} combined products have both a target and actual figures for this week" style="font-size:9px;font-weight:600;color:#92400E;margin-top:2px;">${w.used}/${w.of}</div>` : '';
+    return `${d}${tag}`;
+  };
+  table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
+  legend.style.display = 'block';
+}
 /* LT-GLUE-END */
 
 let tseSeeded = false;   // the tab starts from Product Detail's selection the first time it's opened, then keeps its own
+let tseSelection = [];   // ticked product ASINs, in the order they were ticked
+let tseCleared = false;  // true after "Clear", so an empty selection isn't silently refilled with the first product
+let tseGroups = [];      // the grouped, marketplace-filtered product list the menu is showing
+let tseMenuOpen = false, tseTimer = null;
+
+function tseSchedule(){ clearTimeout(tseTimer); tseTimer = setTimeout(loadTseForecast, 120); }   // several quick ticks = one refresh
+function tseToggleMenu(force){
+  tseMenuOpen = force != null ? force : !tseMenuOpen;
+  document.getElementById('tseProductMenu').style.display = tseMenuOpen ? 'block' : 'none';
+  document.getElementById('tseProductBtn').setAttribute('aria-expanded', String(tseMenuOpen));
+}
+document.addEventListener('click', e => { if(tseMenuOpen && !e.target.closest('#tseProductField')) tseToggleMenu(false); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && tseMenuOpen) tseToggleMenu(false); });
+function tsePick(asin, on){
+  tseSelection = on ? (tseSelection.includes(asin) ? tseSelection : [...tseSelection, asin]) : tseSelection.filter(a => a !== asin);
+  tseCleared = tseSelection.length === 0; tseSchedule();
+}
+function tseGroupPick(key, on){
+  const items = (tseGroups.find(g => g.key === key) || { items: [] }).items.map(p => p.asin);
+  tseSelection = on ? [...tseSelection, ...items.filter(a => !tseSelection.includes(a))] : tseSelection.filter(a => !items.includes(a));
+  tseCleared = tseSelection.length === 0; tseSchedule();
+}
+function tseAction(act){
+  const all = tseGroups.flatMap(g => g.items.map(p => p.asin));
+  if(act === 'all') tseSelection = all;
+  else if(act === 'clear') tseSelection = [];
+  else tseSelection = ((tseGroups.find(g => g.key === act) || { items: [] }).items).map(p => p.asin);
+  tseCleared = tseSelection.length === 0; tseSchedule();
+}
+function tseRenderMenu(){
+  const menu = document.getElementById('tseProductMenu');
+  const list = menu.querySelector('.ms-list'), keepScroll = list ? list.scrollTop : 0;
+  const sel = new Set(tseSelection), total = tseGroups.reduce((n, g) => n + g.items.length, 0);
+  let h = `<div class="ms-actions"><button type="button" onclick="tseAction('all')">Select all shown (${total})</button>` +
+    (tseGroups.some(g => g.key === 'launch') ? '<button type="button" onclick="tseAction(\'launch\')">Launch only</button>' : '') +
+    (tseGroups.some(g => g.key === 'expansion') ? '<button type="button" onclick="tseAction(\'expansion\')">Expansion only</button>' : '') +
+    '<button type="button" onclick="tseAction(\'clear\')">Clear</button></div><div class="ms-list">';
+  tseGroups.forEach(g => {
+    h += `<div><label class="ms-group-h"><input type="checkbox" ${g.items.every(p => sel.has(p.asin)) ? 'checked' : ''} onchange="tseGroupPick('${g.key}', this.checked)"> ${g.label} (${g.items.length})</label>`;
+    g.items.forEach(p => { h += `<label class="ms-item"><input type="checkbox" ${sel.has(p.asin) ? 'checked' : ''} onchange="tsePick('${p.asin}', this.checked)"> <span>${escapeHtml(productDisplayName(p))}</span></label>`; });
+    h += '</div>';
+  });
+  menu.innerHTML = h + '</div>';
+  const nl = menu.querySelector('.ms-list'); if(nl) nl.scrollTop = keepScroll;
+}
+function tseUpdateButton(selected){
+  document.getElementById('tseProductBtnText').textContent =
+    selected.length === 0 ? 'Select products' : selected.length === 1 ? productDisplayName(selected[0]) : `${selected.length} products selected`;
+}
 async function loadTseForecast(){
-  const sel = document.getElementById('tseProductSelect');
   const mktSel = document.getElementById('tseMarketplaceSelect');
   const [products, marketplaces] = await Promise.all([fetchProducts(), getMarketplaces()]);
 
-  let wantAsin = sel.value, wantMkt = mktSel.value || 'ALL';
+  let wantMkt = mktSel.value || 'ALL';
   if(!tseSeeded){
     tseSeeded = true;
     const pdAsin = document.getElementById('productSelect').value, pdMkt = document.getElementById('marketplaceSelect').value || 'ALL';
-    if(pdAsin && products.find(p=>p.asin===pdAsin)){ wantAsin = pdAsin; wantMkt = pdMkt; }
+    if(pdAsin && products.find(p=>p.asin===pdAsin)){ tseSelection = [pdAsin]; wantMkt = pdMkt; }
   }
   mktSel.innerHTML = '<option value="ALL">All</option>';
   marketplaces.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; mktSel.appendChild(o); });
@@ -5507,21 +5693,32 @@ async function loadTseForecast(){
   const mkt = mktSel.value;
 
   // The marketplace filters the product list (same as Product Detail), grouped Launch / Expansion / Post 12-Week.
-  const visible = fillGroupedProductSelect(sel, mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt));
-  if(visible.find(p=>p.asin===wantAsin)) sel.value = wantAsin;
-  else if(visible.length) sel.value = visible[0].asin;
+  tseGroups = groupProductsForSelect(mkt === 'ALL' ? products : products.filter(p=>p.marketplace===mkt));
+  const visible = tseGroups.flatMap(g => g.items), visibleAsins = new Set(visible.map(p => p.asin));
+  tseSelection = tseSelection.filter(a => visibleAsins.has(a));
+  if(!tseSelection.length && !tseCleared && visible.length) tseSelection = [visible[0].asin];
+  const selected = tseSelection.map(a => visible.find(p => p.asin === a));
+  tseRenderMenu(); tseUpdateButton(selected);
 
-  const product = visible.find(p=>p.asin===sel.value);
-  document.getElementById('tseEmpty').style.display = product ? 'none' : 'block';
-  document.getElementById('tseBody').style.display = product ? 'block' : 'none';
-  if(!product){
+  const emptyEl = document.getElementById('tseEmpty');
+  emptyEl.innerHTML = visible.length
+    ? '<div class="big">No product selected</div>Tick one or more products in the <b>Products</b> menu above.'
+    : '<div class="big">No products yet</div>Add a product and upload data from the <b>Upload &amp; Manage</b> tab.';
+  emptyEl.style.display = selected.length ? 'none' : 'block';
+  document.getElementById('tseBody').style.display = selected.length ? 'block' : 'none';
+  if(!selected.length){
     document.getElementById('tseInfoDescription').style.display = 'none';
     document.getElementById('tseInfoMetaGrid').style.display = 'none';
     return;
   }
   try{
-    await renderProductInfoPanel('tseInfo', product, mkt, await productAnchor(product));
-    await loadDealsTargetsComparison(product);
+    if(selected.length === 1){      // exactly as before: the product's own panel, its own tracker line and week numbers
+      await renderProductInfoPanel('tseInfo', selected[0], mkt, await productAnchor(selected[0]));
+      await loadDealsTargetsComparison(selected[0]);
+    } else {                        // several: one combined total
+      tseRenderCombinedHeader(selected);
+      await loadCombinedComparison(selected);
+    }
   }catch(e){
     document.getElementById('ltCompareMessage').textContent = 'Could not load this tab: ' + (e.message || e);
   }
