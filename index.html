@@ -40,8 +40,6 @@
   .brand .mark{width:44px;height:44px;border:2px solid var(--gold);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--gold);font-size:15px;}
   .brand .titles h1{margin:0;color:#FFFFFF;font-size:21px;font-weight:700;}
   .brand .titles .sub{color:#94A3B8;font-size:12.5px;margin-top:1px;}
-  .header-toggle{display:flex;align-items:center;gap:8px;color:#CBD5E1;font-size:13px;font-weight:500;}
-  .header-toggle input{width:16px;height:16px;accent-color:var(--gold);}
   .server-badge{font-size:10.5px;color:#94A3B8;}
   .server-badge.ok{color:#34D399;}
   .server-badge.down{color:#F87171;}
@@ -112,6 +110,10 @@
      the literal 1%) and leaving one empty trailing column with no width set,
      so it's the only column that absorbs whatever space is left over. */
   table.stretch-table{width:100%;}
+  /* Product Detail scorecard: the Total/Avg column is frozen right beside the (already frozen) Metric column, so both stay in view while the
+     weeks scroll sideways. --col1w is the Metric column's measured width (set by freezeTotalColumn), which is where this column must stick. */
+  #scorecardTable th:nth-child(2), #scorecardTable td:nth-child(2){position:sticky;left:var(--col1w,150px);z-index:2;box-shadow:2px 0 4px -2px rgba(15,23,42,0.22);}
+  #scorecardTable thead th:nth-child(2){z-index:4;}
   table.stretch-table th:not(:last-child), table.stretch-table td:not(:last-child){width:1%;}
   /* Glossary table: a plain reference table, not a data grid — left-aligned,
      wraps its (often long) Notes text instead of forcing nowrap, and uses
@@ -284,7 +286,6 @@
       <div class="sub">CD Commerce · Launch Operations · <span id="serverBadge" class="server-badge">checking backend…</span></div>
     </div>
   </div>
-  <div class="header-toggle"><input type="checkbox" id="hideNoLaunch"> Hide products without a launch date</div>
 </header>
 
 <div class="app">
@@ -3099,8 +3100,7 @@ function sortOverviewBy(key){
 }
 async function loadOverview(){
   const products = await fetchProducts();
-  const hideNoLaunch = document.getElementById('hideNoLaunch').checked;
-  const filtered = hideNoLaunch ? products.filter(p=>p.launch) : products;
+  const filtered = products;      // every product is listed, with or without a launch date (the old "hide products without a launch date" switch is gone)
 
   if(!filtered.length){ overviewRowsData = []; renderOverviewTable(); return; }
   const asins = filtered.map(p => p.asin);
@@ -3305,7 +3305,6 @@ function openProductFromOverview(asin){
   document.getElementById('productSelect').value = asin;
   switchView('weekly-pulse');
 }
-document.getElementById('hideNoLaunch').addEventListener('change', loadOverview);
 
 /* ---------------- Consolidated Launch/Expansion Dashboards ---------------- */
 // Which past-Week-12 product panels are currently expanded, per dashboard
@@ -4327,6 +4326,19 @@ function isoYearWeek(iso){
   const wk = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
   return dt.getUTCFullYear() + '-' + String(wk).padStart(2, '0');
 }
+// Keeps the frozen Total/Avg column glued to the right edge of the frozen Metric column: its left offset is the Metric column's actual width,
+// re-measured whenever that width changes (new data, window resize, fonts finishing loading, expanding a breakdown).
+let freezeObserver = null;
+function freezeTotalColumn(){
+  const table = document.getElementById('scorecardTable');
+  const first = table && table.querySelector('thead th:first-child');
+  if(!first) return;
+  const apply = () => table.style.setProperty('--col1w', first.getBoundingClientRect().width + 'px');
+  apply();
+  if(freezeObserver) freezeObserver.disconnect();
+  if(typeof ResizeObserver !== 'undefined'){ freezeObserver = new ResizeObserver(apply); freezeObserver.observe(first); }
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(apply);
+}
 function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceNotesMap){
   const weekDates = weeks.map((_,i)=>{
     if(!anchor) return null;
@@ -4344,6 +4356,7 @@ function renderTable(weeks, targets, anchor, asin, notesMap, hasWeekZero, priceN
     return `<div class="yw" style="font-size:8.5px;font-weight:400;color:var(--text-muted);margin-bottom:1px;letter-spacing:.2px;" title="Calendar week ${isoYearWeek(weekDates[i])}">${isoYearWeek(weekDates[i])}</div>${wkLabel}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${dateStr}</div>`;
   });
   document.getElementById('scorecardTable').innerHTML = buildScorecardTable(weeks, targets, colLabels, asin, weekDates, notesMap, null, false, null, priceNotesMap);
+  freezeTotalColumn();
 }
 
 /* ---------------- Analysis (integrated into each tag dashboard) ---------------- */
