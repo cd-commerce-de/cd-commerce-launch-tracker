@@ -5282,7 +5282,7 @@ function ltBuildCombined(items, todayIso){
   for(let w = sorted[0]; w <= sorted[sorted.length - 1]; w = ltAddDays(w, 7)){
     const state = ltWeekState(w, todayIso);
     const tgt = per.filter(p => hasTarget(p, w));
-    const cells = {}; let used = tgt.length;
+    const cells = {}; let used = tgt.length, revCounted = null;
     LT_METRICS.forEach(m => {
       const fullTarget = sum(tgt, p => p.tBy[w][m.key]);
       if(state === 'future'){ cells[m.key] = { target: fullTarget, actual: null, pct: null }; return; }
@@ -5290,9 +5290,11 @@ function ltBuildCombined(items, todayIso){
       if(!counted.length){ cells[m.key] = { target: fullTarget, actual: null, pct: null }; return; }
       const target = sum(counted, p => p.tBy[w][m.key]), actual = sum(counted, p => +p.aBy[w][m.actualKey]);
       cells[m.key] = { target, actual, pct: target > 0 ? actual / target : null };
-      if(m.key === 'revenue') used = counted.length;          // the headline metric decides the n/N tag
+      if(m.key === 'revenue'){ used = counted.length; revCounted = counted; }     // the headline metric decides the n/N tag and the ASIN note
     });
-    weeks.push({ week: w, state, cells, used, of: per.length });
+    // the products behind this column: those that counted; for a week nobody has actuals for (future / no data), those holding a target
+    const attributed = (state === 'future' || !revCounted) ? tgt : revCounted;
+    weeks.push({ week: w, state, cells, used, of: per.length, asins: attributed.map(p => p.asin) });
   }
   return { weeks };
 }
@@ -5302,6 +5304,16 @@ function ltBuildCombined(items, todayIso){
 let ltParsed = null;          // parsed workbook waiting for "Save targets"
 let ltCompareToken = 0;       // guards against a slow earlier product overwriting a newer one
 
+// Small calendar year-week above a week header (same ISO numbering as Product Detail), and the note under the date naming the ASINs attributed to that week.
+function ltYwHtml(iso){
+  const yw = isoYearWeek(iso);
+  return `<div class="lt-yw" title="Calendar week ${yw}" style="font-size:8.5px;font-weight:400;color:var(--text-muted);margin-bottom:1px;letter-spacing:.2px;">${yw}</div>`;
+}
+function ltAsinNoteHtml(asins, nameOf){
+  if(!asins || !asins.length) return '';
+  return `<div class="lt-asins" style="font-size:7.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--text-muted);line-height:1.3;margin-top:3px;">` +
+    asins.map(a => `<div title="${escapeHtml(nameOf(a))}">${escapeHtml(a)}</div>`).join('') + '</div>';
+}
 function ltFmtDate(iso){
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
@@ -5538,10 +5550,14 @@ async function loadDealsTargetsComparison(product){
   const info = assign.get(mine.kind + '|' + mine.label);
   src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
     `confirmed by date: targets start ${ltFmtDate(mine.firstWeek)}, this product launched ${product.launch ? ltFmtDate(product.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ''}.`;
+  cmp.weeks.forEach(w => {      // the ASIN is attributed to every week in which this product has a target or an actual figure
+    const c = w.cells;
+    w.asins = (c.revenue.target > 0 || c.units.target > 0 || c.margin.target > 0 || c.revenue.actual != null || c.units.actual != null) ? [product.asin] : [];
+  });
   const weekLabel = w => {
     const d = new Date(w.week + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const n = product.launch ? weekNumber(product.launch, w.week) : null;
-    return `${n != null ? 'Wk ' + n : ''}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${d}</div>`;
+    return `${ltYwHtml(w.week)}${n != null ? 'Wk ' + n : ''}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${d}</div>${ltAsinNoteHtml(w.asins, () => productDisplayName(product))}`;
   };
   table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
   legend.style.display = 'block';
@@ -5616,11 +5632,12 @@ async function loadCombinedComparison(selected){
     included.map(i => `${escapeHtml(productDisplayName(i.product))} (${escapeHtml(i.mine.label)})`).join('; ') + '. ' +
     `Weeks are calendar weeks. Each week adds up only the products that have <strong>both</strong> a target and actual figures for it, so target and actual always cover the same products — ` +
     `a column marked <strong>n/N</strong> counts only n of the ${included.length}.` + excludedHtml;
+  const nameByAsin = Object.fromEntries(included.map(i => [i.product.asin, productDisplayName(i.product)]));
   const weekLabel = w => {
     const d = new Date(w.week + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const tag = w.used < w.of
       ? `<div title="${w.used} of the ${w.of} combined products have both a target and actual figures for this week" style="font-size:9px;font-weight:600;color:#92400E;margin-top:2px;">${w.used}/${w.of}</div>` : '';
-    return `${d}${tag}`;
+    return `${ltYwHtml(w.week)}${d}${tag}${ltAsinNoteHtml(w.asins, a => nameByAsin[a] || a)}`;
   };
   table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
   legend.style.display = 'block';
