@@ -258,10 +258,18 @@
       </div>
       <div>
         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Tag</label>
-        <select id="apTag" style="width:100%;">
+        <select id="apTag" style="width:100%;" onchange="apTagChanged()">
           <option value="launch">launch</option>
           <option value="expansion">expansion</option>
+          <option value="relaunch">relaunch</option>
+          <option value="post-launch">post-launch</option>
         </select>
+        <div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;">post-launch hides the product from the Launch / Expansion dashboards and Product Detail — it is still tracked.</div>
+        <div id="apTrackWrap" style="display:none;margin-top:8px;">
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Relaunch shows under</label>
+          <select id="apTrack" style="width:100%;"><option value="launch">Launch dashboard</option><option value="expansion">Expansion dashboard</option></select>
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;">Follows the original launch's tag (launch or expansion). Change it here if that is not right.</div>
+        </div>
       </div>
       <div>
         <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Brand</label>
@@ -1148,7 +1156,29 @@ function productLineOnly(product){
 // own launch date, regardless of tag); a product with no launch date can't be
 // judged, so it stays in its Launch/Expansion group. Returns the products in the
 // exact order they appear, so callers can pick the true first entry.
-// Splits a product list into the Launch / Expansion / Other / Post 12-Week groups every product picker uses, each group newest first.
+/* ---------- Tags: where a product is SHOWN ----------
+   launch -> Launch dashboard · expansion -> Expansion dashboard · relaunch -> Launch dashboard (with a "Relaunch" badge) ·
+   post-launch -> HIDDEN from the Launch dashboard, the Expansion dashboard and Product Detail.
+   Hiding is only a view: every sync and upload keeps tracking the product (none of them look at the tag), and it stays in All Products, Actual vs. Target and the
+   Products list. Changing the tag back makes it reappear. */
+const PRODUCT_TAGS = ['launch', 'expansion', 'relaunch', 'post-launch'];
+const isPostLaunch = p => !!p && p.tag === 'post-launch';
+// A RELAUNCH belongs to the dashboard of the product's ORIGINAL launch: tag_track holds the last launch / expansion tag it had, so a relaunch of an expansion product
+// shows under Expansion and a relaunch of a launch product under Launch. (No track recorded yet -> Launch.) post-launch belongs to neither.
+const dashboardTagOf = p => !p ? null : (p.tag === 'relaunch' ? (p.tag_track === 'expansion' ? 'expansion' : 'launch') : (p.tag === 'post-launch' ? null : p.tag));
+// The tag_track to store when a product gets a new tag. launch / expansion record themselves; relaunch / post-launch keep the track the product already had
+// (its current launch / expansion tag first, otherwise what was remembered), so launch → post-launch → relaunch still lands back under Launch.
+function trackForNewTag(newTag, prev){
+  if(newTag === 'launch' || newTag === 'expansion') return newTag;
+  if(prev && (prev.tag === 'launch' || prev.tag === 'expansion')) return prev.tag;
+  if(prev && (prev.tag_track === 'launch' || prev.tag_track === 'expansion')) return prev.tag_track;
+  return null;
+}
+let tagTrackSupported = true;      // flips to false if the tag_track column doesn't exist yet (add_tag_track_column.sql), so saving a product never depends on it
+const TAG_TRACK_NOTE = 'To remember which dashboard a relaunch belongs under (Launch or Expansion), run add_tag_track_column.sql in the Supabase SQL Editor. Until then a relaunch shows under Launch.';
+const relaunchBadge = p => (p && p.tag === 'relaunch') ? '<span class="tag-pill" style="background:#FEF3C7;color:#92400E;">Relaunch</span>' : '';
+async function fetchVisibleProducts(){ return (await fetchProducts()).filter(p => !isPostLaunch(p)); }      // what Product Detail may show
+// Splits a product list into the Launch / Expansion / Other / Post 12-Week / Post-launch groups every product picker uses, each group newest first.
 function groupProductsForSelect(products){
   const now = Date.now();
   const isPast12 = p => {
@@ -1162,11 +1192,12 @@ function groupProductsForSelect(products){
     if(!b.launch) return -1;
     return new Date(b.launch) - new Date(a.launch);
   };
-  const buckets = { launch:[], expansion:[], other:[], post12:[] };
+  const buckets = { launch:[], expansion:[], other:[], post12:[], postlaunch:[] };
   products.forEach(p=>{
-    if(isPast12(p)) buckets.post12.push(p);
-    else if(p.tag === 'launch') buckets.launch.push(p);
-    else if(p.tag === 'expansion') buckets.expansion.push(p);
+    if(isPostLaunch(p)) buckets.postlaunch.push(p);
+    else if(isPast12(p)) buckets.post12.push(p);
+    else if(dashboardTagOf(p) === 'launch') buckets.launch.push(p);
+    else if(dashboardTagOf(p) === 'expansion') buckets.expansion.push(p);
     else buckets.other.push(p);
   });
   return [
@@ -1174,6 +1205,7 @@ function groupProductsForSelect(products){
     { key:'expansion', label:'Expansion', items:buckets.expansion },
     { key:'other', label:'Other', items:buckets.other },
     { key:'post12', label:'Post 12-Week', items:buckets.post12 },
+    { key:'postlaunch', label:'Post-launch', items:buckets.postlaunch },
   ].filter(g=>g.items.length).map(g=>({ ...g, items:g.items.slice().sort(newestFirst) }));
 }
 function fillGroupedProductSelect(sel, products){
@@ -2241,6 +2273,8 @@ async function renderProductsTable(){
       <td><select onchange="updateProduct('${p.asin}','tag',this.value)">
         <option value="launch" ${p.tag==='launch'?'selected':''}>launch</option>
         <option value="expansion" ${p.tag==='expansion'?'selected':''}>expansion</option>
+        <option value="relaunch" ${p.tag==='relaunch'?'selected':''}>relaunch</option>
+        <option value="post-launch" ${p.tag==='post-launch'?'selected':''}>post-launch</option>
       </select></td>
       <td><select onchange="updateProduct('${p.asin}','brand',this.value)" style="width:120px;">
         <option value="" ${!p.brand?'selected':''}>—</option>
@@ -2301,7 +2335,30 @@ async function updateProduct(asin, field, val){
       }
     }
   }
-  await sb.from('products').update({ [field]: (val==null || val==='') ? null : val }).eq('asin', asin);
+  if(field === 'tag'){
+    const { data: prev } = await sb.from('products').select('*').eq('asin', asin).maybeSingle();
+    const patch = { tag: val };
+    if(tagTrackSupported) patch.tag_track = trackForNewTag(val, prev);
+    let res = await sb.from('products').update(patch).eq('asin', asin);
+    if(res.error && /tag_track/.test(res.error.message)){      // that column isn't created yet: save the tag alone
+      tagTrackSupported = false;
+      res = await sb.from('products').update({ tag: val }).eq('asin', asin);
+      if(!res.error && val === 'relaunch') alert('Saved. ' + TAG_TRACK_NOTE);
+    }
+    if(res.error){
+      alert(`Could not change the tag: ${res.error.message}\n\nIf this mentions a check constraint or an enum, run allow_new_product_tags.sql in the Supabase SQL Editor and try again.`);
+      await renderProductsTable();      // put the dropdown back to what is actually saved
+      return;
+    }
+    await refreshAllViews();
+    return;
+  }
+  const { error: updErr } = await sb.from('products').update({ [field]: (val==null || val==='') ? null : val }).eq('asin', asin);
+  if(updErr && field === 'tag'){
+    alert(`Could not change the tag: ${updErr.message}\n\nIf this mentions a check constraint or an enum, run allow_new_product_tags.sql in the Supabase SQL Editor and try again.`);
+    await renderProductsTable();      // put the dropdown back to what is actually saved
+    return;
+  }
   if(field === 'marketplace') marketplacesCache = null;
   await refreshAllViews();
 }
@@ -2434,7 +2491,7 @@ function miBuildPlan(rows, products, mappings){
       for(const c of cands){ sib = (products || []).find(p => String(p.product_line_code || '').toUpperCase() === c); if(sib) break; }
       const code = sib ? sib.product_line_code : (cands[cands.length - 1] || null);
       entry.newProduct = {
-        asin, name: sib ? sib.name : (code || asin), tag: sib ? (sib.tag || 'expansion') : 'expansion', brand: sib ? (sib.brand || null) : null,
+        asin, name: sib ? sib.name : (code || asin), tag: (sib && (sib.tag === 'launch' || sib.tag === 'expansion')) ? sib.tag : 'expansion', brand: sib ? (sib.brand || null) : null,
         marketplace: derived, launch: null, product_line_code: code, product_line: sib ? (sib.product_line || null) : null, assumed: !sib,
       };
     }
@@ -2759,6 +2816,11 @@ function fillChildAsinRow(container, prefill){
     <button type="button" class="btn btn-sm" onclick="document.getElementById('${id}').remove()" title="Remove this row">✕</button>`;
   container.appendChild(row);
 }
+function apTagChanged(){
+  const v = document.getElementById('apTag').value;
+  if(v === 'launch' || v === 'expansion') document.getElementById('apTrack').value = v;      // a relaunch picked next would follow this
+  document.getElementById('apTrackWrap').style.display = v === 'relaunch' ? 'block' : 'none';
+}
 function addLaunchRow(prefill){
   const row = document.createElement('div');
   row.className = 'launch-row';
@@ -2796,7 +2858,9 @@ async function openAddProductModal(tag, mode, sourceAsin){
     if(!source){ alert('Could not load that product.'); return; }
 
     document.getElementById('apName').value = source.name || '';
-    document.getElementById('apTag').value = source.tag || 'launch';
+    document.getElementById('apTag').value = (mode === 'duplicate' && (source.tag === 'post-launch' || source.tag === 'relaunch')) ? 'launch' : (source.tag || 'launch');      // a copy of a hidden product must not start hidden
+    document.getElementById('apTrack').value = (source.tag === 'launch' || source.tag === 'expansion') ? source.tag : (source.tag_track === 'expansion' ? 'expansion' : 'launch');
+    apTagChanged();
     brandSel.value = source.brand || '';
     document.getElementById('apLineCode').value = source.product_line_code || '';
     document.getElementById('apLineName').value = source.product_line || '';
@@ -2846,6 +2910,8 @@ async function openAddProductModal(tag, mode, sourceAsin){
     asinInput.disabled = false;
     asinInput.title = '';
     document.getElementById('apTag').value = tag || 'launch';
+    document.getElementById('apTrack').value = tag === 'expansion' ? 'expansion' : 'launch';
+    apTagChanged();
     document.getElementById('apMarketplace').value = '';
     document.getElementById('apLaunch').value = '';
     document.getElementById('apLineCode').value = '';
@@ -2933,6 +2999,10 @@ async function submitAddProduct(){
   }
 
   const tag = document.getElementById('apTag').value;
+  let prevRow = null;
+  if(addProductMode === 'edit'){ const { data } = await sb.from('products').select('*').eq('asin', addProductOriginalAsin).maybeSingle(); prevRow = data; }
+  // the dashboard a relaunch belongs under: picked in the form when the tag is relaunch; otherwise remembered from the product's own tags
+  const tagTrack = tag === 'relaunch' ? document.getElementById('apTrack').value : trackForNewTag(tag, prevRow);
   const record = {
     asin, name, tag,
     brand: document.getElementById('apBrand').value || null,
@@ -2942,13 +3012,14 @@ async function submitAddProduct(){
     product_line: document.getElementById('apLineName').value.trim() || null,
   };
 
-  if(addProductMode === 'edit'){
-    const { error: prodErr } = await sb.from('products').update(record).eq('asin', addProductOriginalAsin);
-    if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to update product: ' + prodErr.message); return; }
-  } else {
-    const { error: prodErr } = await sb.from('products').insert(record);
-    if(prodErr){ setStatus('statusAddProduct', 'err', 'Failed to create product: ' + prodErr.message); return; }
+  const writeProduct = rec => addProductMode === 'edit' ? sb.from('products').update(rec).eq('asin', addProductOriginalAsin) : sb.from('products').insert(rec);
+  let { error: prodErr } = await writeProduct(tagTrackSupported ? { ...record, tag_track: tagTrack } : record);
+  if(prodErr && /tag_track/.test(prodErr.message)){      // the column isn't created yet: save without it (add_tag_track_column.sql adds it)
+    tagTrackSupported = false;
+    ({ error: prodErr } = await writeProduct(record));
+    if(!prodErr && tag === 'relaunch') alert('Saved. ' + TAG_TRACK_NOTE);
   }
+  if(prodErr){ setStatus('statusAddProduct', 'err', (addProductMode === 'edit' ? 'Failed to update product: ' : 'Failed to create product: ') + prodErr.message); return; }
 
   const imageFile = document.getElementById('apImage').files[0];
   if(imageFile){
@@ -3087,7 +3158,7 @@ async function refreshAllViews(){
   await loadTseForecast();
 }
 async function populateSelectors(){
-  const products = await fetchProducts();
+  const products = await fetchVisibleProducts();       // post-launch products are hidden from Product Detail
   const sel = document.getElementById('productSelect');
   const current = sel.value;
   fillGroupedProductSelect(sel, products); // Product Detail's dropdown: grouped Launch / Expansion / Post 12-Week
@@ -3457,18 +3528,18 @@ function renderOverviewTable(){
   // keeps this table's totals meaningful rather than blending two different
   // populations together.
   const groupDefs = [
-    { tag:'launch', label:'Launch Products' },
-    { tag:'expansion', label:'Expansion Products' },
+    { tag:'launch', label:'Launch Products', match: pr => dashboardTagOf(pr) === 'launch' },          // launch + relaunches that came from launch
+    { tag:'expansion', label:'Expansion Products', match: pr => dashboardTagOf(pr) === 'expansion' },      // expansion + relaunches that came from expansion
+    { tag:'post-launch', label:'Post-launch Products', match: pr => pr.tag === 'post-launch' },      // hidden from the dashboards and Product Detail, still tracked — seen here
   ];
-  const knownTags = groupDefs.map(g=>g.tag);
-  const otherRows = enriched.filter(r=>!knownTags.includes(r.product.tag));
+  const otherRows = enriched.filter(r=>!groupDefs.some(g=>g.match(r.product)));
   const groups = otherRows.length ? [...groupDefs, { tag:null, label:'Other' }] : groupDefs;
 
   const colCount = cols.length + 1;
   let grandSales=0, grandProfit=0, grandUnits=0, grandSessions=0, grandAdSpend=0, grandRefunds=0, anyGroupRendered=false;
 
   groups.forEach(g=>{
-    const groupRows = g.tag===null ? otherRows : enriched.filter(r=>r.product.tag===g.tag);
+    const groupRows = g.tag===null ? otherRows : enriched.filter(r=>g.match(r.product));
     if(!groupRows.length) return;
     anyGroupRendered = true;
     html += `<tr class="table-section-row"><td colspan="${colCount}">${g.label} (${groupRows.length})</td></tr>`;
@@ -3483,8 +3554,9 @@ function renderOverviewTable(){
       const toggleHtml = hasChildren
         ? `<span onclick="event.stopPropagation(); toggleOverviewChildren('${r.asin}');" style="display:inline-block;width:16px;cursor:pointer;color:var(--text-muted);transform:rotate(${isExpanded?90:0}deg);transition:transform .1s;">▶</span>`
         : `<span style="display:inline-block;width:16px;"></span>`;
-      html += `<tr style="cursor:pointer;" onclick="openProductFromOverview('${r.asin}')">
-        <td style="text-align:left;white-space:nowrap;min-width:220px;">${toggleHtml}${thumb(r.product.image_url)}${escapeHtml(productLineOnly(r.product))}</td>
+      const hiddenRow = isPostLaunch(r.product);      // post-launch products are not in Product Detail, so their row doesn't link there
+      html += `<tr style="${hiddenRow ? '' : 'cursor:pointer;'}"${hiddenRow ? ' title="Post-launch — hidden from Product Detail"' : ` onclick="openProductFromOverview('${r.asin}')"`}>
+        <td style="text-align:left;white-space:nowrap;min-width:220px;">${toggleHtml}${thumb(r.product.image_url)}${escapeHtml(productLineOnly(r.product))}${relaunchBadge(r.product)}</td>
         <td>${escapeHtml(r.asin)}</td>
         <td>${escapeHtml(r.product.marketplace||'–')}</td>
         <td>${fmtMoney(r.totalSales)}</td>
@@ -3594,7 +3666,7 @@ async function loadTagDashboard(tag){
   // Fetches broadly (every product with this tag, regardless of the current
   // marketplace/brand filter selection) so that changing a filter afterward
   // can be served entirely from this cache — see renderTagDashboard below.
-  const allTagProducts = (await fetchProducts()).filter(pr => pr.tag === tag);
+  const allTagProducts = (await fetchProducts()).filter(pr => dashboardTagOf(pr) === tag);      // relaunch -> Launch dashboard; post-launch -> neither
   const allAsins = allTagProducts.map(pr => pr.asin);
   const [allSbRows, allSfRows, { data: allTargets }, { data: allNotes }, { data: allPortfolioNotes }] = await Promise.all([
     fetchAllRows('sellerboard_rows', allAsins),
@@ -3876,7 +3948,7 @@ function renderTagDashboard(tag){
     panel.innerHTML = `
       <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
         <div>
-          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}</h3>
+          <h3 style="margin:0 0 4px;display:flex;align-items:center;">${thumb(product.image_url, 36)}${escapeHtml(productDisplayName(product))}${relaunchBadge(product)}</h3>
           <div style="font-size:12.5px;color:var(--text-muted);">ASIN: <strong>${product.asin}</strong>${ageLabel?' · '+ageLabel:''}</div>
           <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">Date Launched: <strong>${dateLaunchedStr}</strong></div>
         </div>
@@ -4017,7 +4089,10 @@ async function productAnchor(product){
 async function loadDashboard(){
   const sel = document.getElementById('productSelect');
   const mktSel = document.getElementById('marketplaceSelect');
-  const [products, marketplaces] = await Promise.all([fetchProducts(), getMarketplaces()]);
+  const [products, allMarketplaces] = await Promise.all([fetchVisibleProducts(), getMarketplaces()]);      // post-launch products are hidden from Product Detail
+  // ...and so is a marketplace that only they use (it would offer an empty product list)
+  const shownMarkets = new Set(products.map(p => p.marketplace).filter(Boolean));
+  const marketplaces = shownMarkets.size ? allMarketplaces.filter(m => shownMarkets.has(m)) : allMarketplaces;
 
   // Detect whether the PRODUCT dropdown is what just changed (including the
   // very first load), as opposed to the marketplace dropdown — only a
