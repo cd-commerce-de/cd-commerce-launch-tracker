@@ -3251,8 +3251,8 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12, opts){
   });
   if(!product) return { weeks: Array.from({length:12}, makeEmptyWeek).map(finalizeWeek), anchor: null, autoAnchor: false, hasWeekZero: false };
 
-  // opts.endBefore (a Monday): an EARLIER launch of a relaunched product stops at the week where the next launch starts — rows from then on belong to that
-  // launch's own numbering, so they are left out here and the week count is capped there.
+  // opts.endBefore (a Monday): an EARLIER launch of a relaunched product runs up to the week where the next launch starts — rows from then on belong to that
+  // launch's own numbering, so they are left out here, and the view spans exactly the weeks in between.
   if(opts && opts.endBefore){
     sbRows = (sbRows || []).filter(r => r.week < opts.endBefore);
     sfRows = (sfRows || []).filter(r => r.week < opts.endBefore);
@@ -3289,7 +3289,9 @@ function computeWeeksFromRows(product, sbRows, sfRows, extendBeyond12, opts){
     }
   }
 
-  if(anchor && opts && opts.endBefore) totalWeeks = Math.max(1, Math.min(totalWeeks, weekNumber(anchor, opts.endBefore) - 1));
+  // An EARLIER launch covers EVERY week from its own start up to the week before the next launch — whether or not the data reaches that far (a week with no data
+  // simply shows as N/A), rather than stopping at the last week that happens to have a row.
+  if(anchor && opts && opts.endBefore) totalWeeks = Math.max(1, weekNumber(anchor, opts.endBefore) - 1);
   const weeks = Array.from({length: totalWeeks}, makeEmptyWeek);
   if(!anchor) return { weeks: weeks.map(finalizeWeek), anchor: null, autoAnchor, hasWeekZero: false };
 
