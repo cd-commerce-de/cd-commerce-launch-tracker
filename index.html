@@ -1355,8 +1355,31 @@ function setStatus(id, kind, msg){
 // child-ASIN-matching importers (Sellerboard Organic, Data Rova Ranks,
 // Data Rova Visibility) return, instead of just the top-line error message —
 // otherwise the exact ASIN/marketplace causing a failure is invisible.
+// Reads an Edge Function's reply WITHOUT ever hiding what the server actually said. A reply from the platform itself (rather than from our function) has no
+// "error" field — e.g. HTTP 546 "WORKER_LIMIT" when the function runs out of memory/time — which used to show up as just "upload failed".
+async function readJsonResponse(res){
+  let raw = '';
+  if(typeof res.text === 'function') raw = await res.text();
+  else if(typeof res.json === 'function') raw = JSON.stringify(await res.json());
+  let data = {};
+  try{ const j = JSON.parse(raw); data = (j && typeof j === 'object') ? j : { value: j }; }catch(e){ data = {}; }
+  Object.defineProperty(data, '_status', { value: res.status, enumerable: false });
+  Object.defineProperty(data, '_raw', { value: raw, enumerable: false });
+  return data;
+}
+function platformErrorText(data){
+  const st = data && data._status, raw = (data && data._raw) || '';
+  if(!st) return 'upload failed';
+  const msg = (data && (data.message || data.msg || data.code)) || String(raw).slice(0, 160);
+  let hint = '';
+  if(st === 546 || /WORKER_LIMIT|compute resources/i.test(raw)) hint = ' — the function ran out of memory or time on this request (the file is too big to process in one go)';
+  else if(st === 401 || /Invalid JWT|Unauthorized/i.test(raw)) hint = " — Supabase rejected this page's key";
+  else if(st === 404 || /NOT_FOUND/i.test(raw)) hint = ' — that function is not deployed under this name';
+  else if(st === 413) hint = ' — the file is too large for one request';
+  return `HTTP ${st}${msg ? ' (' + msg + ')' : ''}${hint}`;
+}
 function describeMatchError(data){
-  let detail = data.error || 'upload failed';
+  let detail = data.error || platformErrorText(data);
   if(data.unknownChildAsinsSample && data.unknownChildAsinsSample.length){
     detail += ` — ${data.unknownChildAsins} ASIN(s) not found in your child\u2192parent mapping, e.g.: ${data.unknownChildAsinsSample.slice(0,5).join(', ')}`;
   }
@@ -1385,8 +1408,8 @@ async function uploadFile(functionName, file, statusId, buttonId){
       headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
       body: fd,
     });
-    const data = await res.json();
-    if(!res.ok){ setStatus(statusId, 'err', data.error || 'Upload failed'); return; }
+    const data = await readJsonResponse(res);
+    if(!res.ok){ setStatus(statusId, 'err', data.error || platformErrorText(data)); return; }
     const extra = data.newProducts ? ` (${data.newProducts} new product${data.newProducts>1?'s':''} added)` : '';
     const skipped = data.skippedUnknownAsins ? `, ${data.skippedUnknownAsins} unknown ASIN(s) skipped` : '';
     const count = data.rowsLoaded ?? data.productsLoaded ?? data.targetsLoaded;
@@ -1472,6 +1495,15 @@ function sbBuildUploadFile(file, info){
   for(let i=info.headerIdx+1;i<info.lines.length;i++){ if(info.lineWeek[i] && keep.has(info.lineWeek[i])) out.push(info.lines[i]); }
   return new File([out.join('\n')], file.name, { type:'text/csv' });
 }
+// One file per Monday–Sunday week. The function builds a week's parent totals from that week's child rows, so a week is never split between requests — and every
+// request stays about the size of the weekly files that always worked. A whole month in one request can exceed the function's memory / CPU limit (HTTP 546).
+function sbBuildWeekFiles(file, info){
+  if(!info || !info.ok) return [{ week: null, file }];         // couldn't be read in the browser: sent as-is, like before
+  const keep = info.weeks.filter(w => sbKeepPartial || w.complete).map(w => w.week);
+  const header = info.lines[info.headerIdx], byWeek = new Map(keep.map(w => [w, [header]]));
+  for(let i = info.headerIdx + 1; i < info.lines.length; i++){ const w = info.lineWeek[i]; if(w && byWeek.has(w)) byWeek.get(w).push(info.lines[i]); }
+  return keep.map(w => ({ week: w, file: new File([byWeek.get(w).join('\n')], file.name, { type: 'text/csv' }) }));
+}
 function sbIncompleteList(info){
   return info.weeks.filter(w=>!w.complete).map(w=>`week of ${sbFmt(w.week)} (${w.days} of 7 days)`);
 }
@@ -1531,36 +1563,44 @@ async function confirmUploadSB(){
     const statusEl = document.getElementById('sbFileStatus'+i);
     setStatus('statusSB', 'busy', `Uploading ${i+1} of ${sbSelectedFiles.length}: ${file.name}…`);
     const info = sbInfos[i];
-    const upFile = sbBuildUploadFile(file, info);
     if(info && info.ok && !sbKeepPartial){
       sbIncompleteList(info).forEach(x=>skippedWeeks.push(x));
       if(!info.weeks.some(w=>w.complete)){ skippedFiles++; statusEl.textContent = '–'; continue; }   // nothing complete to save from this file
     }
-    const fd = new FormData();
-    fd.append('file', upFile);
-    try{
-      const res = await fetch(`${EDGE_BASE}/upload-sellerboard-weekly`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
-        body: fd,
-      });
-      const data = await res.json();
-      if(!res.ok){
-        statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
-      } else {
-        statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
-        successCount++;
+    const chunks = sbBuildWeekFiles(file, info);        // one request per week
+    let savedWeeks = 0, fileFailed = null;
+    for(let k=0;k<chunks.length;k++){
+      const ch = chunks[k];
+      setStatus('statusSB', 'busy', `Uploading ${i+1} of ${sbSelectedFiles.length}: ${file.name}` + (chunks.length > 1 ? ` — week ${k+1} of ${chunks.length}${ch.week ? ' (' + sbFmt(ch.week) + ')' : ''}…` : '…'));
+      const fd = new FormData();
+      fd.append('file', ch.file);
+      try{
+        const res = await fetch(`${EDGE_BASE}/upload-sellerboard-weekly`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+          body: fd,
+        });
+        const data = await readJsonResponse(res);
+        if(!res.ok){ fileFailed = { week: ch.week, text: describeMatchError(data) }; break; }
+        savedWeeks++;
         totalRows += data.rowsLoaded || 0;
         totalChildRows += data.childRowsLoaded || 0;
         totalMatchedChildRows += data.matchedChildRows || 0;
         totalSkippedUnknown += data.skippedUnknownChildAsins || 0;
         (data.weeksCovered||[]).forEach(w=>allWeeksCovered.add(w));
         if(data.summary) allSummaryRows.push(...data.summary);
+      }catch(err){
+        fileFailed = { week: ch.week, text: 'could not reach Supabase Edge Function' }; break;
       }
-    }catch(err){
+    }
+    if(fileFailed){
       statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-      failCount++; failMessages.push(`${file.name}: could not reach Supabase Edge Function`);
+      failCount++;
+      failMessages.push(`${file.name}: ${fileFailed.week && chunks.length > 1 ? 'week of ' + sbFmt(fileFailed.week) + ' failed — ' : ''}${fileFailed.text}` +
+        (savedWeeks ? ` (the ${savedWeeks} earlier week${savedWeeks>1?'s':''} of this file ${savedWeeks>1?'were':'was'} saved; uploading the file again is safe — it only replaces those weeks)` : ''));
+    } else {
+      statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+      successCount++;
     }
   }
 
@@ -1652,10 +1692,10 @@ async function confirmUploadSF(){
         headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
         body: fd,
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+        failCount++; failMessages.push(`${file.name}: ${data.error || platformErrorText(data)}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
@@ -1741,7 +1781,7 @@ async function confirmUploadDR(){
         headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
         body: fd,
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
         failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
@@ -1835,7 +1875,7 @@ async function confirmUploadDV(){
         headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
         body: fd,
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
         failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
@@ -1931,10 +1971,10 @@ async function confirmUploadKP(){
         headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
         body: fd,
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
-        failCount++; failMessages.push(`${file.name}: ${data.error || 'upload failed'}`);
+        failCount++; failMessages.push(`${file.name}: ${data.error || platformErrorText(data)}`);
       } else {
         statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
         successCount++;
@@ -2086,7 +2126,7 @@ async function confirmUploadRV(){
         headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
         body: fd,
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if(!res.ok){
         statusEl.textContent = '✗'; statusEl.style.color = 'var(--red)';
         failCount++; failMessages.push(`${file.name}: ${describeMatchError(data)}`);
