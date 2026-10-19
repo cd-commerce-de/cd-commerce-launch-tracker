@@ -1338,13 +1338,14 @@ function downloadTemplate(kind){
 async function exportBackup(){
   const { data: products } = await sb.from('products').select('*');
   const allAsins = (products||[]).map(p=>p.asin);
-  const [sellerboard, sellerfox, { data: targets }, { data: product_launches }] = await Promise.all([
+  const [sellerboard, sellerfox, { data: targets }, { data: product_launches }, { data: target_overrides }] = await Promise.all([
     fetchAllRows('sellerboard_rows', allAsins),
     fetchAllRows('sellerfox_rows', allAsins),
     sb.from('targets').select('*'),
     sb.from('product_launches').select('*'),        // every launch of a relaunched product (empty if that table isn't created yet)
+    sb.from('target_overrides').select('*'),        // Deals Tracker lines chosen by hand for delayed launches
   ]);
-  downloadBlob(JSON.stringify({ products, sellerboard, sellerfox, targets, product_launches: product_launches || [] }, null, 2), 'launch_tracker_backup.json', 'application/json');
+  downloadBlob(JSON.stringify({ products, sellerboard, sellerfox, targets, product_launches: product_launches || [], target_overrides: target_overrides || [] }, null, 2), 'launch_tracker_backup.json', 'application/json');
 }
 
 function setStatus(id, kind, msg){
@@ -2185,6 +2186,7 @@ document.getElementById('fileBackup').addEventListener('change', async e=>{
     if(json.sellerfox?.length) await sb.from('sellerfox_rows').upsert(json.sellerfox, { onConflict: 'asin,week' });
     if(json.targets?.length) await sb.from('targets').upsert(json.targets, { onConflict: 'asin' });
     if(json.product_launches?.length) await sb.from('product_launches').upsert(json.product_launches, { onConflict: 'asin,launch_date' });
+    if(json.target_overrides?.length) await sb.from('target_overrides').upsert(json.target_overrides, { onConflict: 'asin,launch_no' });
     alert('Backup restored.'); await refreshAllViews();
   }catch(err){ alert('Invalid backup file: ' + err.message); }
 });
@@ -2405,6 +2407,7 @@ async function updateProduct(asin, field, val){
 async function removeProduct(asin){
   await sb.from('products').delete().eq('asin', asin);
   await sb.from('product_launches').delete().eq('asin', asin);      // its launch history goes with it (an error just means the table isn't created)
+  await sb.from('target_overrides').delete().eq('asin', asin);      // ...and any Deals Tracker line it was set to use
   await renderProductsTable(); await refreshAllViews();
 }
 
@@ -5628,22 +5631,50 @@ function ltLaunchEntries(products, launchMap){
   const out = [];
   products.forEach(p => {
     const ls = launchesOf(p, launchMap);
-    if(!ls.length){ out.push({ ...p, _key: p.asin, _multi: false }); return; }      // no launch date: kept, so the "no launch date" explanation still works
-    ls.forEach(l => out.push({ ...p, launch: l.date, _key: ls.length > 1 ? `${p.asin}@${l.date}` : p.asin, _label: l.label, _multi: ls.length > 1, _latest: l.date === ls[ls.length - 1].date }));
+    if(!ls.length){ out.push({ ...p, _key: p.asin, _no: 1, _multi: false }); return; }      // no launch date: kept, so the "no launch date" explanation still works
+    ls.forEach((l, i) => out.push({ ...p, launch: l.date, _key: ls.length > 1 ? `${p.asin}@${l.date}` : p.asin, _no: i + 1, _label: l.label, _multi: ls.length > 1, _latest: l.date === ls[ls.length - 1].date }));
   });
   return out;
 }
 const ltEntryName = e => productDisplayName(e) + (e && e._multi ? ` — ${e._label}` : '');
 const tseLaunchSel = {};      // asin -> the launch date chosen in Actual vs. Target (defaults to the newest launch)
+async function tseSaveOverride(asin, launchNo, kind, label){
+  const { error } = await sb.from('target_overrides').upsert({ asin, launch_no: launchNo, kind, line_label: label }, { onConflict: 'asin,launch_no' });
+  if(error){
+    alert(/target_overrides|relation|schema cache/i.test(error.message)
+      ? 'This needs the target_overrides table — run add_target_overrides_table.sql in the Supabase SQL Editor, then try again. Nothing was changed.'
+      : 'Could not save the choice: ' + error.message);
+    return;
+  }
+  await loadTseForecast();
+}
+async function tseClearOverride(asin, launchNo){
+  const { error } = await sb.from('target_overrides').delete().eq('asin', asin).eq('launch_no', launchNo);
+  if(error){ alert('Could not remove the choice: ' + error.message); return; }
+  await loadTseForecast();
+}
 function tsePickLaunch(asin, key){ tseLaunchSel[asin] = key; loadTseForecast(); }
-function ltAssignBlocks(blocks, products){
+// Saved choices ("use THIS line for this launch, start it on the launch date"), one per product launch. Missing table -> none.
+async function fetchTargetOverrides(){
+  const { data, error } = await sb.from('target_overrides').select('*');
+  return error ? [] : (data || []);
+}
+function ltAssignBlocks(blocks, products, overrides){
   const key = b => b.kind + '|' + b.label;
+  // A line chosen by hand is placed FIRST and taken out of the automatic matching on both sides (that line, and that product launch) — whatever its tab, marketplace or dates.
+  const forced = new Map(), forcedIds = new Set();
+  (overrides || []).forEach(o => {
+    const entry = products.find(pr => pr.asin === o.asin && (pr._no || 1) === (o.launch_no || 1));
+    const block = blocks.find(b => b.kind === o.kind && b.label === o.line_label);
+    if(entry && block && !forced.has(key(block)) && !forcedIds.has(ltEntryId(entry))){ forced.set(key(block), ltEntryId(entry)); forcedIds.add(ltEntryId(entry)); }
+  });
   const result = new Map(), pairs = [];
   blocks.forEach(b => {
     const info = { status: null, asin: null, days: null, nearest: null, tied: [] };
     result.set(key(b), info);
+    if(forced.has(key(b))){ info.status = 'assigned'; info.asin = forced.get(key(b)); info.forced = true; return; }
     if((b.marketplaces || []).length > 1){ info.status = 'multi_marketplace'; return; }
-    const cand = products.filter(p => ltBlockMatchesProduct(b, p));
+    const cand = products.filter(p => !forcedIds.has(ltEntryId(p)) && ltBlockMatchesProduct(b, p));
     if(!cand.length){ info.status = 'no_product'; return; }
     const dated = cand.filter(p => p.launch)
       .map(p => ({ asin: ltEntryId(p), days: Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(p.launch))) }))
@@ -5674,7 +5705,7 @@ function ltDescribeAssignment(b, info, productOf, nameOf, fmtDate){
   switch(info.status){
     case 'assigned': {
       const p = productOf(info.asin);
-      return { ok: true, text: `${nameOf(p)} — targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ' (same week)'}` };
+      return { ok: true, text: info.forced ? `${nameOf(p)} — chosen by you: targets start ${fmtDate(b.firstWeek)}, moved to start on the launch (${p.launch ? fmtDate(p.launch) : '?'})` : `${nameOf(p)} — targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ' (same week)'}` };
     }
     case 'multi_marketplace': return { ok: false, text: `Covers ${b.marketplaces.join('/')} together — it can't be compared to a single product without combining products, so it's left unmatched` };
     case 'no_product': return { ok: false, text: `No ${b.kind}-tagged product with Product Line Code ${b.code}${b.marketplaces.length ? ' in ' + b.marketplaces.join('/') : ''}` };
@@ -5802,11 +5833,11 @@ function ltSetupMessage(err){
 }
 
 /* ---------- Upload & Manage: importer ---------- */
-function ltRenderPreview(parsed, products, launchMap){
+function ltRenderPreview(parsed, products, launchMap, overrides){
   const withT = parsed.blocks.filter(b => b.weeks.length);
   const without = parsed.blocks.filter(b => !b.weeks.length);
   const entries = ltLaunchEntries(products, launchMap || {});
-  const assign = ltAssignBlocks(withT, entries);
+  const assign = ltAssignBlocks(withT, entries, overrides);
   const productOf = id => entries.find(e => ltEntryId(e) === id);
   let unmatched = 0;
   const rows = withT.map(b => {
@@ -5845,7 +5876,7 @@ async function ltOnFileChosen(){
     const aoa = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: true }) : null;
     ltParsed = ltParseTargets({ launch: aoa('#Launch Targets'), expansion: aoa('#Expansion Targets') });
     const withT = ltParsed.blocks.filter(b => b.weeks.length);
-    prev.innerHTML = ltRenderPreview(ltParsed, await fetchProducts(), await fetchLaunchMap());
+    prev.innerHTML = ltRenderPreview(ltParsed, await fetchProducts(), await fetchLaunchMap(), await fetchTargetOverrides());
     if(!withT.length){ setStatus('statusLT', 'err', 'No targets found. Check this is the Deals Tracker, with the #Launch Targets and #Expansion Targets tabs.'); ltParsed = null; return; }
     saveBtn.style.display = 'inline-block';
     setStatus('statusLT', 'ok', `Read ${withT.length} product lines with targets — review below, then click Save targets.`);
@@ -5979,8 +6010,8 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
     return;
   }
   const code = String(product.product_line_code).trim().toUpperCase();
-  const [{ data: rowsForCode, error }, products, lMap] = await Promise.all([
-    sb.from('line_targets').select('*').eq('product_line_code', code), fetchProducts(), launchMap ? Promise.resolve(launchMap) : fetchLaunchMap(),
+  const [{ data: rowsForCode, error }, products, lMap, overrides] = await Promise.all([
+    sb.from('line_targets').select('*').eq('product_line_code', code), fetchProducts(), launchMap ? Promise.resolve(launchMap) : fetchLaunchMap(), fetchTargetOverrides(),
   ]);
   if(token !== ltCompareToken) return;
   if(error){ msg.innerHTML = box(escapeHtml(ltSetupMessage(error))); return; }
@@ -5989,10 +6020,11 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
   const blocks = ltBlocksFromRows(rowsForCode || []);
   // Decided across every LAUNCH of every product with this code: the chosen launch of this product gets (at most) one line, by dates.
   const entries = ltLaunchEntries(products, lMap);
-  const assign = ltAssignBlocks(blocks, entries);
+  const assign = ltAssignBlocks(blocks, entries, overrides);
   const productOf = id => entries.find(e => ltEntryId(e) === id);
   const myEntry = entries.find(e => e.asin === product.asin && e.launch === product.launch) || entries.find(e => e.asin === product.asin);
   const myId = ltEntryId(myEntry || product);
+  const myNo = (myEntry && myEntry._no) || 1;
   const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === myId);
 
   if(!mine){
@@ -6012,27 +6044,44 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
         // This product's own date gap, so the reason always shows the evidence for THIS product
         const gap = product.launch ? Math.abs(ltDaysBetween(b.firstWeek, ltMondayOf(product.launch))) : null;
         const own = gap == null ? '' : ` — targets start ${ltFmtDate(b.firstWeek)}, this product launched ${ltFmtDate(product.launch)} (${gap} days apart)`;
-        if(info.status === 'assigned') why = `was matched to ${ltEntryName(productOf(info.asin))} instead, whose launch date is closer${own}`;
+        if(info.status === 'assigned') why = info.forced ? `was chosen by hand for ${ltEntryName(productOf(info.asin))}` : `was matched to ${ltEntryName(productOf(info.asin))} instead, whose launch date is closer${own}`;
         else if(info.status === 'date_mismatch') why = `doesn't line up by date${own || ' (this product has no launch date)'}; the limit is ${Math.round(LT_DATE_TOLERANCE_DAYS / 7)} weeks`;
         else why = ltDescribeAssignment(b, info, productOf, ltEntryName, ltFmtDate).text;
       }
-      return `<li><strong>${escapeHtml(b.label)}</strong> (${tab(b)} tab) — ${escapeHtml(why)}</li>`;
+      // the launch was delayed (or the dates don't line up for another reason): let the user pick the line, started on the real launch date
+      const useBtn = product.launch ? ` <button type="button" class="btn btn-sm lt-use-line" data-kind="${b.kind}" data-label="${escapeHtml(b.label)}" style="margin-left:6px;padding:1px 9px;">Use this line, starting on ${escapeHtml(ltFmtDate(product.launch))}</button>` : '';
+      return `<li style="margin-bottom:4px;"><strong>${escapeHtml(b.label)}</strong> (${tab(b)} tab) — ${escapeHtml(why)}${useBtn}</li>`;
     }).join('');
-    msg.innerHTML = box(`None of the tracker lines for code <strong>${escapeHtml(code)}</strong> belong to this product:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul>`);
+    msg.innerHTML = box(`None of the tracker lines for code <strong>${escapeHtml(code)}</strong> belong to this product:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul>` +
+      (product.launch ? `<div style="margin-top:8px;">Launch delayed? Choose the line to use — its targets are kept as they are, but moved so that their first week lands on this product's launch week (${escapeHtml(ltFmtDate(product.launch))}).</div>` : ''));
+    msg.onclick = e => { const btn = e.target.closest('.lt-use-line'); if(btn) tseSaveOverride(product.asin, myNo, btn.dataset.kind, btn.dataset.label); };
     return;
   }
 
-  const matched = (rowsForCode || []).filter(r => r.kind === mine.kind && r.line_label === mine.label);
+  const matchedRaw = (rowsForCode || []).filter(r => r.kind === mine.kind && r.line_label === mine.label);
+  // A line chosen by hand keeps its targets but starts on the product's real launch week: every target week is moved by the same number of days.
+  const infoMine = assign.get(mine.kind + '|' + mine.label);
+  const shiftDays = infoMine.forced && product.launch ? ltDaysBetween(ltMondayOf(product.launch), mine.firstWeek) : 0;
+  const matched = shiftDays ? matchedRaw.map(r => ({ ...r, week: ltAddDays(r.week, shiftDays) })) : matchedRaw;
+  const firstWeekUsed = shiftDays ? ltAddDays(mine.firstWeek, shiftDays) : mine.firstWeek;
   const { data: actualRows, error: aErr } = await sb.from('sellerboard_rows').select('week,sales,units,net_profit')
-    .eq('asin', product.asin).gte('week', mine.firstWeek).lte('week', matched.map(r => r.week).sort().pop());
+    .eq('asin', product.asin).gte('week', firstWeekUsed).lte('week', matched.map(r => r.week).sort().pop());
   if(token !== ltCompareToken) return;
   if(aErr){ msg.innerHTML = box(escapeHtml(aErr.message)); return; }
 
   const cmp = ltBuildComparison(matched, actualRows || [], new Date().toISOString().slice(0, 10));
   if(!cmp){ msg.innerHTML = box('The matching tracker line has no targets entered yet.'); return; }
   const info = assign.get(mine.kind + '|' + mine.label);
-  src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
-    `confirmed by date: targets start ${ltFmtDate(mine.firstWeek)}, this product launched ${product.launch ? ltFmtDate(product.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ''}.`;
+  if(info.forced){
+    const wks = Math.round(Math.abs(shiftDays) / 7);
+    src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
+      `<strong>chosen by you</strong> for this product. The tracker has these targets starting ${ltFmtDate(mine.firstWeek)}; they are moved to start on the launch week (${product.launch ? ltFmtDate(product.launch) : '?'})` +
+      `${wks ? `, ${wks} week${wks === 1 ? '' : 's'} ${shiftDays > 0 ? 'later' : 'earlier'}` : ''}. <a href="#" id="ltClearOverride">Go back to automatic matching</a>`;
+    const clr = document.getElementById('ltClearOverride'); if(clr) clr.onclick = e => { e.preventDefault(); tseClearOverride(product.asin, myNo); };
+  } else {
+    src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
+      `confirmed by date: targets start ${ltFmtDate(mine.firstWeek)}, this product launched ${product.launch ? ltFmtDate(product.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ''}.`;
+  }
   cmp.weeks.forEach(w => {      // the ASIN is attributed to every week in which this product has a target or an actual figure
     const c = w.cells;
     w.asins = (c.revenue.target > 0 || c.units.target > 0 || c.margin.target > 0 || c.revenue.actual != null || c.units.actual != null) ? [product.asin] : [];
@@ -6070,9 +6119,9 @@ async function loadCombinedComparison(selected){
 
   const codeOf = p => String(p.product_line_code || '').trim().toUpperCase();
   const codes = [...new Set(selected.map(codeOf).filter(Boolean))];
-  const [rowsRes, products, lMap] = await Promise.all([
+  const [rowsRes, products, lMap, overrides] = await Promise.all([
     codes.length ? sb.from('line_targets').select('*').in('product_line_code', codes) : Promise.resolve({ data: [], error: null }),
-    fetchProducts(), fetchLaunchMap(),
+    fetchProducts(), fetchLaunchMap(), fetchTargetOverrides(),
   ]);
   const entries = ltLaunchEntries(products, lMap);
   if(token !== ltCompareToken) return;
@@ -6087,10 +6136,13 @@ async function loadCombinedComparison(selected){
     if(!rows.length){ excluded.push({ p, why: `there are no saved tracker lines for code ${code}` }); return; }
     // a relaunched product is totalled on its CURRENT (newest) launch
     const mineEntries = entries.filter(e => e.asin === p.asin), entry = mineEntries.find(e => e._latest) || mineEntries[0] || p;
-    const blocks = ltBlocksFromRows(rows), assign = ltAssignBlocks(blocks, entries);
+    const blocks = ltBlocksFromRows(rows), assign = ltAssignBlocks(blocks, entries, overrides);
     const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === ltEntryId(entry));
     if(!mine){ excluded.push({ p, why: `none of the ${code} tracker lines is matched to it (open it on its own to see why)` }); return; }
-    included.push({ product: p, entry, mine, matched: rows.filter(r => r.kind === mine.kind && r.line_label === mine.label) });
+    const matchedRaw = rows.filter(r => r.kind === mine.kind && r.line_label === mine.label);
+    const shift = assign.get(mine.kind + '|' + mine.label).forced && entry.launch ? ltDaysBetween(ltMondayOf(entry.launch), mine.firstWeek) : 0;      // a line chosen by hand starts on the launch week
+    included.push({ product: p, entry, shifted: !!shift, mine: shift ? { ...mine, firstWeek: ltAddDays(mine.firstWeek, shift) } : mine,
+                    matched: shift ? matchedRaw.map(r => ({ ...r, week: ltAddDays(r.week, shift) })) : matchedRaw });
   });
   const excludedHtml = excluded.length
     ? `<div style="margin-top:6px;color:#92400E;">Not included — no matching targets: ${excluded.map(x => `<strong>${escapeHtml(productDisplayName(x.p))}</strong> (${escapeHtml(x.why)})`).join('; ')}.</div>` : '';
@@ -6116,7 +6168,7 @@ async function loadCombinedComparison(selected){
   if(!cmp){ msg.innerHTML = box(`The matched tracker lines have no targets entered yet.${excludedHtml}`); return; }
 
   src.innerHTML = `Combined total of <strong>${included.length}</strong> product${included.length === 1 ? '' : 's'}: ` +
-    included.map(i => `${escapeHtml(ltEntryName(i.entry))} (${escapeHtml(i.mine.label)})`).join('; ') + '. ' +
+    included.map(i => `${escapeHtml(ltEntryName(i.entry))} (${escapeHtml(i.mine.label)}${i.shifted ? ', chosen by you — moved to start on the launch' : ''})`).join('; ') + '. ' +
     `Weeks are calendar weeks. Each week adds up only the products that have <strong>both</strong> a target and actual figures for it, so target and actual always cover the same products — ` +
     `a column marked <strong>n/N</strong> counts only n of the ${included.length}.` + excludedHtml;
   const nameByAsin = Object.fromEntries(included.map(i => [i.product.asin, productDisplayName(i.product)]));
