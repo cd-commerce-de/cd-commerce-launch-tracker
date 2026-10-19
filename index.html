@@ -627,7 +627,9 @@
         <div id="sbSyncStatus" style="display:none;font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:12px;"></div>
         <div class="toolbar" style="justify-content:flex-start;">
           <button class="btn btn-sm" id="btnForceSync" onclick="forceSellerboardSync()">⟳ Force update now (pulls latest data immediately, instead of waiting for the daily schedule)</button>
+          <button class="btn btn-sm" id="btnCheckFeed" onclick="checkSellerboardFeed()" title="Read-only: shows what Sellerboard's automatic report contains for one product, next to what is stored — nothing is changed">🔍 Check what the automatic report says…</button>
         </div>
+        <div id="sbCheckResult" style="display:none;margin-top:12px;"></div>
         <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
           <h4 style="margin:0 0 4px;font-size:13px;">Upload previous weeks</h4>
           <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">To backfill older weeks (or if the automatic sync was ever down): in Sellerboard go to <strong>Reports → Dashboard by Product</strong>, pick the date range and export. Use <strong>full Monday–Sunday weeks</strong>. Each file is checked before it's sent, and any week that isn't fully in the file is <strong>left out</strong>, so a partial week can't overwrite good numbers. Weeks already saved for the same products are replaced by the file's numbers.</p>
@@ -5189,6 +5191,65 @@ async function loadSbSyncStatus(){
   el.style.color = data.success ? '#166534' : '#991B1B';
   el.style.border = `1px solid ${data.success ? '#BBF7D0' : '#FECACA'}`;
   el.innerHTML = `<strong>Last automated Sellerboard sync</strong> — ${data.success ? '✓ Succeeded' : '✗ Failed'} · ${escapeHtml(when)}<br>${escapeHtml(data.message || '')}`;
+}
+// READ-ONLY: shows what Sellerboard's AUTOMATIC report contains for one product (day by day and per week) next to what is stored in the database — to answer
+// "is the report itself different from Sellerboard's dashboard, or is the database behind?". Nothing is written anywhere.
+let lastSbCheckParent = '';
+async function checkSellerboardFeed(){
+  const box = document.getElementById('sbCheckResult');
+  const secret = window.SYNC_TRIGGER_SECRET;
+  if(!secret){ alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.'); return; }
+  const sel = document.getElementById('productSelect');
+  const parent = String(prompt('Which product should I check? Enter its parent ASIN (for example B0HKK7CRRZ):', lastSbCheckParent || (sel && sel.value) || '') || '').trim().toUpperCase();
+  if(!parent) return;
+  lastSbCheckParent = parent;
+  const show = html => { box.style.display = 'block'; box.innerHTML = html; };
+  show('<div style="font-size:12px;color:var(--text-muted);">Reading the automatic report…</div>');
+  const { data: kids, error: kErr } = await sb.from('child_asin_mapping').select('child_asin,marketplace,sku').eq('parent_asin', parent);
+  if(kErr || !kids || !kids.length){ show(`<div class="status-line status-err">No child ASINs are registered for parent ${escapeHtml(parent)} in the ASIN Mapping tab, so there is nothing to look for in the report.</div>`); return; }
+  let data;
+  try{
+    const res = await fetch(`${EDGE_BASE}/sync-sellerboard-weekly`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': secret, 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ diagnose: { asins: kids.map(k => k.child_asin) } }),
+    });
+    data = await readJsonResponse(res);
+    if(!res.ok || data.diagnose !== true){ show(`<div class="status-line status-err">Could not read the report: ${escapeHtml(data.error || platformErrorText(data, 'Unknown error'))}</div>`); return; }
+  }catch(err){ show(`<div class="status-line status-err">Could not reach the sync function: ${escapeHtml(err.message)}</div>`); return; }
+
+  // what the page would show for those weeks: every stored row dated inside the Monday–Sunday week, added together (exactly how the weekly table is built)
+  const weeks = data.weeks.map(w => w.week);
+  const lo = weeks[0], hi = weeks.length ? isoPlusDays(weeks[weeks.length - 1], 6) : lo;
+  const { data: stored } = weeks.length ? await sb.from('sellerboard_rows').select('week,sales,units,ad_spend,refunds').eq('asin', parent).gte('week', lo).lte('week', hi) : { data: [] };
+  const storedBy = {}; (stored || []).forEach(r => { const w = mondayOf(String(r.week).slice(0, 10)); const a = storedBy[w] = storedBy[w] || { sales: 0, units: 0, ad: 0, rows: 0 }; a.sales += +r.sales || 0; a.units += +r.units || 0; a.ad += +r.ad_spend || 0; a.rows++; });
+  const f = data.feed, eur = n => fmtMoney(n), cell = 'style="padding:4px 6px;text-align:right;white-space:nowrap;"', lcell = 'style="padding:4px 6px;text-align:left;white-space:nowrap;"';
+  const closeTo = (a, b) => Math.abs(a - b) < 0.005;
+  const wkRows = data.weeks.map(w => {
+    const st = storedBy[w.week];
+    const same = st && closeTo(st.sales, w.sales) && st.units === w.units && closeTo(st.ad, w.adSpend);
+    const verdict = !st ? '<span style="color:var(--text-muted);">not stored</span>' : same ? '<span style="color:#166534;font-weight:600;">✓ same</span>' : '<span style="color:#991B1B;font-weight:600;">✗ differs</span>';
+    return `<tr><td ${lcell}>${escapeHtml(launchFmt(w.week))} <span style="color:var(--text-muted);font-size:10.5px;">${isoYearWeek(w.week)}</span></td><td ${cell}>${w.daysInReport}/7</td><td ${lcell}>${escapeHtml(w.action)}</td>` +
+      `<td ${cell}>${eur(w.sales)}</td><td ${cell}>${st ? eur(st.sales) + (st.rows > 1 ? ` <span style="color:#991B1B;" title="${st.rows} stored rows are added together">⚠ ${st.rows} rows</span>` : '') : '–'}</td>` +
+      `<td ${cell}>${w.units}</td><td ${cell}>${st ? st.units : '–'}</td><td ${cell}>${eur(w.adSpend)}</td><td ${cell}>${st ? eur(st.ad) : '–'}</td><td ${lcell}>${verdict}</td></tr>`;
+  }).join('');
+  const dayTot = {}; data.rows.forEach(r => { const d = dayTot[r.date] = dayTot[r.date] || { sales: 0, units: 0, ad: 0, ref: 0 }; d.sales += r.sales; d.units += r.units; d.ad += r.adSpend; d.ref += r.refunds; });
+  const dayRows = Object.keys(dayTot).sort().map(d => { const t = dayTot[d]; return `<tr><td ${lcell}>${escapeHtml(d)} <span style="color:var(--text-muted);font-size:10.5px;">${new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</span></td><td ${cell}>${eur(t.sales)}</td><td ${cell}>${t.units}</td><td ${cell}>${eur(t.ad)}</td><td ${cell}>${t.ref}</td></tr>`; }).join('');
+  const kidRows = data.rows.map(r => `<tr><td ${lcell}>${escapeHtml(r.date)}</td><td ${lcell}>${escapeHtml(r.sku || r.asin)}</td><td ${cell}>${eur(r.sales)}</td><td ${cell}>${r.units}</td><td ${cell}>${eur(r.adSpend)}</td><td ${cell}>${r.refunds}</td></tr>`).join('');
+  const th = t => `<th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-muted);font-weight:600;line-height:1.2;">${t}</th>`, thl = t => th(t).replace('text-align:right', 'text-align:left');
+  const text = ['Automatic report vs stored — parent ' + parent, `Report covers ${f.firstDay} → ${f.lastDay} (${f.daysInReport} days)${f.lastModified ? ', last modified ' + f.lastModified : ''}${f.filename ? ', file ' + f.filename : ''}`, '',
+    'week | days | a real run would | report sales | stored sales | report units | stored units | report ads | stored ads',
+    ...data.weeks.map(w => { const st = storedBy[w.week]; return [w.week, w.daysInReport + '/7', w.action, w.sales, st ? st.sales : '-', w.units, st ? st.units : '-', w.adSpend, st ? st.ad.toFixed(2) : '-'].join(' | '); }),
+    '', 'day | sales | units | ads | refunds', ...Object.keys(dayTot).sort().map(d => [d, dayTot[d].sales.toFixed(2), dayTot[d].units, dayTot[d].ad.toFixed(2), dayTot[d].ref].join(' | '))].join('\n');
+  show(`<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:#fff;">
+    <div style="font-weight:700;margin-bottom:2px;">Automatic report vs stored — ${escapeHtml(parent)} <span style="font-weight:400;color:var(--text-muted);font-size:11.5px;">(${kids.length} child ASIN${kids.length === 1 ? '' : 's'})</span></div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">The report covers <strong>${escapeHtml(launchFmt(f.firstDay))} → ${escapeHtml(launchFmt(f.lastDay))}</strong> (${f.daysInReport} days)${f.lastModified ? `, last modified ${escapeHtml(f.lastModified)}` : ''}${f.filename ? `, file ${escapeHtml(f.filename)}` : ''}. Read-only — nothing was changed.</div>
+    <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12px;"><thead><tr>${thl('Week')}${th('Days in report')}${thl('A real run would')}${th('Report sales')}${th('Stored sales')}${th('Report units')}${th('Stored units')}${th('Report ads')}${th('Stored ads')}${thl('')}</tr></thead><tbody>${wkRows}</tbody></table></div>
+    <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;">Day by day, as the report has it (compare with Sellerboard's own dashboard for the same days)</summary>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px;"><div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12px;"><thead><tr>${thl('Day (all children)')}${th('Sales')}${th('Units')}${th('Ads')}${th('Refunds')}</tr></thead><tbody>${dayRows}</tbody></table></div>
+      <div style="overflow-x:auto;max-height:260px;overflow-y:auto;"><table style="border-collapse:collapse;font-size:12px;"><thead><tr>${thl('Day')}${thl('SKU')}${th('Sales')}${th('Units')}${th('Ads')}${th('Refunds')}</tr></thead><tbody>${kidRows}</tbody></table></div></div></details>
+    <details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;">Plain text (to copy and send)</summary><textarea readonly rows="${Math.min(18, text.split('\n').length + 1)}" style="width:100%;margin-top:6px;font:11.5px monospace;">${escapeHtml(text)}</textarea></details>
+  </div>`);
 }
 async function forceSellerboardSync(){
   const btn = document.getElementById('btnForceSync');
