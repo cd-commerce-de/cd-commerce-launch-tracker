@@ -5638,8 +5638,22 @@ function ltLaunchEntries(products, launchMap){
 }
 const ltEntryName = e => productDisplayName(e) + (e && e._multi ? ` — ${e._label}` : '');
 const tseLaunchSel = {};      // asin -> the launch date chosen in Actual vs. Target (defaults to the newest launch)
-async function tseSaveOverride(asin, launchNo, kind, label){
-  const { error } = await sb.from('target_overrides').upsert({ asin, launch_no: launchNo, kind, line_label: label }, { onConflict: 'asin,launch_no' });
+async function tseSaveOverride(asin, launchNo, kind, label, mode){
+  mode = mode === 'tracker' ? 'tracker' : 'launch';
+  // A tracker line can serve ONE product launch at a time. If it is already chosen for another, say so first — otherwise one of the two choices would silently lose.
+  const { data: taken } = await sb.from('target_overrides').select('*').eq('kind', kind).eq('line_label', label);
+  const others = (taken || []).filter(r => !(r.asin === asin && (r.launch_no || 1) === launchNo));
+  if(others.length){
+    const names = others.map(r => r.asin + ((r.launch_no || 1) > 1 ? ` (launch ${r.launch_no})` : '')).join(', ');
+    if(!confirm(`"${label}" is already chosen for ${names}. A line can only be used for one product at a time.\n\n${others.length > 1 ? 'Those products' : 'That product'} will go back to automatic matching if you continue. Continue?`)) return;
+    for(const r of others) await sb.from('target_overrides').delete().eq('asin', r.asin).eq('launch_no', r.launch_no || 1);
+  }
+  const rec = { asin, launch_no: launchNo, kind, line_label: label, start_mode: mode };
+  let { error } = await sb.from('target_overrides').upsert(rec, { onConflict: 'asin,launch_no' });
+  if(error && /start_mode/.test(error.message)){
+    if(mode === 'tracker'){ alert('Keeping the tracker\'s own dates needs a small addition to the table — run add_target_overrides_table.sql again in the Supabase SQL Editor, then try again. Nothing was changed.'); return; }
+    ({ error } = await sb.from('target_overrides').upsert({ asin, launch_no: launchNo, kind, line_label: label }, { onConflict: 'asin,launch_no' }));      // "starting on the launch" works without the column
+  }
   if(error){
     alert(/target_overrides|relation|schema cache/i.test(error.message)
       ? 'This needs the target_overrides table — run add_target_overrides_table.sql in the Supabase SQL Editor, then try again. Nothing was changed.'
@@ -5659,20 +5673,26 @@ async function fetchTargetOverrides(){
   const { data, error } = await sb.from('target_overrides').select('*');
   return error ? [] : (data || []);
 }
+// The two ways to use a line by hand: start its targets on the product's launch week, or keep the tracker's own dates (Week 1 = the line's first week).
+function ltUseButtons(b, launch){
+  const lbl = escapeHtml(b.label);
+  return ` <button type="button" class="btn btn-sm lt-use-line" data-mode="launch" data-kind="${b.kind}" data-label="${lbl}" style="margin-left:6px;padding:1px 9px;">Use this line, starting on ${escapeHtml(ltFmtDate(launch))}</button>` +
+         ` <button type="button" class="btn btn-sm lt-use-line" data-mode="tracker" data-kind="${b.kind}" data-label="${lbl}" style="margin-left:4px;padding:1px 9px;">Use this line as in the tracker (Week 1 = ${escapeHtml(ltFmtDate(b.firstWeek))})</button>`;
+}
 function ltAssignBlocks(blocks, products, overrides){
   const key = b => b.kind + '|' + b.label;
   // A line chosen by hand is placed FIRST and taken out of the automatic matching on both sides (that line, and that product launch) — whatever its tab, marketplace or dates.
-  const forced = new Map(), forcedIds = new Set();
+  const forced = new Map(), forcedIds = new Set(), forcedMode = new Map();
   (overrides || []).forEach(o => {
     const entry = products.find(pr => pr.asin === o.asin && (pr._no || 1) === (o.launch_no || 1));
     const block = blocks.find(b => b.kind === o.kind && b.label === o.line_label);
-    if(entry && block && !forced.has(key(block)) && !forcedIds.has(ltEntryId(entry))){ forced.set(key(block), ltEntryId(entry)); forcedIds.add(ltEntryId(entry)); }
+    if(entry && block && !forced.has(key(block)) && !forcedIds.has(ltEntryId(entry))){ forced.set(key(block), ltEntryId(entry)); forcedIds.add(ltEntryId(entry)); forcedMode.set(key(block), o.start_mode === 'tracker' ? 'tracker' : 'launch'); }
   });
   const result = new Map(), pairs = [];
   blocks.forEach(b => {
     const info = { status: null, asin: null, days: null, nearest: null, tied: [] };
     result.set(key(b), info);
-    if(forced.has(key(b))){ info.status = 'assigned'; info.asin = forced.get(key(b)); info.forced = true; return; }
+    if(forced.has(key(b))){ info.status = 'assigned'; info.asin = forced.get(key(b)); info.forced = true; info.mode = forcedMode.get(key(b)); return; }
     if((b.marketplaces || []).length > 1){ info.status = 'multi_marketplace'; return; }
     const cand = products.filter(p => !forcedIds.has(ltEntryId(p)) && ltBlockMatchesProduct(b, p));
     if(!cand.length){ info.status = 'no_product'; return; }
@@ -5705,7 +5725,7 @@ function ltDescribeAssignment(b, info, productOf, nameOf, fmtDate){
   switch(info.status){
     case 'assigned': {
       const p = productOf(info.asin);
-      return { ok: true, text: info.forced ? `${nameOf(p)} — chosen by you: targets start ${fmtDate(b.firstWeek)}, moved to start on the launch (${p.launch ? fmtDate(p.launch) : '?'})` : `${nameOf(p)} — targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ' (same week)'}` };
+      return { ok: true, text: info.forced ? (info.mode === 'tracker' ? `${nameOf(p)} — chosen by you: the tracker's own dates are kept (targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'})` : `${nameOf(p)} — chosen by you: targets start ${fmtDate(b.firstWeek)}, moved to start on the launch (${p.launch ? fmtDate(p.launch) : '?'})`) : `${nameOf(p)} — targets start ${fmtDate(b.firstWeek)}, product launched ${p.launch ? fmtDate(p.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ' (same week)'}` };
     }
     case 'multi_marketplace': return { ok: false, text: `Covers ${b.marketplaces.join('/')} together — it can't be compared to a single product without combining products, so it's left unmatched` };
     case 'no_product': return { ok: false, text: `No ${b.kind}-tagged product with Product Line Code ${b.code}${b.marketplaces.length ? ' in ' + b.marketplaces.join('/') : ''}` };
@@ -6049,19 +6069,20 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
         else why = ltDescribeAssignment(b, info, productOf, ltEntryName, ltFmtDate).text;
       }
       // the launch was delayed (or the dates don't line up for another reason): let the user pick the line, started on the real launch date
-      const useBtn = product.launch ? ` <button type="button" class="btn btn-sm lt-use-line" data-kind="${b.kind}" data-label="${escapeHtml(b.label)}" style="margin-left:6px;padding:1px 9px;">Use this line, starting on ${escapeHtml(ltFmtDate(product.launch))}</button>` : '';
+      const useBtn = product.launch ? ltUseButtons(b, product.launch) : '';
       return `<li style="margin-bottom:4px;"><strong>${escapeHtml(b.label)}</strong> (${tab(b)} tab) — ${escapeHtml(why)}${useBtn}</li>`;
     }).join('');
     msg.innerHTML = box(`None of the tracker lines for code <strong>${escapeHtml(code)}</strong> belong to this product:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul>` +
-      (product.launch ? `<div style="margin-top:8px;">Launch delayed? Choose the line to use — its targets are kept as they are, but moved so that their first week lands on this product's launch week (${escapeHtml(ltFmtDate(product.launch))}).</div>` : ''));
-    msg.onclick = e => { const btn = e.target.closest('.lt-use-line'); if(btn) tseSaveOverride(product.asin, myNo, btn.dataset.kind, btn.dataset.label); };
+      (product.launch ? `<div style="margin-top:8px;">Launch delayed? Choose the line to use, in one of two ways: <strong>starting on the launch</strong> — its targets are kept as they are but moved so their first week lands on this product's launch week (${escapeHtml(ltFmtDate(product.launch))}) — or <strong>as in the tracker</strong> — the targets keep their own dates and Week 1 is the line's first week, so the weeks before the real launch simply have no actuals.</div>` : ''));
+    msg.onclick = e => { const btn = e.target.closest('.lt-use-line'); if(btn) tseSaveOverride(product.asin, myNo, btn.dataset.kind, btn.dataset.label, btn.dataset.mode); };
     return;
   }
 
   const matchedRaw = (rowsForCode || []).filter(r => r.kind === mine.kind && r.line_label === mine.label);
   // A line chosen by hand keeps its targets but starts on the product's real launch week: every target week is moved by the same number of days.
   const infoMine = assign.get(mine.kind + '|' + mine.label);
-  const shiftDays = infoMine.forced && product.launch ? ltDaysBetween(ltMondayOf(product.launch), mine.firstWeek) : 0;
+  const keepTrackerDates = !!(infoMine.forced && infoMine.mode === 'tracker');      // chosen "as in the tracker": no shifting, and Week 1 is the line's first week
+  const shiftDays = infoMine.forced && !keepTrackerDates && product.launch ? ltDaysBetween(ltMondayOf(product.launch), mine.firstWeek) : 0;
   const matched = shiftDays ? matchedRaw.map(r => ({ ...r, week: ltAddDays(r.week, shiftDays) })) : matchedRaw;
   const firstWeekUsed = shiftDays ? ltAddDays(mine.firstWeek, shiftDays) : mine.firstWeek;
   const { data: actualRows, error: aErr } = await sb.from('sellerboard_rows').select('week,sales,units,net_profit')
@@ -6072,23 +6093,41 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
   const cmp = ltBuildComparison(matched, actualRows || [], new Date().toISOString().slice(0, 10));
   if(!cmp){ msg.innerHTML = box('The matching tracker line has no targets entered yet.'); return; }
   const info = assign.get(mine.kind + '|' + mine.label);
-  if(info.forced){
+  if(info.forced && keepTrackerDates){
+    const lw = product.launch ? weekNumber(mine.firstWeek, ltMondayOf(product.launch)) : null;
+    src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
+      `<strong>chosen by you</strong>, <strong>as in the tracker</strong>: Week 1 is ${ltFmtDate(mine.firstWeek)}, the first week of the targets` +
+      `${lw && lw > 1 ? `, and this product's real launch (${ltFmtDate(product.launch)}) falls in Week ${lw}, so the weeks before it have a target but no actuals` : ''}. <a href="#" id="ltClearOverride">Go back to automatic matching</a>`;
+  } else if(info.forced){
     const wks = Math.round(Math.abs(shiftDays) / 7);
     src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
       `<strong>chosen by you</strong> for this product. The tracker has these targets starting ${ltFmtDate(mine.firstWeek)}; they are moved to start on the launch week (${product.launch ? ltFmtDate(product.launch) : '?'})` +
       `${wks ? `, ${wks} week${wks === 1 ? '' : 's'} ${shiftDays > 0 ? 'later' : 'earlier'}` : ''}. <a href="#" id="ltClearOverride">Go back to automatic matching</a>`;
-    const clr = document.getElementById('ltClearOverride'); if(clr) clr.onclick = e => { e.preventDefault(); tseClearOverride(product.asin, myNo); };
   } else {
     src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
       `confirmed by date: targets start ${ltFmtDate(mine.firstWeek)}, this product launched ${product.launch ? ltFmtDate(product.launch) : '?'}${info.days ? ` (${info.days} days apart)` : ''}.`;
   }
+  // The choice must ALWAYS be reachable — also when a line is matched by date or already chosen (the buttons used to appear only when NOTHING matched).
+  if(product.launch){
+    const items = blocks.map(b => {
+      const inUse = b.kind === mine.kind && b.label === mine.label;
+      return `<li style="margin-bottom:4px;"><strong>${escapeHtml(b.label)}</strong> (${b.kind === 'launch' ? 'Launch' : 'Expansion'} tab) — targets start ${escapeHtml(ltFmtDate(b.firstWeek))}` +
+        (inUse ? (info.forced ? (keepTrackerDates ? ' <em>(in use, as in the tracker)</em>' : ' <em>(in use, moved to the launch)</em>') : ' <em>(in use, matched by date)</em>') : '') +
+        ltUseButtons(b, product.launch).split(' <button').filter(Boolean).map(x => ' <button' + x).filter(x => !(inUse && info.forced && x.includes(`data-mode="${keepTrackerDates ? 'tracker' : 'launch'}"`))).join('') + '</li>';
+    }).join('');
+    src.innerHTML += `<div style="margin-top:6px;"><a href="#" id="ltChangeLine">Use a different line, or start the targets on the launch date…</a>` +
+      `<div id="ltChangePanel" style="display:none;margin-top:6px;"><ul style="margin:0 0 0 18px;padding:0;">${items}</ul></div></div>`;
+    const tg = document.getElementById('ltChangeLine'); if(tg) tg.onclick = e => { e.preventDefault(); const pn = document.getElementById('ltChangePanel'); pn.style.display = pn.style.display === 'none' ? 'block' : 'none'; };
+    src.onclick = e => { const btn = e.target.closest('.lt-use-line'); if(btn) tseSaveOverride(product.asin, myNo, btn.dataset.kind, btn.dataset.label, btn.dataset.mode); };
+  }
+  const clr = document.getElementById('ltClearOverride'); if(clr) clr.onclick = e => { e.preventDefault(); tseClearOverride(product.asin, myNo); };
   cmp.weeks.forEach(w => {      // the ASIN is attributed to every week in which this product has a target or an actual figure
     const c = w.cells;
     w.asins = (c.revenue.target > 0 || c.units.target > 0 || c.margin.target > 0 || c.revenue.actual != null || c.units.actual != null) ? [product.asin] : [];
   });
   const weekLabel = w => {
     const d = new Date(w.week + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    const n = product.launch ? weekNumber(product.launch, w.week) : null;
+    const n = keepTrackerDates ? weekNumber(mine.firstWeek, w.week) : (product.launch ? weekNumber(product.launch, w.week) : null);      // as in the tracker: Week 1 = the line's first week
     return `${ltYwHtml(w.week)}${n != null ? 'Wk ' + n : ''}<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:2px;">${d}</div>${ltAsinNoteHtml(w.asins, () => productDisplayName(product))}`;
   };
   table.innerHTML = ltRenderComparisonTable(cmp, weekLabel);
@@ -6140,8 +6179,9 @@ async function loadCombinedComparison(selected){
     const mine = blocks.find(b => assign.get(b.kind + '|' + b.label).asin === ltEntryId(entry));
     if(!mine){ excluded.push({ p, why: `none of the ${code} tracker lines is matched to it (open it on its own to see why)` }); return; }
     const matchedRaw = rows.filter(r => r.kind === mine.kind && r.line_label === mine.label);
-    const shift = assign.get(mine.kind + '|' + mine.label).forced && entry.launch ? ltDaysBetween(ltMondayOf(entry.launch), mine.firstWeek) : 0;      // a line chosen by hand starts on the launch week
-    included.push({ product: p, entry, shifted: !!shift, mine: shift ? { ...mine, firstWeek: ltAddDays(mine.firstWeek, shift) } : mine,
+    const infoC = assign.get(mine.kind + '|' + mine.label);
+    const shift = infoC.forced && infoC.mode !== 'tracker' && entry.launch ? ltDaysBetween(ltMondayOf(entry.launch), mine.firstWeek) : 0;      // chosen by hand "starting on the launch": moved to the launch week; "as in the tracker": left alone
+    included.push({ product: p, entry, shifted: !!shift, kept: !!(infoC.forced && infoC.mode === 'tracker'), mine: shift ? { ...mine, firstWeek: ltAddDays(mine.firstWeek, shift) } : mine,
                     matched: shift ? matchedRaw.map(r => ({ ...r, week: ltAddDays(r.week, shift) })) : matchedRaw });
   });
   const excludedHtml = excluded.length
@@ -6168,7 +6208,7 @@ async function loadCombinedComparison(selected){
   if(!cmp){ msg.innerHTML = box(`The matched tracker lines have no targets entered yet.${excludedHtml}`); return; }
 
   src.innerHTML = `Combined total of <strong>${included.length}</strong> product${included.length === 1 ? '' : 's'}: ` +
-    included.map(i => `${escapeHtml(ltEntryName(i.entry))} (${escapeHtml(i.mine.label)}${i.shifted ? ', chosen by you — moved to start on the launch' : ''})`).join('; ') + '. ' +
+    included.map(i => `${escapeHtml(ltEntryName(i.entry))} (${escapeHtml(i.mine.label)}${i.shifted ? ', chosen by you — moved to start on the launch' : (i.kept ? ', chosen by you — tracker dates kept' : '')})`).join('; ') + '. ' +
     `Weeks are calendar weeks. Each week adds up only the products that have <strong>both</strong> a target and actual figures for it, so target and actual always cover the same products — ` +
     `a column marked <strong>n/N</strong> counts only n of the ${included.length}.` + excludedHtml;
   const nameByAsin = Object.fromEntries(included.map(i => [i.product.asin, productDisplayName(i.product)]));
