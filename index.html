@@ -5194,7 +5194,17 @@ async function forceSellerboardSync(){
     if(!res.ok){
       alert('Sync failed: ' + (data.error || 'Unknown error'));
     } else {
-      alert(`Sync succeeded — ${data.rowsLoaded||0} product/week rows updated across weeks: ${(data.weeksCovered||[]).join(', ')||'none'}.`);
+      let text = `Sync succeeded — ${data.rowsLoaded||0} product/week rows updated across weeks: ${(data.weeksCovered||[]).join(', ')||'none'}.`;
+      // Weeks that Sellerboard's rolling report only PARTLY contains are never rewritten, so they keep their old (possibly outdated) numbers — say so.
+      const skipped = [...(data.skippedIncompleteWeeks || [])].sort();
+      if(skipped.length){
+        const one = skipped.length === 1;
+        text += `\n\nNOT refreshed: the week${one ? '' : 's'} of ${skipped.map(launchFmt).join(', ')}. Sellerboard's automatic report only contains part of ${one ? 'that week' : 'those weeks'} right now, ` +
+                `so ${one ? 'its numbers were' : 'their numbers were'} left exactly as ${one ? 'they were' : 'they were'} — a finished week can't be rebuilt from part of it.\n\n` +
+                `To correct ${one ? 'it' : 'them'}: upload Sellerboard's exported report for ${one ? 'that week' : 'those weeks'} in Upload & Manage, or lengthen the report's period in Sellerboard ` +
+                `(Automation → Dashboard by Product → daily rows, the last 21 days) so finished weeks stay inside it.`;
+      }
+      alert(text);
     }
   }catch(err){
     alert('Could not reach the sync function: ' + err.message);
