@@ -5849,6 +5849,16 @@ const LT_METRICS = [
   { key: 'margin',  label: 'Margin', actualKey: 'net_profit' },
 ];
 // targetRows: stored rows already filtered to this product's blocks. actualRows: sellerboard_rows for the product.
+// Chosen "as in the tracker" for a DELAYED launch: the targets start on their own dates, so the first weeks come BEFORE the product has any data. Those finished weeks
+// count as €0 actual (0 units, €0 profit) so the % of target runs from Week 1 instead of starting at the first week with data. Deliberately narrow: only weeks before the
+// product's FIRST data row (a missing row after data has started means missing data, not zero), only finished weeks, and nothing at all if there is no data yet.
+function ltZeroFillBeforeFirstData(targetRows, actualRows, todayIso){
+  if(!actualRows || !actualRows.length) return actualRows || [];
+  const first = actualRows.map(r => r.week).sort()[0], have = new Set(actualRows.map(r => r.week));
+  const add = [...new Set(targetRows.map(r => r.week))].sort().filter(w => w < first && !have.has(w) && ltWeekState(w, todayIso) === 'done')
+                .map(w => ({ week: w, sales: 0, units: 0, net_profit: 0 }));
+  return add.length ? actualRows.concat(add) : actualRows;
+}
 function ltBuildComparison(targetRows, actualRows, todayIso){
   const tByWeek = {};
   targetRows.forEach(r => {
@@ -6180,14 +6190,19 @@ async function loadDealsTargetsComparison(product, launchMap){      // `product`
   if(token !== ltCompareToken) return;
   if(aErr){ msg.innerHTML = box(escapeHtml(aErr.message)); return; }
 
-  const cmp = ltBuildComparison(matched, actualRows || [], new Date().toISOString().slice(0, 10));
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const actualFilled = keepTrackerDates ? ltZeroFillBeforeFirstData(matched, actualRows || [], todayIso) : (actualRows || []);
+  const filledWeeks = actualFilled.length - (actualRows || []).length;
+  const firstDataWeek = (actualRows || []).map(r => r.week).sort()[0];
+  const cmp = ltBuildComparison(matched, actualFilled, todayIso);
   if(!cmp){ msg.innerHTML = box('The matching tracker line has no targets entered yet.'); return; }
   const info = assign.get(mine.kind + '|' + mine.label);
   if(info.forced && keepTrackerDates){
     const lw = product.launch ? weekNumber(mine.firstWeek, ltMondayOf(product.launch)) : null;
     src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
       `<strong>chosen by you</strong>, <strong>as in the tracker</strong>: Week 1 is ${ltFmtDate(mine.firstWeek)}, the first week of the targets` +
-      `${lw && lw > 1 ? `, and this product's real launch (${ltFmtDate(product.launch)}) falls in Week ${lw}, so the weeks before it have a target but no actuals` : ''}. <a href="#" id="ltClearOverride">Go back to automatic matching</a>`;
+      `${lw && lw > 1 ? `, and this product's real launch (${ltFmtDate(product.launch)}) falls in Week ${lw}${filledWeeks ? '' : ', so the weeks before it have a target but no actuals'}` : ''}.` +
+      `${filledWeeks ? ` The ${filledWeeks} finished week${filledWeeks === 1 ? '' : 's'} before the product has any data (before ${ltFmtDate(firstDataWeek)}) count as €0 actual, so the % of target runs from Week 1.` : ''} <a href="#" id="ltClearOverride">Go back to automatic matching</a>`;
   } else if(info.forced){
     const wks = Math.round(Math.abs(shiftDays) / 7);
     src.innerHTML = `Targets from the Deals Tracker: <strong>${escapeHtml(mine.label)}</strong> (${mine.kind === 'launch' ? 'Launch' : 'Expansion'} tab${mine.windowNote ? ', ' + escapeHtml(mine.windowNote) : ''}) — ` +
@@ -6287,14 +6302,16 @@ async function loadCombinedComparison(selected){
   const actual = [];
   for(let from = 0; ; from += 1000){        // page through, so no week is silently lost past the 1000-row limit
     const { data, error } = await sb.from('sellerboard_rows').select('asin,week,sales,units,net_profit')
-      .in('asin', asins).gte('week', minWeek).lte('week', maxWeek).range(from, from + 999);
+      .in('asin', asins).gte('week', minWeek).lte('week', maxWeek).order('asin').order('week').range(from, from + 999);      // sorted, so paging can't skip or repeat a row
     if(token !== ltCompareToken) return;
     if(error){ msg.innerHTML = box(escapeHtml(error.message)); return; }
     actual.push(...(data || []));
     if(!data || data.length < 1000) break;
   }
-  const cmp = ltBuildCombined(included.map(i => ({ asin: i.product.asin, targetRows: i.matched, actualRows: actual.filter(r => r.asin === i.product.asin) })),
-                              new Date().toISOString().slice(0, 10));
+  const todayIsoC = new Date().toISOString().slice(0, 10);
+  const cmp = ltBuildCombined(included.map(i => { const mine = actual.filter(r => r.asin === i.product.asin);
+                                                   return { asin: i.product.asin, targetRows: i.matched, actualRows: i.kept ? ltZeroFillBeforeFirstData(i.matched, mine, todayIsoC) : mine }; }),
+                              todayIsoC);
   if(!cmp){ msg.innerHTML = box(`The matched tracker lines have no targets entered yet.${excludedHtml}`); return; }
 
   src.innerHTML = `Combined total of <strong>${included.length}</strong> product${included.length === 1 ? '' : 's'}: ` +
