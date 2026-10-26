@@ -972,15 +972,19 @@
     <div class="view" id="view-users">
       <div class="panel">
         <h2 style="margin-top:0;">Users — who may use the launch tracker</h2>
-        <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Only the people listed here can sign in, using a one-time code sent to their email. Only <strong>@cd-commerce.de</strong> addresses can be added. Removing someone signs them out and deletes their login.</p>
+        <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Only the people listed here can sign in, using a one-time code sent to their email. Only <strong>@cd-commerce.de</strong> addresses can be added. An <strong>invitation</strong> is an email telling them they now have access and how to sign in. Removing someone signs them out and deletes their login.</p>
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;width:100%;max-width:880px;"><thead><tr>
           <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">EMAIL</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">ROLE</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">LOGIN</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">LAST SIGNED IN</th><th></th></tr></thead>
           <tbody id="usersBody"></tbody></table></div>
         <div class="toolbar" style="margin-top:14px;gap:8px;flex-wrap:wrap;">
           <input type="email" id="usersNewEmail" placeholder="name@cd-commerce.de" style="min-width:260px;" onkeydown="if(event.key==='Enter') usersAdd()">
           <select id="usersNewRole"><option value="user">User</option><option value="admin">Admin</option></select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);"><input type="checkbox" id="usersNewInvite" checked> Send them an invitation email</label>
           <button class="btn btn-primary" onclick="usersAdd()">Add person</button>
-          <button class="btn" id="usersCreateLoginsBtn" onclick="usersCreateLogins()" style="display:none;">Create the missing logins</button>
+        </div>
+        <div class="toolbar" style="margin-top:8px;gap:8px;flex-wrap:wrap;">
+          <button class="btn" id="usersInvitePendingBtn" onclick="usersInvitePending()" style="display:none;">Invite everyone who has not signed in yet</button>
+          <button class="btn" id="usersCreateLoginsBtn" onclick="usersCreateLogins()" style="display:none;">Create the missing logins (without an email)</button>
         </div>
         <div id="usersMissingNote" style="font-size:12px;color:#991B1B;margin-top:6px;"></div>
         <div class="status-line" id="usersStatus" style="margin-top:8px;"></div>
@@ -3873,34 +3877,57 @@ function usersStatus(text, kind){ const el = document.getElementById('usersStatu
 function renderUsers(people){
   const me = CURRENT_USER && CURRENT_USER.email, td = 'style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;"';
   const fmt = iso => iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-  const missing = people.filter(x => !x.hasLogin).length;
+  const missing = people.filter(x => !x.hasLogin).length, notYet = people.filter(x => !x.lastSignInAt).length;
+  const loginCell = x => !x.hasLogin ? '<span style="color:#991B1B;font-weight:600;">no login yet</span>' : x.lastSignInAt ? '<span style="color:#166534;font-weight:600;">✓ signed in</span>' : '<span style="color:#92400E;font-weight:600;">login ready · not signed in yet</span>';
   document.getElementById('usersBody').innerHTML = people.map(x => `<tr>
     <td ${td}><strong>${escapeHtml(x.email)}</strong>${x.email === me ? ' <span style="color:var(--text-muted);font-size:11px;">(you)</span>' : ''}</td>
     <td ${td}><select class="users-role" data-email="${escapeHtml(x.email)}" ${x.email === me ? 'disabled title="You cannot change your own role"' : ''}><option value="user" ${x.role === 'user' ? 'selected' : ''}>User</option><option value="admin" ${x.role === 'admin' ? 'selected' : ''}>Admin</option></select></td>
-    <td ${td}>${x.hasLogin ? '<span style="color:#166534;font-weight:600;">✓ ready</span>' : '<span style="color:#991B1B;font-weight:600;">no login yet</span>'}</td>
+    <td ${td}>${loginCell(x)}</td>
     <td ${td}>${escapeHtml(fmt(x.lastSignInAt))}</td>
-    <td ${td}>${x.email === me ? '' : `<button class="btn btn-sm users-remove" data-email="${escapeHtml(x.email)}">Remove</button>`}</td></tr>`).join('') || `<tr><td colspan="5" ${td}>Nobody yet.</td></tr>`;
+    <td ${td} style="white-space:nowrap;">${x.lastSignInAt || x.email === me ? '' : `<button class="btn btn-sm users-invite" data-email="${escapeHtml(x.email)}">${x.hasLogin ? 'Resend invite' : 'Invite'}</button> `}${x.email === me ? '' : `<button class="btn btn-sm users-remove" data-email="${escapeHtml(x.email)}">Remove</button>`}</td></tr>`).join('') || `<tr><td colspan="5" ${td}>Nobody yet.</td></tr>`;
   document.querySelectorAll('.users-role').forEach(sel => sel.addEventListener('change', () => usersSetRole(sel.dataset.email, sel.value)));
   document.querySelectorAll('.users-remove').forEach(b => b.addEventListener('click', () => usersRemove(b.dataset.email)));
+  document.querySelectorAll('.users-invite').forEach(b => b.addEventListener('click', () => usersInvite(b.dataset.email)));
+  document.getElementById('usersInvitePendingBtn').style.display = notYet ? '' : 'none';
+  document.getElementById('usersInvitePendingBtn').textContent = `Invite everyone who has not signed in yet (${notYet})`;
   document.getElementById('usersCreateLoginsBtn').style.display = missing ? '' : 'none';
-  document.getElementById('usersMissingNote').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no login yet and cannot sign in until it is created.` : '';
+  document.getElementById('usersMissingNote').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no login yet and cannot sign in until it is created (inviting them creates it).` : '';
 }
+// refreshes the list after a failed action WITHOUT touching the message line (so the explanation stays on screen)
+async function usersRefresh(){ try{ renderUsers((await usersCall('list')).people); }catch(e){ /* keep the earlier message */ } }
 async function loadUsersView(){ usersStatus('Loading…'); try{ renderUsers((await usersCall('list')).people); usersStatus(''); }catch(e){ usersStatus('Could not load the list: ' + e.message, 'err'); } }
 async function usersAdd(){
-  const input = document.getElementById('usersNewEmail'), email = input.value.trim().toLowerCase(), role = document.getElementById('usersNewRole').value;
+  const input = document.getElementById('usersNewEmail'), email = input.value.trim().toLowerCase(), role = document.getElementById('usersNewRole').value, invite = document.getElementById('usersNewInvite').checked;
   if(!email){ usersStatus('Enter an email address.', 'err'); return; }
-  usersStatus('Adding…');
-  try{ const d = await usersCall('add', { email, role }); renderUsers(d.people); input.value = ''; usersStatus(`Added ${email}. They can now sign in with an emailed code.`, 'ok'); }
-  catch(e){ usersStatus(e.message, 'err'); }
+  usersStatus(invite ? 'Adding and sending the invitation…' : 'Adding…');
+  try{
+    const d = await usersCall('add', { email, role, invite }); renderUsers(d.people); input.value = '';
+    if(!invite) usersStatus(`Added ${email}. They can now sign in with an emailed code.`, 'ok');
+    else if(d.invited) usersStatus(`Added ${email} and sent them an invitation email.`, 'ok');
+    else if(d.inviteNote === 'already-signed-in') usersStatus(`Added ${email}. They have signed in before, so no invitation was needed.`, 'ok');
+    else usersStatus(`Added ${email}, but the invitation email could not be sent (${d.inviteError || 'unknown reason'}). They can still sign in with an emailed code at the sign-in page.`, 'err');
+  }catch(e){ usersStatus(e.message, 'err'); }
+}
+async function usersInvite(email){
+  usersStatus(`Sending an invitation to ${email}…`);
+  try{ const d = await usersCall('invite', { email }); renderUsers(d.people); usersStatus(`Invitation sent to ${email}.`, 'ok'); }
+  catch(e){ usersStatus(e.message, 'err'); usersRefresh(); }
+}
+async function usersInvitePending(){
+  const n = document.querySelectorAll('.users-invite').length;
+  if(!confirm(`Send an invitation email to the ${n} ${n === 1 ? 'person who has' : 'people who have'} not signed in yet?\n\nPeople who have already signed in are skipped.`)) return;
+  usersStatus('Sending invitations…');
+  try{ const d = await usersCall('invite_pending'); renderUsers(d.people); usersStatus(`Sent ${d.invited.length} invitation${d.invited.length === 1 ? '' : 's'}${d.skipped.length ? ` (${d.skipped.length} already signed in — skipped)` : ''}.`, 'ok'); }
+  catch(e){ usersStatus(e.message, 'err'); usersRefresh(); }
 }
 async function usersRemove(email){
   if(!confirm(`Remove ${email}?\n\nThey will be signed out and will no longer be able to open the launch tracker.`)) return;
   usersStatus('Removing…');
-  try{ renderUsers((await usersCall('remove', { email })).people); usersStatus(`Removed ${email}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); loadUsersView(); }
+  try{ renderUsers((await usersCall('remove', { email })).people); usersStatus(`Removed ${email}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); usersRefresh(); }
 }
 async function usersSetRole(email, role){
   usersStatus('Saving…');
-  try{ renderUsers((await usersCall('set_role', { email, role })).people); usersStatus(`${email} is now ${role === 'admin' ? 'an admin' : 'a user'}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); loadUsersView(); }
+  try{ renderUsers((await usersCall('set_role', { email, role })).people); usersStatus(`${email} is now ${role === 'admin' ? 'an admin' : 'a user'}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); usersRefresh(); }
 }
 async function usersCreateLogins(){
   usersStatus('Creating logins…');
