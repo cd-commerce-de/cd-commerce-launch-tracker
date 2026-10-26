@@ -41,6 +41,19 @@
   .brand .titles h1{margin:0;color:#FFFFFF;font-size:21px;font-weight:700;}
   .brand .titles .sub{color:#94A3B8;font-size:12.5px;margin-top:1px;}
   .server-badge{font-size:10.5px;color:#94A3B8;}
+  #authGate{position:fixed;inset:0;z-index:100000;background:linear-gradient(135deg,#0F172A,#1E293B);display:none;align-items:center;justify-content:center;padding:20px;}
+  #authCard{background:#fff;border-radius:16px;max-width:400px;width:100%;padding:28px 28px 20px;box-shadow:0 20px 60px rgba(0,0,0,.4);border-top:4px solid var(--gold);}
+  #authCard input{width:100%;box-sizing:border-box;margin:12px 0 10px;padding:11px 12px;font-size:15px;border:1px solid var(--border);border-radius:8px;}
+  .auth-title{font-family:var(--font-h);font-size:21px;font-weight:700;color:#0F172A;}
+  .auth-sub{color:var(--text-muted);font-size:12.5px;margin-bottom:16px;}
+  .auth-text{font-size:13.5px;color:#334155;line-height:1.5;}
+  .auth-btn{width:100%;padding:11px;font-size:14px;}
+  .auth-links{display:flex;justify-content:space-between;margin-top:12px;}
+  .auth-link{background:none;border:none;color:var(--gold-dark);font-size:12.5px;cursor:pointer;padding:0;text-decoration:underline;}
+  .auth-link:disabled{color:var(--text-muted);cursor:default;text-decoration:none;}
+  .auth-msg{min-height:18px;margin-top:12px;font-size:12.5px;color:var(--text-muted);}
+  .auth-msg.err{color:#991B1B;}
+  .auth-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);}
   .server-badge.ok{color:#34D399;}
   .server-badge.down{color:#F87171;}
 
@@ -322,7 +335,29 @@
       <div class="sub">CD Commerce · Launch Operations · <span id="serverBadge" class="server-badge">checking backend…</span></div>
     </div>
   </div>
+  <div id="userChip" style="display:none;align-items:center;gap:10px;color:#CBD5E1;font-size:12.5px;"><span id="userEmail"></span><button class="btn btn-sm" onclick="authSignOut()" style="padding:4px 10px;">Sign out</button></div>
 </header>
+
+<div id="authGate">
+  <div id="authCard">
+    <div class="auth-title">Launch KPI Dashboard</div>
+    <div class="auth-sub">CD Commerce · Launch Operations</div>
+    <div id="authStep-loading" style="display:none;"><div class="auth-text">Checking your sign-in…</div></div>
+    <div id="authStep-email" style="display:none;">
+      <div class="auth-text">Sign in with your work email. We will send you a one-time code.</div>
+      <input type="email" id="authEmail" placeholder="name@cd-commerce.de" autocomplete="email" onkeydown="if(event.key==='Enter') authSendCode(false)">
+      <button class="btn btn-primary auth-btn" id="authSendBtn" onclick="authSendCode(false)">Send me a code</button>
+    </div>
+    <div id="authStep-code" style="display:none;">
+      <div class="auth-text">If <strong id="authSentTo"></strong> is approved, a 6-digit code is on its way. It only works for a short time.</div>
+      <input type="text" id="authCode" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" maxlength="10" onkeydown="if(event.key==='Enter') authVerifyCode()">
+      <button class="btn btn-primary auth-btn" id="authVerifyBtn" onclick="authVerifyCode()">Sign in</button>
+      <div class="auth-links"><button class="auth-link" id="authResend" onclick="authSendCode(true)">Send a new code</button><button class="auth-link" onclick="authStep('email'); authMsg('')">Use a different email</button></div>
+    </div>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-foot">Only approved CD Commerce email addresses can sign in.</div>
+  </div>
+</div>
 
 <div class="app">
   <nav class="sidebar">
@@ -357,6 +392,10 @@
     <div class="nav-item" data-view="asin-mapping" onclick="switchView('asin-mapping')" title="Register which child ASINs belong to which parent product">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/><path d="M14 17.5h-4a3 3 0 0 1-3-3V10"/></svg></div>
       ASIN Mapping
+    </div>
+    <div class="nav-item" id="navUsers" data-view="users" onclick="switchView('users')" style="display:none;" title="Who may use the launch tracker (admins only)">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      Users
     </div>
     <div class="nav-item" data-view="instructions" onclick="switchView('instructions')" title="Step-by-step guide for keeping the dashboard up to date">
       <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></div>
@@ -930,6 +969,25 @@
       </div>
     </div>
 
+    <div class="view" id="view-users">
+      <div class="panel">
+        <h2 style="margin-top:0;">Users — who may use the launch tracker</h2>
+        <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Only the people listed here can sign in, using a one-time code sent to their email. Only <strong>@cd-commerce.de</strong> addresses can be added. Removing someone signs them out and deletes their login.</p>
+        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;width:100%;max-width:880px;"><thead><tr>
+          <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">EMAIL</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">ROLE</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">LOGIN</th><th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);">LAST SIGNED IN</th><th></th></tr></thead>
+          <tbody id="usersBody"></tbody></table></div>
+        <div class="toolbar" style="margin-top:14px;gap:8px;flex-wrap:wrap;">
+          <input type="email" id="usersNewEmail" placeholder="name@cd-commerce.de" style="min-width:260px;" onkeydown="if(event.key==='Enter') usersAdd()">
+          <select id="usersNewRole"><option value="user">User</option><option value="admin">Admin</option></select>
+          <button class="btn btn-primary" onclick="usersAdd()">Add person</button>
+          <button class="btn" id="usersCreateLoginsBtn" onclick="usersCreateLogins()" style="display:none;">Create the missing logins</button>
+        </div>
+        <div id="usersMissingNote" style="font-size:12px;color:#991B1B;margin-top:6px;"></div>
+        <div class="status-line" id="usersStatus" style="margin-top:8px;"></div>
+        <p style="color:var(--text-muted);font-size:12px;margin-top:14px;"><strong>Admin</strong> can open this tab and add or remove people. <strong>User</strong> can use everything else. There is always at least one admin.</p>
+      </div>
+    </div>
+
     <div class="view" id="view-glossary">
       <div class="page-head">
         <h2>Metrics Glossary</h2>
@@ -1078,6 +1136,100 @@
 <script>
 const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 const EDGE_BASE = window.SUPABASE_URL + '/functions/v1';
+
+/* ---------------- Sign-in: an emailed one-time code, approved addresses only ---------------- */
+// The database itself refuses anyone who is not signed in AND on the approved list (table allowed_users), so this screen is not the lock — it is how an approved person
+// gets the key. REQUIRE_LOGIN = false in config.js only hides the screen (e.g. for local development); it does not open the database.
+const AUTH_ON = !!(sb.auth && typeof sb.auth.getSession === 'function') && window.REQUIRE_LOGIN !== false;
+let CURRENT_USER = null, APP_STARTED = false, authPendingEmail = '', authCooldownTimer = null, lastAccessCheck = Date.now();
+function appReload(){ location.reload(); }
+// a short note that survives the reload that follows a sign-out ("your access was removed"); storage can be blocked by the browser, so it must never throw
+let authNoticeMem = '';
+function authNoticeSet(t){ authNoticeMem = t; try{ sessionStorage.setItem('authNotice', t); }catch(e){ /* storage blocked: the note is simply not shown */ } }
+function authNoticeTake(){ let t = authNoticeMem; authNoticeMem = ''; try{ t = sessionStorage.getItem('authNotice') || t; sessionStorage.removeItem('authNotice'); }catch(e){ /* ignore */ } return t; }
+async function accessToken(){
+  if(!sb.auth || typeof sb.auth.getSession !== 'function') return '';
+  const { data } = await sb.auth.getSession();
+  return (data && data.session && data.session.access_token) || '';
+}
+// headers for every call to a backend function: the signed-in person's token (the functions check it AND that the email is approved)
+async function edgeAuthHeaders(extra){ return { 'Authorization': `Bearer ${await accessToken()}`, ...(extra || {}) }; }
+function authStep(step){
+  document.getElementById('authGate').style.display = 'flex'; document.body.style.overflow = 'hidden';
+  ['loading', 'email', 'code'].forEach(x => { document.getElementById('authStep-' + x).style.display = x === step ? 'block' : 'none'; });
+  if(step === 'email') setTimeout(() => document.getElementById('authEmail').focus(), 0);
+  if(step === 'code') setTimeout(() => document.getElementById('authCode').focus(), 0);
+}
+function authHide(){ document.getElementById('authGate').style.display = 'none'; document.body.style.overflow = ''; }
+function authMsg(text, kind){ const m = document.getElementById('authMsg'); m.textContent = text || ''; m.className = 'auth-msg' + (kind ? ' ' + kind : ''); }
+function authCooldownStart(sec){
+  const b = document.getElementById('authResend'); let left = sec; clearInterval(authCooldownTimer);
+  b.disabled = true; b.textContent = `Send a new code (${left}s)`;
+  authCooldownTimer = setInterval(() => { left--; if(left <= 0){ clearInterval(authCooldownTimer); b.disabled = false; b.textContent = 'Send a new code'; } else b.textContent = `Send a new code (${left}s)`; }, 1000);
+}
+async function authSendCode(resend){
+  const email = String(resend ? authPendingEmail : document.getElementById('authEmail').value || '').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ authMsg('Please enter your work email address.', 'err'); return; }
+  const btn = document.getElementById('authSendBtn'); btn.disabled = true; authMsg('Sending…');
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  btn.disabled = false;
+  const m = (error && error.message) || '';
+  if(error && /rate limit|too many|only request this after|for security purposes/i.test(m)){ authMsg('Too many requests — please wait a minute and try again.', 'err'); return; }
+  if(error && !/signups? not allowed|not found|user.*(not|does)/i.test(m)){ authMsg('We could not send the code right now. Please try again in a minute — if it keeps happening, tell your admin.', 'err'); return; }
+  // An address that is not on the list gets exactly the same screen as one that is, so this page never reveals who is approved.
+  authPendingEmail = email; document.getElementById('authSentTo').textContent = email; document.getElementById('authCode').value = '';
+  authStep('code'); authMsg(''); authCooldownStart(45);
+}
+async function authVerifyCode(){
+  const code = String(document.getElementById('authCode').value || '').replace(/\s+/g, '');
+  if(!/^\d{6,8}$/.test(code)){ authMsg('Enter the 6-digit code from the email.', 'err'); return; }
+  const btn = document.getElementById('authVerifyBtn'); btn.disabled = true; authMsg('Checking…');
+  const { data, error } = await sb.auth.verifyOtp({ email: authPendingEmail, token: code, type: 'email' });
+  btn.disabled = false;
+  if(error || !data || !data.session){ authMsg('That code is not right or has expired. Check it, or send a new one.', 'err'); return; }
+  await authEnter(data.session);
+}
+// null = signed in but NOT on the approved list; 'error' = could not check; otherwise { email, role }
+async function authCheckApproved(session){
+  const email = String((session && session.user && session.user.email) || '').toLowerCase();
+  const { data, error } = await sb.from('allowed_users').select('email,role').eq('email', email).limit(1);
+  if(error) return 'error';
+  return (data && data.length) ? { email, role: data[0].role } : null;
+}
+async function authEnter(session){
+  authStep('loading'); authMsg('');
+  const me = await authCheckApproved(session);
+  if(me === 'error'){ authStep('email'); authMsg('Could not check your access right now. Please try again in a moment.', 'err'); return; }
+  if(!me){
+    const who = (session.user && session.user.email) || 'This address';
+    await sb.auth.signOut(); authStep('email'); authMsg(`${who} is not approved to use the launch tracker. Ask your admin to add you.`, 'err'); return;
+  }
+  CURRENT_USER = me; lastAccessCheck = Date.now(); authHide(); authRenderChip();
+  if(!APP_STARTED){ APP_STARTED = true; await startApp(); }
+}
+function authRenderChip(){
+  document.getElementById('userEmail').textContent = CURRENT_USER.email;
+  document.getElementById('userChip').style.display = 'flex';
+  document.getElementById('navUsers').style.display = CURRENT_USER.role === 'admin' ? '' : 'none';
+}
+async function authSignOut(){ CURRENT_USER = null; try{ await sb.auth.signOut(); }catch(e){ /* ignore */ } appReload(); }      // CURRENT_USER first, so the sign-out event does not also reload
+async function authBoot(){
+  if(!AUTH_ON){ APP_STARTED = true; await startApp(); return; }
+  sb.auth.onAuthStateChange(ev => { if(ev === 'SIGNED_OUT' && CURRENT_USER){ CURRENT_USER = null; appReload(); } });
+  const notice = authNoticeTake();
+  if(notice){ authStep('email'); authMsg(notice, 'err'); return; }
+  authStep('loading');
+  const { data } = await sb.auth.getSession();
+  if(data && data.session) await authEnter(data.session); else authStep('email');
+}
+// somebody removed from the list while the page is open is signed out the next time they come back to it (checked at most every 5 minutes)
+document.addEventListener('visibilitychange', async () => {
+  if(document.visibilityState !== 'visible' || !AUTH_ON || !CURRENT_USER || Date.now() - lastAccessCheck < 5 * 60 * 1000) return;
+  lastAccessCheck = Date.now();
+  const { data } = await sb.auth.getSession();
+  if(!data || !data.session){ appReload(); return; }
+  if(await authCheckApproved(data.session) === null){ authNoticeSet('Your access to the launch tracker has been removed.'); CURRENT_USER = null; await sb.auth.signOut(); appReload(); }
+});
 const BRAND_OPTIONS = ['Heimfleiss','Nasswerk','Tarpofix','PD','Planenfux','Mattenheld'];
 
 function fmtMoney(n, naLabel){ if(n==null||isNaN(n)) return naLabel||'–'; return (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -1270,6 +1422,7 @@ function sortRows(rows, key, dir, nameGetter){
 }
 
 function switchView(view){
+  if(view === 'users' && !(CURRENT_USER && CURRENT_USER.role === 'admin')) return;      // the Users tab is for admins only
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+view).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
@@ -1281,6 +1434,7 @@ function switchView(view){
   if(view==='instructions') loadInstructions();
   if(view==='data-manage'){ loadSbSyncStatus(); loadDrSyncStatus(); loadKpSyncStatus(); ltLoadStored(); }
   if(view==='asin-mapping') loadAsinMapping();
+  if(view==='users') loadUsersView();
   if(view==='documentation') loadDocumentation();
 }
 
@@ -1409,7 +1563,7 @@ async function uploadFile(functionName, file, statusId, buttonId){
   try{
     const res = await fetch(`${EDGE_BASE}/${functionName}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+      headers: await edgeAuthHeaders(),
       body: fd,
     });
     const data = await readJsonResponse(res);
@@ -1581,7 +1735,7 @@ async function confirmUploadSB(){
       try{
         const res = await fetch(`${EDGE_BASE}/upload-sellerboard-weekly`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+          headers: await edgeAuthHeaders(),
           body: fd,
         });
         const data = await readJsonResponse(res);
@@ -1693,7 +1847,7 @@ async function confirmUploadSF(){
     try{
       const res = await fetch(`${EDGE_BASE}/upload-sellerfox`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        headers: await edgeAuthHeaders(),
         body: fd,
       });
       const data = await readJsonResponse(res);
@@ -1782,7 +1936,7 @@ async function confirmUploadDR(){
     try{
       const res = await fetch(`${EDGE_BASE}/upload-datarova-ranks`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        headers: await edgeAuthHeaders(),
         body: fd,
       });
       const data = await readJsonResponse(res);
@@ -1876,7 +2030,7 @@ async function confirmUploadDV(){
     try{
       const res = await fetch(`${EDGE_BASE}/upload-datarova-visibility`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        headers: await edgeAuthHeaders(),
         body: fd,
       });
       const data = await readJsonResponse(res);
@@ -1972,7 +2126,7 @@ async function confirmUploadKP(){
     try{
       const res = await fetch(`${EDGE_BASE}/upload-keepa-bsr`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        headers: await edgeAuthHeaders(),
         body: fd,
       });
       const data = await readJsonResponse(res);
@@ -2127,7 +2281,7 @@ async function confirmUploadRV(){
     try{
       const res = await fetch(`${EDGE_BASE}/upload-reviews`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+        headers: await edgeAuthHeaders(),
         body: fd,
       });
       const data = await readJsonResponse(res);
@@ -3708,6 +3862,50 @@ function renderOverviewChildBreakdown(childSummaries){
     <tbody>${rows}</tbody>
   </table>`;
 }
+/* ---------------- Users (admin only) ---------------- */
+async function usersCall(action, extra){
+  const res = await fetch(`${EDGE_BASE}/manage-access`, { method: 'POST', headers: await edgeAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action, ...(extra || {}) }) });
+  const data = await readJsonResponse(res);
+  if(!res.ok) throw new Error(data.error || platformErrorText(data, 'Unknown error'));
+  return data;
+}
+function usersStatus(text, kind){ const el = document.getElementById('usersStatus'); el.textContent = text || ''; el.style.color = kind === 'err' ? '#991B1B' : kind === 'ok' ? '#166534' : 'var(--text-muted)'; }
+function renderUsers(people){
+  const me = CURRENT_USER && CURRENT_USER.email, td = 'style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;"';
+  const fmt = iso => iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  const missing = people.filter(x => !x.hasLogin).length;
+  document.getElementById('usersBody').innerHTML = people.map(x => `<tr>
+    <td ${td}><strong>${escapeHtml(x.email)}</strong>${x.email === me ? ' <span style="color:var(--text-muted);font-size:11px;">(you)</span>' : ''}</td>
+    <td ${td}><select class="users-role" data-email="${escapeHtml(x.email)}" ${x.email === me ? 'disabled title="You cannot change your own role"' : ''}><option value="user" ${x.role === 'user' ? 'selected' : ''}>User</option><option value="admin" ${x.role === 'admin' ? 'selected' : ''}>Admin</option></select></td>
+    <td ${td}>${x.hasLogin ? '<span style="color:#166534;font-weight:600;">✓ ready</span>' : '<span style="color:#991B1B;font-weight:600;">no login yet</span>'}</td>
+    <td ${td}>${escapeHtml(fmt(x.lastSignInAt))}</td>
+    <td ${td}>${x.email === me ? '' : `<button class="btn btn-sm users-remove" data-email="${escapeHtml(x.email)}">Remove</button>`}</td></tr>`).join('') || `<tr><td colspan="5" ${td}>Nobody yet.</td></tr>`;
+  document.querySelectorAll('.users-role').forEach(sel => sel.addEventListener('change', () => usersSetRole(sel.dataset.email, sel.value)));
+  document.querySelectorAll('.users-remove').forEach(b => b.addEventListener('click', () => usersRemove(b.dataset.email)));
+  document.getElementById('usersCreateLoginsBtn').style.display = missing ? '' : 'none';
+  document.getElementById('usersMissingNote').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no login yet and cannot sign in until it is created.` : '';
+}
+async function loadUsersView(){ usersStatus('Loading…'); try{ renderUsers((await usersCall('list')).people); usersStatus(''); }catch(e){ usersStatus('Could not load the list: ' + e.message, 'err'); } }
+async function usersAdd(){
+  const input = document.getElementById('usersNewEmail'), email = input.value.trim().toLowerCase(), role = document.getElementById('usersNewRole').value;
+  if(!email){ usersStatus('Enter an email address.', 'err'); return; }
+  usersStatus('Adding…');
+  try{ const d = await usersCall('add', { email, role }); renderUsers(d.people); input.value = ''; usersStatus(`Added ${email}. They can now sign in with an emailed code.`, 'ok'); }
+  catch(e){ usersStatus(e.message, 'err'); }
+}
+async function usersRemove(email){
+  if(!confirm(`Remove ${email}?\n\nThey will be signed out and will no longer be able to open the launch tracker.`)) return;
+  usersStatus('Removing…');
+  try{ renderUsers((await usersCall('remove', { email })).people); usersStatus(`Removed ${email}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); loadUsersView(); }
+}
+async function usersSetRole(email, role){
+  usersStatus('Saving…');
+  try{ renderUsers((await usersCall('set_role', { email, role })).people); usersStatus(`${email} is now ${role === 'admin' ? 'an admin' : 'a user'}.`, 'ok'); }catch(e){ usersStatus(e.message, 'err'); loadUsersView(); }
+}
+async function usersCreateLogins(){
+  usersStatus('Creating logins…');
+  try{ renderUsers((await usersCall('create_logins')).people); usersStatus('Logins created — everyone on the list can now sign in.', 'ok'); }catch(e){ usersStatus(e.message, 'err'); }
+}
 function openProductFromOverview(asin){
   document.getElementById('productSelect').value = asin;
   switchView('weekly-pulse');
@@ -5197,8 +5395,6 @@ async function loadSbSyncStatus(){
 let lastSbCheckParent = '';
 async function checkSellerboardFeed(){
   const box = document.getElementById('sbCheckResult');
-  const secret = window.SYNC_TRIGGER_SECRET;
-  if(!secret){ alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.'); return; }
   const sel = document.getElementById('productSelect');
   const parent = String(prompt('Which product should I check? Enter its parent ASIN (for example B0HKK7CRRZ):', lastSbCheckParent || (sel && sel.value) || '') || '').trim().toUpperCase();
   if(!parent) return;
@@ -5211,7 +5407,7 @@ async function checkSellerboardFeed(){
   try{
     const res = await fetch(`${EDGE_BASE}/sync-sellerboard-weekly`, {
       method: 'POST',
-      headers: { 'x-cron-secret': secret, 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      headers: await edgeAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ diagnose: { asins: kids.map(k => k.child_asin) } }),
     });
     data = await readJsonResponse(res);
@@ -5257,18 +5453,13 @@ async function checkSellerboardFeed(){
 }
 async function forceSellerboardSync(){
   const btn = document.getElementById('btnForceSync');
-  const secret = window.SYNC_TRIGGER_SECRET;
-  if(!secret){
-    alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.');
-    return;
-  }
   btn.disabled = true;
   const originalText = btn.textContent;
   btn.textContent = '⟳ Pulling latest data…';
   try{
     const res = await fetch(`${EDGE_BASE}/sync-sellerboard-weekly`, {
       method: 'POST',
-      headers: { 'x-cron-secret': secret, 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}` },
+      headers: await edgeAuthHeaders(),
     });
     const data = await readJsonResponse(res);
     if(!res.ok){
@@ -5307,11 +5498,6 @@ async function loadDrSyncStatus(){
 }
 async function forceDatarovaSync(){
   const btn = document.getElementById('btnForceDrSync');
-  const secret = window.SYNC_TRIGGER_SECRET;
-  if(!secret){
-    alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.');
-    return;
-  }
   btn.disabled = true;
   const originalText = btn.textContent;
   btn.textContent = '⟳ Pulling latest data…';
@@ -5319,7 +5505,7 @@ async function forceDatarovaSync(){
   try{
     const res = await fetch(`${EDGE_BASE}/sync-datarova-weekly`, {
       method: 'POST',
-      headers: { 'x-cron-secret': secret, 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      headers: await edgeAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(week ? { week } : {}),
     });
     const data = await readJsonResponse(res);
@@ -5345,8 +5531,6 @@ async function forceDatarovaSync(){
 // calling it until it reports the history is complete — a long history never times out. Visibility has no history and is never touched.
 async function backfillDatarova(){
   const btn = document.getElementById('btnDrBackfill'), statusEl = document.getElementById('drBackfillStatus');
-  const secret = window.SYNC_TRIGGER_SECRET;
-  if(!secret){ alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.'); return; }
   const from = document.getElementById('drBackfillFrom').value;
   if(!from){ alert('Pick the first week to fill (any date in that week). It fills every week from there up to the last completed one.'); return; }
   btn.disabled = true; statusEl.style.color = 'var(--text-muted)'; statusEl.textContent = 'Starting…';
@@ -5354,7 +5538,7 @@ async function backfillDatarova(){
   try{
     while(next && calls < 80){
       const res = await fetch(`${EDGE_BASE}/sync-datarova-weekly`, {
-        method: 'POST', headers: { 'x-cron-secret': secret, 'Content-Type': 'application/json' },
+        method: 'POST', headers: await edgeAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ fromWeek: next }),
       });
       const data = await res.json();
@@ -5387,11 +5571,6 @@ async function loadKpSyncStatus(){
 }
 async function forceKeepaSync(){
   const btn = document.getElementById('btnForceKpSync');
-  const secret = window.SYNC_TRIGGER_SECRET;
-  if(!secret){
-    alert('SYNC_TRIGGER_SECRET is not set in config.js — add it (same value as the CRON_SECRET function secret in Supabase) to use this button.');
-    return;
-  }
   btn.disabled = true;
   const originalText = btn.textContent;
   btn.textContent = '⟳ Pulling latest data…';
@@ -5399,7 +5578,7 @@ async function forceKeepaSync(){
   try{
     const res = await fetch(`${EDGE_BASE}/sync-keepa-bsr`, {
       method: 'POST',
-      headers: { 'x-cron-secret': secret, 'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      headers: await edgeAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(week ? { week } : {}),
     });
     const data = await readJsonResponse(res);
@@ -6577,12 +6756,13 @@ document.getElementById('fileMI').addEventListener('change', miOnFileChosen);
   });
 })();
 
-(async function init(){
+async function startApp(){
   const up = await checkServer();
   if(!up) return;
   await populateSelectors();
   await loadDashboard();
-})();
+}
+authBoot();
 </script>
 </body>
 </html>
