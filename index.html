@@ -888,7 +888,7 @@
       </div>
       <div class="panel">
         <h3>Import mappings from a file</h3>
-        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Load a whole parent → child ASIN list — <strong>and the product details in the same file</strong>. Required columns: <strong>Parent ASIN</strong> and <strong>ASIN</strong> (the child). Optional: <strong>SKU</strong>, <strong>Marketplace</strong> (without it the marketplace is read from the end of the SKU, e.g. <code>VZW01-FR</code> → FR), and the product's details — <strong>Product Name</strong>, <strong>Tag</strong> (launch / expansion / relaunch / post-launch), <strong>Launch Date</strong>, <strong>Brand</strong>, <strong>Product Line Code</strong>, <strong>Product Line</strong>, <strong>Relaunch Date</strong>, <strong>Relaunch Shows Under</strong>, <strong>Top Level Category</strong> and <strong>Image URL</strong>. The details describe the parent product, so put them on its first row (or every row). Dates can be written 2026-10-12, 12.10.2026 or 12 Oct 2026 (day first). Accepts .tsv, .csv or .xlsx. The file is compared with what's already saved and every change is listed first — <strong>nothing is saved until you click Apply</strong>. The import only adds or updates: <strong>it never removes a mapping</strong>, including ones the file doesn't mention. <strong>New products</strong> are created with the details from the file (anything the file doesn't say is copied from an existing product with the same line code, and only then guessed). <strong>Existing products</strong> only get details that are still <em>empty</em> — nothing already saved is overwritten (change those in Products → Edit).</p>
+        <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 12px;">Load a whole parent → child ASIN list — <strong>and the product details in the same file</strong>. Required columns: <strong>Parent ASIN</strong> and <strong>ASIN</strong> (the child). Optional: <strong>SKU</strong>, <strong>Marketplace</strong> (without it the marketplace is read from the end of the SKU, e.g. <code>VZW01-FR</code> → FR), and the product's details — <strong>Product Name</strong>, <strong>Tag</strong> (launch / expansion / relaunch / post-launch), <strong>Launch Date</strong>, <strong>Brand</strong>, <strong>Product Line Code</strong> and <strong>Product Line</strong>. The details describe the parent product, so put them on its first row (or every row). Dates can be written 2026-10-12, 12.10.2026 or 12 Oct 2026 (day first). Accepts .tsv, .csv or .xlsx. The file is compared with what's already saved and every change is listed first — <strong>nothing is saved until you click Apply</strong>. The import only adds or updates: <strong>it never removes a mapping</strong>, including ones the file doesn't mention. <strong>New products</strong> are created with the details from the file (anything the file doesn't say is copied from an existing product with the same line code, and only then guessed). <strong>Existing products</strong> only get details that are still <em>empty</em> — nothing already saved is overwritten (change those in Products → Edit).</p>
         <div class="toolbar" style="margin:-2px 0 10px;"><button class="btn btn-sm" onclick="miDownloadTemplate()">⬇ Download the template (.xlsx)</button></div>
         <div class="upload-box" id="dropMI">
           <label for="fileMI">Choose mapping file (.tsv, .csv or .xlsx)</label>
@@ -2670,10 +2670,6 @@ const MI_DETAIL_COLUMNS = [
   { k: 'brand',    label: 'Brand',                col: 'brand',             heads: ['brand'] },
   { k: 'code',     label: 'Product Line Code',    col: 'product_line_code', heads: ['productlinecode', 'linecode', 'plcode'] },
   { k: 'line',     label: 'Product Line',         col: 'product_line',      heads: ['productline', 'productlinename', 'line'] },
-  { k: 'relaunch', label: 'Relaunch Date',        col: null,                heads: ['relaunchdate', 'relaunch', 'relaunchedon', 'secondlaunch'] },
-  { k: 'track',    label: 'Relaunch Shows Under', col: null,                heads: ['relaunchshowsunder', 'showsunder', 'relaunchtrack'] },
-  { k: 'category', label: 'Top Level Category',   col: 'top_level_category', heads: ['toplevelcategory', 'category', 'maincategory', 'topcategory'] },
-  { k: 'image',    label: 'Image URL',            col: 'image_url',         heads: ['imageurl', 'image', 'imagelink', 'picture'] },
 ];
 function miNormTag(v){
   const k = String(v == null ? '' : v).toLowerCase().replace(/[\s_\-]/g, '');
@@ -2755,11 +2751,9 @@ function miParseTable(text){
       const v = String(c[dc.i] == null ? '' : c[dc.i]).trim();
       if(!v) return;
       if(dc.k === 'tag'){ const t = miNormTag(v); if(t) d.tag = t; else warn(`Tag "${v}" isn't launch, expansion, relaunch or post-launch — ignored.`); }
-      else if(dc.k === 'launch' || dc.k === 'relaunch'){ const p = miParseDate(v); if(p.iso) d[dc.k] = p.iso; else warn(`${dc.label} "${v}" isn't a date I can read (use e.g. 2026-10-12 or 12.10.2026) — ignored.`); }
-      else if(dc.k === 'track'){ const t = miNormTag(v); if(t === 'launch' || t === 'expansion') d.track = t; else warn(`Relaunch Shows Under "${v}" must be launch or expansion — ignored.`); }
+      else if(dc.k === 'launch'){ const p = miParseDate(v); if(p.iso) d.launch = p.iso; else warn(`${dc.label} "${v}" isn't a date I can read (use e.g. 2026-10-12 or 12.10.2026) — ignored.`); }
       else if(dc.k === 'brand'){ const b = miNormBrand(v); d.brand = b.value; if(!b.known) d.brandUnknown = true; }
       else if(dc.k === 'code') d.code = v.toUpperCase();
-      else if(dc.k === 'image'){ if(/^https?:\/\//i.test(v)) d.image = v; else warn(`Image URL "${v}" doesn't start with http:// or https:// — ignored.`); }
       else d[dc.k] = v;
     });
     out.rows.push({ line: n, parent, child, sku, marketplace, d });
@@ -2842,23 +2836,19 @@ function miBuildPlan(rows, products, mappings){
       if(!d.name && !sib) guesses.push('name guessed from the line code');
       if(!d.tag && !sibTag) guesses.push('tag set to expansion by default');
       if(d.brandUnknown) guesses.push(`brand "${d.brand}" isn't one of the usual brands (${miKnownBrands().join(', ')}) — saved as written`);
-      let relaunch = d.relaunch || null;
-      if(relaunch && !d.launch){ entry.notes.push('Relaunch Date ignored — it needs a Launch Date as well.'); relaunch = null; }
-      else if(relaunch && relaunch <= d.launch){ entry.notes.push('Relaunch Date ignored — it must be after the Launch Date.'); relaunch = null; }
       entry.newProduct = {
         asin, name: d.name || (sib ? sib.name : (code || asin)), tag: d.tag || sibTag || 'expansion', brand: d.brand || (sib ? (sib.brand || null) : null),
         marketplace: derived, launch: d.launch || null, product_line_code: code, product_line: d.line || (sib ? (sib.product_line || null) : null),
-        top_level_category: d.category || null, image_url: d.image || null, relaunch, track: d.track || null, guesses, assumed: guesses.length > 0,
+        guesses, assumed: guesses.length > 0,
       };
     } else {
       // an existing product: details the file supplies fill in what is still EMPTY; nothing already saved is ever overwritten
       MI_DETAIL_COLUMNS.filter(dc => dc.col && d[dc.k] != null && d[dc.k] !== '').forEach(dc => {
         const cur = product[dc.col], v = d[dc.k];
         if(cur == null || String(cur).trim() === '') entry.fills.push({ k: dc.k, col: dc.col, label: dc.label, to: v });
-        else if(dc.k !== 'image' && String(cur).trim().toLowerCase() !== String(v).trim().toLowerCase()) entry.keeps.push({ k: dc.k, label: dc.label, saved: cur, file: v });
+        else if(String(cur).trim().toLowerCase() !== String(v).trim().toLowerCase()) entry.keeps.push({ k: dc.k, label: dc.label, saved: cur, file: v });
       });
       if(d.brandUnknown && entry.fills.some(f => f.k === 'brand')) entry.notes.push(`Brand "${d.brand}" isn't one of the usual brands — saved as written.`);
-      if(d.relaunch || d.track) entry.notes.push('Relaunch Date and Relaunch Shows Under are only used when a product is created — set them in Products → Edit.');
     }
     plan.parents.push(entry);
   });
@@ -2913,10 +2903,10 @@ async function miFileToText(file){
 }
 
 // The template: the first sheet ("Import") is what gets read; "How to fill" is only a legend.
-const MI_TEMPLATE_HEADERS = ['Parent ASIN', 'ASIN', 'SKU', 'Marketplace', 'Product Name', 'Tag', 'Launch Date', 'Brand', 'Product Line Code', 'Product Line', 'Relaunch Date', 'Relaunch Shows Under', 'Top Level Category', 'Image URL'];
+const MI_TEMPLATE_HEADERS = ['Parent ASIN', 'ASIN', 'SKU', 'Marketplace', 'Product Name', 'Tag', 'Launch Date', 'Brand', 'Product Line Code', 'Product Line'];
 const MI_TEMPLATE_EXAMPLE = [
-  ['B0EXAMPLE1', 'B0EXAMPLE2', 'ATS01-SW-DE', 'DE', 'Heimfleiss® Filing Cabinet', 'launch', '2026-10-12', 'Heimfleiss', 'ATS', 'Filing Cabinet', '', '', '', ''],
-  ['B0EXAMPLE1', 'B0EXAMPLE3', 'ATS01-BW-DE', 'DE', '', '', '', '', '', '', '', '', '', ''],
+  ['B0EXAMPLE1', 'B0EXAMPLE2', 'ATS01-SW-DE', 'DE', 'Heimfleiss® Filing Cabinet', 'launch', '2026-10-12', 'Heimfleiss', 'ATS', 'Filing Cabinet'],
+  ['B0EXAMPLE1', 'B0EXAMPLE3', 'ATS01-BW-DE', 'DE', '', '', '', '', '', ''],
 ];
 const MI_TEMPLATE_HELP = [
   ['Column', 'Required?', 'What to enter', 'Example'],
@@ -2930,14 +2920,10 @@ const MI_TEMPLATE_HELP = [
   ['Brand', 'Optional', 'Heimfleiss, Nasswerk, Tarpofix, PD, Planenfux or Mattenheld.', 'Heimfleiss'],
   ['Product Line Code', 'Optional', 'The short line code.', 'ATS'],
   ['Product Line', 'Optional', 'The product line name.', 'Filing Cabinet'],
-  ['Relaunch Date', 'Optional', 'A later launch of the same product (after the Launch Date). Only used when the product is created.', ''],
-  ['Relaunch Shows Under', 'Optional', 'For a relaunch: launch or expansion — the dashboard it belongs under. Default launch.', ''],
-  ['Top Level Category', 'Optional', 'The main Amazon category.', ''],
-  ['Image URL', 'Optional', 'A web address (https://…) of the product picture.', ''],
   [],
   ['Notes', '', '', ''],
   ['', '', 'Replace or delete the two example rows (B0EXAMPLE1) before you upload — the preview lists every change and nothing is saved until you press Apply.', ''],
-  ['', '', "The product details (Product Name … Image URL) describe the parent product: fill them on its first row; the other rows only need Parent ASIN and ASIN (+ SKU).", ''],
+  ['', '', "The product details (Product Name … Product Line) describe the parent product: fill them on its first row; the other rows only need Parent ASIN and ASIN (+ SKU).", ''],
   ['', '', 'New products are created with these details. For a product that already exists, only details that are still EMPTY are filled in — nothing already saved is overwritten.', ''],
   ['', '', 'Only the first sheet ("Import") is read.', ''],
 ];
@@ -2949,7 +2935,7 @@ function miDownloadTemplate(){
     return;
   }
   const ws = XLSX.utils.aoa_to_sheet([MI_TEMPLATE_HEADERS, ...MI_TEMPLATE_EXAMPLE]);
-  ws['!cols'] = [14, 14, 16, 12, 30, 12, 13, 13, 18, 18, 14, 20, 20, 30].map(w => ({ wch: w }));
+  ws['!cols'] = [14, 14, 16, 12, 30, 12, 13, 13, 18, 18].map(w => ({ wch: w }));
   const help = XLSX.utils.aoa_to_sheet(MI_TEMPLATE_HELP);
   help['!cols'] = [{ wch: 22 }, { wch: 13 }, { wch: 95 }, { wch: 28 }];
   const wb = XLSX.utils.book_new();
@@ -2964,7 +2950,7 @@ function miRenderPreview(state, banner){
   const nameOf = asin => { const p = saved.products.find(x => x.asin === asin); return p ? `${asin} (${p.name || 'unnamed'}${p.marketplace ? ', ' + p.marketplace : ''})` : asin; };
   const amber = t => `<span style="color:#92400E;">${t}</span>`;
   const green = t => `<span style="color:#166534;">${t}</span>`;
-  const fmtVal = (k, v) => (k === 'launch' || k === 'relaunch') && typeof launchFmt === 'function' ? launchFmt(v) : v;
+  const fmtVal = (k, v) => k === 'launch' && typeof launchFmt === 'function' ? launchFmt(v) : v;
   let h = banner || '';
 
   const intro = `${state.rows.length} child ASIN row${state.rows.length === 1 ? '' : 's'} for ${plan.parents.length} parent product${plan.parents.length === 1 ? '' : 's'}.`;
@@ -2993,9 +2979,6 @@ function miRenderPreview(state, banner){
           if(n.brand) bits.push('Brand ' + escapeHtml(n.brand));
           if(n.product_line_code || n.product_line) bits.push('Line ' + escapeHtml([n.product_line_code, n.product_line].filter(Boolean).join(' — ')));
           if(n.launch) bits.push('Launch ' + escapeHtml(fmtVal('launch', n.launch)));
-          if(n.relaunch) bits.push('Relaunch ' + escapeHtml(fmtVal('relaunch', n.relaunch)) + (n.tag === 'relaunch' ? ` (shows under ${escapeHtml(n.track || 'launch')})` : ''));
-          if(n.top_level_category) bits.push(escapeHtml(n.top_level_category));
-          if(n.image_url) bits.push('image set');
           const flags = [...(n.launch ? [] : ['launch date not set']), ...n.guesses.map(escapeHtml)];
           prod = `<strong style="color:#166534;">NEW</strong> — will be created as “${escapeHtml(n.name)}” (${escapeHtml(n.tag)})` +
                  (bits.length ? `<div style="font-size:10.5px;color:var(--text-muted);">${bits.join(' · ')}</div>` : '') +
@@ -3066,20 +3049,12 @@ async function miApply(){
   const done = []; let step = '';
   try{
     const created = plan.parents.filter(p => p.action === 'create');
-    const withHistory = created.filter(p => p.newProduct.relaunch);
-    if(withHistory.length){        // the launch history lives in its own table: check it BEFORE anything is written, so a missing table can never leave a half-saved product
-      step = 'Checking the launch-history table';
-      const { error } = await sb.from('product_launches').select('asin').limit(1);
-      if(error) throw new Error('Relaunch dates need the product_launches table — run add_product_launches_table.sql in Supabase (SQL Editor), then apply again');
-    }
     // 1) products that don't exist yet, with every detail the file gave
     const recOf = p => {
-      const n = p.newProduct, r = { asin: n.asin, name: n.name, tag: n.tag, brand: n.brand, marketplace: n.marketplace, launch: n.launch, product_line_code: n.product_line_code, product_line: n.product_line };
-      if(n.top_level_category) r.top_level_category = n.top_level_category;
-      if(n.image_url) r.image_url = n.image_url;
-      return r;
+      const n = p.newProduct;
+      return { asin: n.asin, name: n.name, tag: n.tag, brand: n.brand, marketplace: n.marketplace, launch: n.launch, product_line_code: n.product_line_code, product_line: n.product_line };
     };
-    const trackOf = n => n.tag === 'relaunch' ? (n.track || 'launch') : trackForNewTag(n.tag, null);
+    const trackOf = n => n.tag === 'relaunch' ? 'launch' : trackForNewTag(n.tag, null);      // a relaunch follows the Launch dashboard unless it is changed in Products → Edit
     if(created.length){
       step = 'Creating products';
       let { error } = await sb.from('products').insert(created.map(p => tagTrackSupported ? { ...recOf(p), tag_track: trackOf(p.newProduct) } : recOf(p)));
@@ -3087,16 +3062,6 @@ async function miApply(){
       if(error) throw new Error(error.message);
       done.push(`${created.length} product${created.length > 1 ? 's' : ''} created`);
     }
-    // 1b) launch history for a product created with a relaunch date — written AFTER the product; its current launch moves to the newest date only once the history is saved
-    for(const p of withHistory){
-      step = `Saving the launch history of ${p.asin}`;
-      const n = p.newProduct;
-      const { error } = await sb.from('product_launches').insert([{ asin: n.asin, launch_date: n.launch, label: 'Original' }, { asin: n.asin, launch_date: n.relaunch, label: 'Relaunch' }]);
-      if(error) throw new Error(error.message);
-      const { error: e2 } = await sb.from('products').update({ launch: n.relaunch }).eq('asin', n.asin);
-      if(e2) throw new Error(e2.message);
-    }
-    if(withHistory.length) done.push(`launch history saved for ${withHistory.length}`);
     // 2) details on products that already exist — only the fields that were empty
     const filled = plan.parents.filter(p => p.fills.length);
     for(const p of filled){
